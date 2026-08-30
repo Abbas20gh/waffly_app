@@ -1,2 +1,10 @@
-skills/
-node_modules/
+node_modules
+.next
+db/*.db
+db/backups
+dev.log
+server.log
+*.log
+.zscripts
+mini-services/sync-service/log.txt
+mini-services/sync-service/node_modules

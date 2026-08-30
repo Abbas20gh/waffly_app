@@ -1,0 +1,187 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// جدول‌های سینک‌پذیر — id سمت کلاینت ساخته می‌شود، updatedAt میلی‌ثانیه، deleted تومب‌استون
+
+model BreadType {
+  id        String @id
+  name      String
+  code      String // کد ۲ رقمی برای شماره جعبه
+  active    Int    @default(1)
+  updatedAt Float
+  deleted   Int    @default(0)
+}
+
+model Production {
+  id            String  @id
+  date          String // شمسی YYYY/MM/DD
+  breadTypeId   String
+  totalProduced Float   @default(0)
+  boxesCount    Float   @default(0)
+  perBoxCount   Float   @default(0)
+  waste         Float   @default(0)
+  carriedFrom   String? // تاریخ اصلی در صورت انتقال از روز قبل
+  note          String?
+  createdBy     String?
+  updatedAt     Float
+  deleted       Int     @default(0)
+  @@index([date])
+}
+
+model Box {
+  id           String @id
+  code         String // ۱۰ رقمی TTDDMMNNSS
+  productionId String
+  breadTypeId  String
+  count        Float  @default(0)
+  date         String
+  updatedAt    Float
+  deleted      Int    @default(0)
+  @@index([code])
+  @@index([date])
+}
+
+model Material {
+  id        String @id
+  name      String
+  unit      String // کیلوگرم، کیسه، گونی، ...
+  minStock  Float  @default(0)
+  updatedAt Float
+  deleted   Int    @default(0)
+}
+
+model Consumption {
+  id         String  @id
+  date       String
+  materialId String
+  quantity   Float   @default(0)
+  note       String?
+  createdBy  String?
+  updatedAt  Float
+  deleted    Int     @default(0)
+  @@index([date])
+}
+
+model Customer {
+  id              String  @id
+  name            String
+  phone           String?
+  address         String?
+  cooperationType String?
+  updatedAt       Float
+  deleted         Int     @default(0)
+}
+
+model Sale {
+  id             String  @id
+  date           String
+  customerId     String
+  items          String  @default("[]") // JSON [{breadTypeId, qty, unitPrice, delivered, returned, returnCost}]
+  totalAmount    Float   @default(0)
+  settledStatus  String  @default("UNPAID") // PAID | PARTIAL | UNPAID
+  paidAmount     Float   @default(0)
+  paymentMethod  String  @default("CASH") // CASH | CARD | TRANSFER | CHECK
+  checkDueDate   String?
+  checkNumber    String?
+  checkBank      String?
+  paymentDate    String? // تاریخ وصول واقعی
+  note           String?
+  createdBy      String?
+  updatedAt      Float
+  deleted        Int     @default(0)
+  @@index([date])
+  @@index([customerId])
+}
+
+model Supplier {
+  id        String  @id
+  name      String
+  phone     String?
+  address   String?
+  updatedAt Float
+  deleted   Int     @default(0)
+}
+
+model Purchase {
+  id            String  @id
+  date          String
+  materialId    String
+  quantity      Float   @default(0)
+  cost          Float   @default(0)
+  supplierId    String?
+  settledStatus String  @default("UNPAID")
+  paidAmount    Float   @default(0)
+  note          String?
+  createdBy     String?
+  updatedAt     Float
+  deleted       Int     @default(0)
+  @@index([date])
+}
+
+model Machine {
+  id        String  @id
+  name      String
+  kind      String  @default("BAKING") // BAKING = تجهیزات نانوایی | BUSINESS = دستگاه‌سازی تجاری
+  startDate String
+  status    String  @default("IN_PROGRESS") // IN_PROGRESS | DONE | PAUSED
+  note      String?
+  updatedAt Float
+  deleted   Int     @default(0)
+}
+
+model MachineCost {
+  id        String @id
+  machineId String
+  kind      String @default("CONSUMABLE") // CONSUMABLE مصرفی | CAPITAL سرمایه‌ای
+  name      String
+  quantity  Float  @default(1)
+  date      String
+  cost      Float  @default(0)
+  updatedAt Float
+  deleted   Int    @default(0)
+  @@index([machineId])
+}
+
+model ExpenseCategory {
+  id              String @id
+  name            String
+  includeInProfit Int    @default(1)
+  updatedAt       Float
+  deleted         Int    @default(0)
+}
+
+model Expense {
+  id          String  @id
+  date        String
+  categoryId  String
+  amount      Float   @default(0)
+  description String?
+  createdBy   String?
+  updatedAt   Float
+  deleted     Int     @default(0)
+  @@index([date])
+}
+
+model Setting {
+  id             String @id
+  businessName   String @default("Waffly")
+  monthStartDay  Int    @default(1) // روز شروع دوره حسابداری
+  badDebtDays    Int    @default(30) // آستانه بدحسابی
+  checkAlertDays Int    @default(7) // هشدار سررسید چک
+  updatedAt      Float
+  deleted        Int    @default(0)
+}
+
+model SyncLog {
+  seq Int    @id @default(autoincrement())
+  tbl String
+  rid String
+  ts  Float
+  @@index([seq])
+}
