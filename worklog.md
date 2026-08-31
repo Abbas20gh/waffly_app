@@ -40,3 +40,22 @@ Work Log:
 Stage Summary:
 - پروژه کاملاً آماده دیپلوی سرورلس؛ بعد از ساخت ریپو GitHub + دیتابیس Turso فقط: push کد، اجرای turso-setup، ست کردن ۲ env در Vercel
 - داده‌های موبایل کاربر با --data به Turso منتقل و با bootstrap مجدد به گوشی برمی‌گردد
+
+---
+Task ID: 5
+Agent: Main Agent (Super Z)
+Task: اجرای عملی دیپلوی — push به GitHub + راه‌اندازی Turso
+
+Work Log:
+- انتقال داده به Turso با scripts/turso-setup.mjs --data: ۱۵ جدول ساخته شد + ۱۷ ردیف منتقل (BreadType:5, Material:7, ExpenseCategory:4, Setting:1) — صحت‌سنجی با خواندن مستقیم از Turso ✓
+- SyncLog عمداً خالی ماند؛ bootstrap دستگاه جدید از /api/sync/full (اسنپ‌شات جدول‌ها) استفاده می‌کند نه SyncLog ✓
+- z-ai-web-dev-sdk از dependencies حذف شد (استفاده‌ای نداشت)؛ .env از git خارج + .env.example ساخته شد
+- کشف ریپو remote نسخه قدیمی پروژه داشت (کامیت 8caafce «Waffly») → force push نسخه فعلی
+- push موفق: origin/main = 4216955 (Abbas20gh/waffly_app، توکن fine-grained فقط همین ریپو)
+- ریپو: 4MB public (۳۸ اسپلش + فونت)، .git حجم 53MB
+
+Stage Summary:
+- GitHub: https://github.com/Abbas20gh/waffly_app (برَندچ main، آپدیت‌های بعدی فقط git push)
+- Turso: libsql://waffly-db-abbas20gh.aws-eu-west-1.turso.io آماده با جدول‌ها و seed
+- remaining (کاربر): Import در Vercel با ۲ env (DATABASE_URL + DATABASE_URL_AUTH_TOKEN)
+- هشدار به کاربر: از این لحظه ورود داده فقط در آدرس جدید Vercel (آدرس قدیمی سندباکس منسوخ)
