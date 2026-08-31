@@ -59,3 +59,24 @@ Stage Summary:
 - Turso: libsql://waffly-db-abbas20gh.aws-eu-west-1.turso.io آماده با جدول‌ها و seed
 - remaining (کاربر): Import در Vercel با ۲ env (DATABASE_URL + DATABASE_URL_AUTH_TOKEN)
 - هشدار به کاربر: از این لحظه ورود داده فقط در آدرس جدید Vercel (آدرس قدیمی سندباکس منسوخ)
+
+---
+Task ID: 6
+Agent: Main Agent (Super Z)
+Task: پلن B — آماده‌سازی کامل Cloudflare Pages (چون Vercel اکانت کاربر را بلاک کرد)
+
+Work Log:
+- تصمیم معماری: Frontend استاتیک (output: export) + Pages Functions با SQL خام و @libsql/client → همان Turso (بدون D1، داده‌ها حفظ)
+- functions/api/_sync.ts: پرت یک‌به‌یک منطق سینک (TABLES/PHYS/FIELDS/sanitizeRow با نرمال‌سازی ارقام فارسی، ensureSeed، pushOps با LWW + batch، pullRows با dedupe، fullSnapshot)
+- functions/api/[[route]].ts: catch-all هر ۵ endpoint + کش isolate کلاینت libsql
+- next.config.ts: CF_EXPORT=1 → output export + images unoptimized
+- scripts/build-pages.mjs: جابجایی موقت src/app/api ↔ .cf-api-hidden با finally + چک سلامت out/ (index/sw/manifest/icon)
+- scripts/test-cf-api.mjs: ۱۹ تست (seed، LWW برابر/قدیمی/جدید، تاریخ فارسی→لاتین، sanitize، pull cursor، تومب‌استون، شکل JSON) — همه پاس
+- تست زنده با wrangler pages dev + Turso واقعی: استاتیک 200، health OK، full داده واقعی برگرداند، push smoke accepted — سپس پاکسازی smoke از Turso
+- devDep: wrangler 4.127.1 + tsx؛ wrangler.toml با nodejs_compat؛ out/ و لاگ‌ها gitignore
+- push به GitHub: 1f6ab6c
+
+Stage Summary:
+- پروژه کاملاً آماده دیپلوی: `wrangler pages project create waffly` + `wrangler pages secret put` ×۲ + `wrangler pages deploy out`
+- فقط منتظر توکن API + Account ID از کاربر
+- نکته: بروزرسانی‌های آینده = node scripts/build-pages.mjs && wrangler pages deploy out
