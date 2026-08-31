@@ -5,6 +5,7 @@ db/backups
 dev.log
 server.log
 *.log
+.env
 .zscripts
 mini-services/sync-service/log.txt
 mini-services/sync-service/node_modules
