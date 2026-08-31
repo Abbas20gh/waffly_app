@@ -6,6 +6,8 @@ import { useEffect } from 'react'
 export function SwRegister() {
   useEffect(() => {
     if (typeof window === 'undefined') return
+    // داخل اپ اندروید (Capacitor) نیازی به SW نیست — فایل‌ها داخل خود APK هستند
+    if (typeof (window as unknown as { Capacitor?: unknown }).Capacitor !== 'undefined') return
     if (!('serviceWorker' in navigator)) return
     // فقط در HTTPS (پیش‌نمایش واقعی) فعال شود؛
     // در dev محلی (http) کش SW باعث کهنگی باندل می‌شود

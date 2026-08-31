@@ -23,6 +23,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 
 interface BackupItem { file: string; size: number; mtime: number }
 
+// بسته‌بندی اندروید (Capacitor): آدرس سرور در زمان build تزریق می‌شود؛ روی وب نسبی می‌ماند
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || ''
+
 export function SettingsView() {
   const setting = useSetting()
   const { pendingCount, online, lastSyncAt } = useSyncStore()
@@ -56,7 +59,7 @@ export function SettingsView() {
 
   const loadBackups = async () => {
     try {
-      const res = await fetch('/api/backup?action=list')
+      const res = await fetch(`${API_BASE}/api/backup?action=list`)
       const data = await res.json() as { items?: BackupItem[] }
       setBackups(data.items || [])
     } catch { /* آفلاین */ }
@@ -82,7 +85,7 @@ export function SettingsView() {
   const createBackup = async () => {
     setBusy(true)
     try {
-      const res = await fetch('/api/backup?action=create')
+      const res = await fetch(`${API_BASE}/api/backup?action=create`)
       const data = await res.json() as { ok?: boolean; file?: string }
       if (data.ok) { toast({ title: 'پشتیبان ساخته شد', description: data.file || undefined }); void loadBackups() }
       else toast({ title: 'ساخت پشتیبان ناموفق بود', variant: 'destructive' })
@@ -259,7 +262,7 @@ export function SettingsView() {
                           <TableCell className="text-xs waffly-num" dir="ltr">{b.file}</TableCell>
                           <TableCell className="text-xs waffly-num">{faDigits(Math.round(b.size / 1024))} KB</TableCell>
                           <TableCell>
-                            <a href={`/api/backup?action=download&file=${encodeURIComponent(b.file)}`} download>
+                            <a href={`${API_BASE}/api/backup?action=download&file=${encodeURIComponent(b.file)}`} download>
                               <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="دانلود">
                                 <Download className="h-4 w-4" />
                               </Button>

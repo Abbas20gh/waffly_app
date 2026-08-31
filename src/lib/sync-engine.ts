@@ -48,11 +48,14 @@ let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let cycleTimer: ReturnType<typeof setInterval> | null = null
 let socket: Socket | null = null
 
+// بسته‌بندی اندروید (Capacitor): آدرس سرور سینک در زمان build تزریق می‌شود؛ روی وب نسبی می‌ماند
+export const API_BASE = process.env.NEXT_PUBLIC_API_BASE || ''
+
 async function pushOutbox(): Promise<void> {
   for (;;) {
     const ops = await getOutboxBatch(400)
     if (ops.length === 0) return
-    const res = await fetch('/api/sync/push', {
+    const res = await fetch(`${API_BASE}/api/sync/push`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ops: ops.map(o => ({ tbl: o.tbl, row: o.row })) }),
@@ -72,7 +75,7 @@ async function pullIncremental(): Promise<void> {
   for (;;) {
     if (guard++ > 200) break
     const since = getCursor()
-    const res = await fetch(`/api/sync/pull?since=${since}&limit=300`)
+    const res = await fetch(`${API_BASE}/api/sync/pull?since=${since}&limit=300`)
     if (!res.ok) throw new Error(`pull ${res.status}`)
     const data = await res.json() as { rows: { tbl: SyncTbl; row: Record<string, unknown> }[]; cursor: number; hasMore: boolean }
     if (data.rows?.length) await putRemoteRows(data.rows as never)
@@ -86,7 +89,7 @@ async function bootstrap(): Promise<void> {
   // اگر دستگاه از قبل داده محلی دارد، bootstrap نکن (داده کاربر از بین نرود)
   const anyData = await dexie.sales.count() + await dexie.productions.count() + await dexie.customers.count()
   if (anyData > 0) { markBootstrapped(); return }
-  const res = await fetch('/api/sync/full')
+  const res = await fetch(`${API_BASE}/api/sync/full`)
   if (!res.ok) throw new Error(`full ${res.status}`)
   const data = await res.json() as { rows: { tbl: SyncTbl; row: Record<string, unknown> }[]; cursor: number }
   await putRemoteRows(data.rows as never)
@@ -145,19 +148,15 @@ export function startSyncEngine(): () => void {
 
   cycleTimer = setInterval(() => void syncNow(), 20000)
 
-  // اتصال real-time — فقط اگر NEXT_PUBLIC_SOCKET_URL تنظیم شده باشد (هاست با سرور دائمی)
-  // روی هاست سرورلس (مثل Vercel) این متغیر خالی است و سینک از polling دوره‌ای استفاده می‌کند
-  const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL
-  if (socketUrl) {
-    try {
-      socket = io(socketUrl, {
-        reconnectionDelayMax: 10000,
-        transports: ['websocket', 'polling'],
-      })
-      socket.on('connect', () => { void syncNow() })
-      socket.on('data-changed', () => { void syncNow() })
-    } catch { /* socket اختیاری است */ }
-  }
+  // اتصال real-time از طریق گیت‌وی (پورت 3003)
+  try {
+    socket = io('/?XTransformPort=3003', {
+      reconnectionDelayMax: 10000,
+      transports: ['websocket', 'polling'],
+    })
+    socket.on('connect', () => { void syncNow() })
+    socket.on('data-changed', () => { void syncNow() })
+  } catch { /* socket اختیاری است */ }
 
   // شمارش صف اولیه + سینک اول
   void outboxCount().then(n => setState({ pendingCount: n }))
