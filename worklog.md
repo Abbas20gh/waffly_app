@@ -99,3 +99,20 @@ Work Log:
 Stage Summary:
 - https://waffly.pages.dev زنده است (استاتیک + Functions سالم)
 - مانده: کاربر توکن Turso را بدهد → wrangler pages secret put TURSO_TOKEN + redeploy + تست full/push واقعی + مقایسه داده سندباکس (scripts/compare-counts.mjs) و در صورت وجود ردیف جدید، انتقال با turso-setup.mjs --data
+
+---
+Task ID: 7-2
+Agent: Main Agent (Super Z)
+Task: تکمیل دیپلوی — توکن Turso، secret دوم، redeploy و تست نهایی
+
+Work Log:
+- توکن جدید Turso از کاربر رسید (فرمت database-scoped با claim "a":"rw") → با /v2/pipeline تأیید شد
+- مقایسه داده با scripts/compare-counts.mjs: همه جدول‌ها برابر (BreadType:5, Material:7, ExpenseCategory:4, Setting:1)؛ فقط SyncLog محلی 17 ردیف تست دارد که عمداً منتقل نمی‌شود → انتقال داده لازم نبود
+- wrangler pages secret put TURSO_TOKEN موفق + redeploy (8ac45cb6)
+- تست نهایی production: /api/sync/full → {rows:17, cursor, serverTime} با شکل {tbl, row} و نام استور کلاینت (breadTypes) ✓؛ /api/sync/pull → {rows:[],cursor:0,hasMore:false} ✓؛ /api → Hello world ✓
+- push مسیر production عمداً تست دستی نشد (آلودگی داده) — قبلاً در Task 6 با wrangler pages dev + Turso واقعی smoke شده بود
+
+Stage Summary:
+- https://waffly.pages.dev کاملاً عملیاتی: استاتیک PWA + Functions + Turso متصل
+- secrets: TURSO_URL + TURSO_TOKEN روی پروژه waffly ست شده
+- آپدیت آینده: node scripts/build-pages.mjs && wrangler pages deploy out --branch main (با CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID)
