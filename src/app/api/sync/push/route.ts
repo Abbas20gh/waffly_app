@@ -42,8 +42,10 @@ export async function POST(req: NextRequest) {
     }
 
     if (accepted > 0) {
-      // اطلاع‌رسانی real-time به دستگاه‌های دیگر
-      fetch('http://127.0.0.1:3003/notify', { method: 'POST' }).catch(() => {})
+      // اطلاع‌رسانی real-time به دستگاه‌های دیگر — فقط اگر سرویس socket محلی تنظیم شده باشد
+      if (process.env.SOCKET_NOTIFY_URL) {
+        fetch(process.env.SOCKET_NOTIFY_URL, { method: 'POST' }).catch(() => {})
+      }
     }
 
     return NextResponse.json({ accepted, skipped, serverTime: Date.now() })

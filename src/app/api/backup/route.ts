@@ -13,6 +13,9 @@ const DB_FILE = (() => {
 const BACKUP_DIR = path.join(path.dirname(DB_FILE), 'backups')
 const KEEP = 14
 
+// در حالت سرورلس (Turso/libsql) فایل دیتابیس محلی وجود ندارد
+const IS_SERVERLESS = (process.env.DATABASE_URL || '').startsWith('libsql://')
+
 function backupStamp(kind: 'auto' | 'manual') {
   const now = new Date()
   const { jy, jm, jd } = gregorianToJalali(now.getFullYear(), now.getMonth() + 1, now.getDate())
@@ -40,6 +43,10 @@ export async function GET(req: NextRequest) {
   const action = new URL(req.url).searchParams.get('action') || 'list'
   try {
     if (action === 'list') {
+      if (IS_SERVERLESS) {
+        // در Turso بکاپ‌ها سمت پلتفرم مدیریت می‌شوند
+        return NextResponse.json({ items: [], serverless: true })
+      }
       await mkdir(BACKUP_DIR, { recursive: true }).catch(() => {})
       const files = (await readdir(BACKUP_DIR).catch(() => [] as string[])).filter(f => f.endsWith('.db')).sort().reverse()
       const items = []
@@ -51,6 +58,9 @@ export async function GET(req: NextRequest) {
     }
 
     if (action === 'create' || action === 'auto') {
+      if (IS_SERVERLESS) {
+        return NextResponse.json({ error: 'serverless', message: 'در حالت هاست ابری، بکاپ‌گیری به‌صورت خودکار توسط پلتفرم انجام می‌شود.' }, { status: 501 })
+      }
       if (!existsSync(DB_FILE)) return NextResponse.json({ error: 'db missing' }, { status: 500 })
       if (action === 'auto') {
         // فقط اگر ۲۴ ساعت از آخرین پشتیبان گذشته باشد

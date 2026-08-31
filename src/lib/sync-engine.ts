@@ -145,15 +145,19 @@ export function startSyncEngine(): () => void {
 
   cycleTimer = setInterval(() => void syncNow(), 20000)
 
-  // اتصال real-time از طریق گیت‌وی (پورت 3003)
-  try {
-    socket = io('/?XTransformPort=3003', {
-      reconnectionDelayMax: 10000,
-      transports: ['websocket', 'polling'],
-    })
-    socket.on('connect', () => { void syncNow() })
-    socket.on('data-changed', () => { void syncNow() })
-  } catch { /* socket اختیاری است */ }
+  // اتصال real-time — فقط اگر NEXT_PUBLIC_SOCKET_URL تنظیم شده باشد (هاست با سرور دائمی)
+  // روی هاست سرورلس (مثل Vercel) این متغیر خالی است و سینک از polling دوره‌ای استفاده می‌کند
+  const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL
+  if (socketUrl) {
+    try {
+      socket = io(socketUrl, {
+        reconnectionDelayMax: 10000,
+        transports: ['websocket', 'polling'],
+      })
+      socket.on('connect', () => { void syncNow() })
+      socket.on('data-changed', () => { void syncNow() })
+    } catch { /* socket اختیاری است */ }
+  }
 
   // شمارش صف اولیه + سینک اول
   void outboxCount().then(n => setState({ pendingCount: n }))
