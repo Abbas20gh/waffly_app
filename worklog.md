@@ -80,3 +80,22 @@ Stage Summary:
 - پروژه کاملاً آماده دیپلوی: `wrangler pages project create waffly` + `wrangler pages secret put` ×۲ + `wrangler pages deploy out`
 - فقط منتظر توکن API + Account ID از کاربر
 - نکته: بروزرسانی‌های آینده = node scripts/build-pages.mjs && wrangler pages deploy out
+
+---
+Task ID: 7
+Agent: Main Agent (Super Z)
+Task: دیپلوی Waffly روی Cloudflare Pages با اعتبارنامه‌های کاربر
+
+Work Log:
+- توکن CF (cfut_...) با verify تأیید شد؛ فقط پرمیشن Pages:Edit روی اکانت 4d239652... دارد (Workers/user/memberships → 9109/10000 — نیاز نداریم)
+- توکن Turso از خلاصه جلسه قابل بازسازی نبود (بریده بود) → invalid JWT؛ در .env/لاگ‌ها/history هم نبود → باید دوباره از کاربر گرفته شود
+- بیلد استاتیک با scripts/build-pages.mjs موفق (Next 16.1.3 Turbopack، out/ سالم)
+- wrangler pages project create waffly → پروژه ساخته شد، آدرس https://waffly.pages.dev
+- secret TURSO_URL ست شد؛ TURSO_TOKEN منتظر کاربر
+- deploy out/ موفق: 99 فایل + Functions bundle → production branch main
+- تست دود: / 200 (53KB)، /api → Hello world، sw.js 200، manifest 200، /api/sync/full → 500 (چون توکن Turso نیست — انتظارش را داشتیم)
+- push به GitHub: 090c23b
+
+Stage Summary:
+- https://waffly.pages.dev زنده است (استاتیک + Functions سالم)
+- مانده: کاربر توکن Turso را بدهد → wrangler pages secret put TURSO_TOKEN + redeploy + تست full/push واقعی + مقایسه داده سندباکس (scripts/compare-counts.mjs) و در صورت وجود ردیف جدید، انتقال با turso-setup.mjs --data
