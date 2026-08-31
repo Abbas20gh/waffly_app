@@ -9,3 +9,7 @@ server.log
 .zscripts
 mini-services/sync-service/log.txt
 mini-services/sync-service/node_modules
+out
+wrangler-dev.log
+.wrangler
+.cf-api-hidden
