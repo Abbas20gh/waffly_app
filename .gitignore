@@ -13,3 +13,10 @@ out
 wrangler-dev.log
 .wrangler
 .cf-api-hidden
+
+# Local JDK/SDK for APK builds
+.android-sdk
+.jdk21
+
+# تا وقتی توکن scope وردفلو دارد (فعلاً از push خارج است)
+.github/workflows
