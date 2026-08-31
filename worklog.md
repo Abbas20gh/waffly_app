@@ -116,3 +116,25 @@ Stage Summary:
 - https://waffly.pages.dev کاملاً عملیاتی: استاتیک PWA + Functions + Turso متصل
 - secrets: TURSO_URL + TURSO_TOKEN روی پروژه waffly ست شده
 - آپدیت آینده: node scripts/build-pages.mjs && wrangler pages deploy out --branch main (با CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID)
+
+---
+Task ID: 8
+Agent: Main Agent (Super Z)
+Task: ساخت APK اندروید وافلی با Capacitor 8
+
+Work Log:
+- کشف ریست مجدد sandbox وسط کار: تاریخچه git به 87af15b (Task 3) برگشته بود + فایل‌های scripts از دست — ریپو از origin/main بازیابی شد (reset --hard a96444c) و تغییرات APK دستی برگشت
+- پچ کلاینت: NEXT_PUBLIC_API_BASE در sync-engine.ts (export const API_BASE) + settings-view.tsx (backup) — روی وب خالی = نسبی، در APK = https://waffly.pages.dev
+- sw-register: ثبت SW داخل Capacitor غیرفعال شد (گارد window.Capacitor)
+- Capacitor 8.5.0 (appId com.abbas20gh.waffly) + @capacitor/assets: ۶۱ آیکون/اسپلش از maskable-512 تولید شد (برند #101613)
+- Prisma بعد از ریست خراب بود: adapter-libsql 6.19.2 + client 6.19.2 هم‌نسخه شدند + generate
+- keystore PKCS12 (android/keystore/waffly.keystore، پسورد در keystore.properties — عمداً در ریپو برای امضای یکسان CI؛ قبل از انتشار Play باید چرخد)
+- خطاها: PAT گیت‌هاب scope وردفلو ندارد (push وردفلو رد شد → فایل روی دیسک ماند و .gitignore شد)؛ javac نبود (Temurin 21 در .jdk21 نصب شد)؛ مسیر keystore در gradle باید rootProject.file می‌بود
+- بیلد موفق: Gradle 8.14.3 + SDK 36 (در .android-sdk محلی) → app-release.apk امضاشده (SHA-256: a31b9080...) = download/Waffly-v1.0.apk (8.3MB)
+- صحت‌سنجی aapt/apksigner: package com.abbas20gh.waffly v1.0، ۱۰۱ فایل وب داخل APK، رشته waffly.pages.dev در باندل JS موجود (API_BASE تزریق شده) ✓
+- APK در ریپو هم کامیت شد (download/Waffly-v1.0.apk) → لینک دائمی دانلود در GitHub
+
+Stage Summary:
+- APK: /home/z/my-project/download/Waffly-v1.0.apk + raw.githubusercontent.com/Abbas20gh/waffly_app/main/download/Waffly-v1.0.apk
+- بیلد محلی مجدد (برای آپدیت‌ها): build-pages با API_BASE → cap sync → gradlew assembleRelease (JDK: JAVA_HOME=.jdk21)
+- workflow CI آماده روی دیسک (.github/workflows/build-apk.yml) — با توکن دارای scope وردفلو push می‌شود
