@@ -20,3 +20,23 @@ Stage Summary:
 - اپ کامل و سالم روی پورت 3000؛ همه endpoint ها 200
 - bot-id لینک preview از داخل sandbox قابل کشف نیست (مثل جلسه قبل) — کاربر از Preview Panel استفاده می‌کند
 - لینک‌ها: کد در git (commit 87af15b)
+
+---
+Task ID: 4
+Agent: Main Agent (Super Z)
+Task: آماده‌سازی پروژه برای دیپلوی دائمی رایگان (Vercel + Turso) با GitHub
+
+Work Log:
+- کشف اینکه Prisma 6 provider بومی libsql ندارد → پیاده‌سازی با driver adapter (@prisma/adapter-libsql@6.11.1 هماهنگ با client — نسخه ۷ ناسازگار بود)
+- src/lib/db.ts: اگر DATABASE_URL با libsql:// شروع شود → PrismaLibSQL adapter (Turso)؛ در غیر این صورت موتور استاندارد SQLite (لوکال). سازنده آداپتر در v6 آبجکت Config می‌گیرد نه Client
+- sync-engine.ts: socket فقط با NEXT_PUBLIC_SOCKET_URL فعال می‌شود (روی Vercel خالی → polling 20s)
+- sync/push route: notify فقط با SOCKET_NOTIFY_URL
+- backup route: گارد IS_SERVERLESS (list با فلگ serverless، create با پیام فارسی 501)
+- .env سندباکس: SOCKET_NOTIFY_URL + NEXT_PUBLIC_SOCKET_URL=/?XTransformPort=3003 اضافه شد تا real-time فعلی کار کند
+- scripts/turso-setup.mjs: تولید SQL از اسکیما با prisma migrate diff (بدون اتصال) + executeMultiple + انتقال داده (نام جدول فیزیکی = نام مدل: BreadType...) با INSERT OR REPLACE + گارد ضدتداخل
+- package.json: postinstall=prisma generate (برای Vercel)
+- تست: adapter runtime OK، build OK، push/pull E2E OK، اسکریپت Turso با انتقال ۱۶ ردیف seed محلی OK — کامیت 0204fd1
+
+Stage Summary:
+- پروژه کاملاً آماده دیپلوی سرورلس؛ بعد از ساخت ریپو GitHub + دیتابیس Turso فقط: push کد، اجرای turso-setup، ست کردن ۲ env در Vercel
+- داده‌های موبایل کاربر با --data به Turso منتقل و با bootstrap مجدد به گوشی برمی‌گردد
