@@ -138,3 +138,19 @@ Stage Summary:
 - APK: /home/z/my-project/download/Waffly-v1.0.apk + raw.githubusercontent.com/Abbas20gh/waffly_app/main/download/Waffly-v1.0.apk
 - بیلد محلی مجدد (برای آپدیت‌ها): build-pages با API_BASE → cap sync → gradlew assembleRelease (JDK: JAVA_HOME=.jdk21)
 - workflow CI آماده روی دیسک (.github/workflows/build-apk.yml) — با توکن دارای scope وردفلو push می‌شود
+
+---
+Task ID: 9
+Agent: Main Agent (Super Z)
+Task: ساخت پرامپت جامع پروژه + zip سورس برای انتقال به هوش مصنوعی دیگر
+
+Work Log:
+- کاربر خواست: «دقیق‌ترین پرامپت اپ» یا فایل واقعی اپ برای دادن به AI دیگر و اعمال تغییرات
+- مرور دقیق سورس: worklog، package.json، prisma/schema.prisma، types.ts، localdb.ts، sync-engine.ts، sync-tables.ts، functions/api/_sync.ts، app-shell.tsx، calc.ts، boxcode.ts، capacitor.config.ts، next.config.ts، wrangler.toml، .env.example، .gitignore
+- نوشتن download/Waffly-AI-Prompt.md (~۲۷۰ خط، ۱۴ بخش فارسی): هویت، استک با نسخه‌ها، معماری آفلاین‌فرست + دیاگرام، نقشه فایل‌ها، ۱۵ جدول با فیلدها، API سینک دو بک‌اند، موتور سینک، ۷ نما، منطق کسب‌وکار (boxcode TTDDMMNNSS، بدحسابی، ۳ مبنا سود)، قوانین UI، دیپلوی (CF Pages + APK + Turso)، ۱۲ RED LINE، وضعیت فعلی، چک‌لیست تغییر
+- ساخت download/Waffly-Source-v1.0.zip (4.3MB، ۳۱۲ فایل): کل سورس شامل android/keystore (عمدی طبق Task 8)؛ خروجی‌ها: node_modules/.next/out/.git/skills/upload/download/db/*.log/.env/worklog/Caddyfile/bun.lock حذف؛ پرامپت در ریشه آرشیو هم کپی شد
+- سکرت‌ها (CF/Turso tokens) در هیچ‌کدام از دو فایل نیست
+
+Stage Summary:
+- تحویل: download/Waffly-AI-Prompt.md + download/Waffly-Source-v1.0.zip (+ APK موجود از قبل)
+- راهنمای کاربر: پرامپت را اول بده، بعد zip یا لینک ریپو؛ هشدار درباره سکرت‌ها و اینکه داده واقعی در zip نیست (روی Turso/گوشی است)
