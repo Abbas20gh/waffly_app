@@ -76,20 +76,20 @@ function DailyTab() {
     setOpen(true)
   }
 
-  // پیش‌نمایش کدهای جعبه — عدد کوتاه ترتیبی (ادامهٔ کدهای موجود)
+  // پیش‌نمایش کدهای جعبه — ماه + روز + شمارهٔ جعبهٔ همان روز (ادامهٔ شماره‌های موجود)
   const previewCodes = useMemo(() => {
     const count = parseInt(form.boxesCount || '0', 10)
     if (!bt || count <= 0) return []
-    const start = nextBoxSerial(boxes.map(b => b.code))
+    const start = nextBoxSerial(boxes.map(b => b.code), form.date)
     const n = Math.min(count, 5)
     const codes: string[] = []
-    for (let i = 0; i < n; i++) codes.push(boxCode(start + i))
+    for (let i = 0; i < n; i++) codes.push(boxCode(form.date, start + i))
     return codes
-  }, [bt, boxes, form.boxesCount])
+  }, [bt, boxes, form.boxesCount, form.date])
 
   const save = async () => {
     if (!form.breadTypeId || !bt) { toast({ title: 'نوع نان را انتخاب کنید', variant: 'destructive' }); return }
-    const serialStart = nextBoxSerial(boxes.map(b => b.code))
+    const serialStart = nextBoxSerial(boxes.map(b => b.code), form.date)
     const total = parseFloat(form.totalProduced || '0')
     const boxCount = parseInt(form.boxesCount || '0', 10)
     const per = parseInt(form.perBoxCount || '0', 10)
@@ -114,14 +114,14 @@ function DailyTab() {
       updatedAt: 0,
       deleted: 0,
     })
-    // ساخت کدهای کوتاه ترتیبی جعبه‌ها (اولین جعبه‌ها اسانس‌دار بر اساس ورودی فرم)
+    // ساخت کدهای معنادار جعبه‌ها: ماه + روز + شمارهٔ همان روز (اولین جعبه‌ها اسانس‌دار بر اساس ورودی فرم)
     if (boxCount > 0 && per > 0) {
       const boxRows: Box[] = []
       for (let i = 0; i < boxCount; i++) {
         const withEssence = i < essenceCount
         boxRows.push({
           id: uid(),
-          code: boxCode(serialStart + i),
+          code: boxCode(form.date, serialStart + i),
           productionId: prodId,
           breadTypeId: bt.id,
           count: per,
@@ -242,7 +242,7 @@ function DailyTab() {
         <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>ثبت تولید روزانه</DialogTitle>
-            <DialogDescription>کد جعبه‌ها خودکار ساخته می‌شود: عدد کوتاه ۵ رقمی و ترتیبی</DialogDescription>
+            <DialogDescription>کد جعبه‌ها خودکار ساخته می‌شود: ماه + روز تولید + شمارهٔ جعبهٔ همان روز (۵ رقم)</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <FormRow label="نوع نان">
@@ -353,7 +353,7 @@ function BoxesTab() {
       </CardHeader>
       <CardContent>
         <p className="text-[11px] text-muted-foreground mb-3 leading-5">
-          کد جعبه یک عدد کوتاه ۵ رقمی است (مثلاً <code className="waffly-num" dir="ltr">00123</code>) که خودکار و ترتیبی ساخته می‌شود — معنای خاصی ندارد، فقط شناسهٔ جعبه است؛ کدهای قدیمی ۱۰ رقمی هم معتبرند.
+          فرمت کد: <code className="waffly-num" dir="ltr">MM DD S</code> — ماه و روز تولید + شمارهٔ جعبهٔ همان روز؛ مثلاً <code className="waffly-num" dir="ltr">07263</code> یعنی مهر ۲۶، جعبهٔ ۳. اگر یک روز بیش از ۹ جعبه تولید شود کد ۶ رقمی می‌شود؛ کدهای قدیمی ۱۰ رقمی هم معتبرند.
           با دکمه ویرایش، نوع نان/اسانس/یادداشت هر جعبه را جدا تنظیم کنید؛ کد چاپی ثابت می‌ماند.
         </p>
         {list.length === 0 ? (
