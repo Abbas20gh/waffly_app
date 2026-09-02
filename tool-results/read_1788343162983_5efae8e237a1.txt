@@ -1,0 +1,597 @@
+     1→'use client'
+     2→
+     3→// خرید مواد اولیه — خریدها، انبار، تامین‌کنندگان، اقلام
+     4→import { useMemo, useState } from 'react'
+     5→import { toast } from '@/hooks/use-toast'
+     6→import { ShoppingBasket, Plus, Trash2, Warehouse, Truck, PackageSearch, AlertTriangle } from 'lucide-react'
+     7→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+     8→import { Button } from '@/components/ui/button'
+     9→import { Input } from '@/components/ui/input'
+    10→import {
+    11→  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+    12→} from '@/components/ui/dialog'
+    13→import { PageHeader, FormRow, TabsBar, EmptyState, SettleBadge, Money, Num } from './bits'
+    14→import { JalaliDateInput } from './jalali-date'
+    15→import { InlinePicker } from './inline-picker'
+    16→import { useTable, useSetting, putRecord, removeRecord, uid, getActiveUser } from '@/lib/localdb'
+    17→import type { Purchase, Supplier, Material, Consumption, Good, Sale } from '@/lib/types'
+    18→import { todayJalali, faDigits, faMoney, prettyJalali } from '@/lib/jalali'
+    19→import { active, materialStocks, goodsStocks, effectiveSettled } from '@/lib/calc'
+    20→import { cn } from '@/lib/utils'
+    21→
+    22→type Tab = 'purchases' | 'stock' | 'suppliers' | 'items' | 'goods'
+    23→
+    24→const UNITS = ['کیلوگرم', 'گرم', 'کیسه', 'گونی', 'عدد', 'لیتر', 'بشکه', 'بسته']
+    25→
+    26→export function PurchasesView() {
+    27→  const [tab, setTab] = useState<Tab>('purchases')
+    28→  return (
+    29→    <div>
+    30→      <PageHeader title="خرید و انبار" subtitle="خرید مواد و کالاها، موجودی انبار با هشدار حد بحرانی، تامین‌کنندگان" icon={<ShoppingBasket className="h-5 w-5" />} />
+    31→      <TabsBar<Tab>
+    32→        value={tab}
+    33→        onChange={setTab}
+    34→        tabs={[
+    35→          { key: 'purchases', label: 'خریدها' },
+    36→          { key: 'stock', label: 'انبار و موجودی' },
+    37→          { key: 'goods', label: 'کالاها' },
+    38→          { key: 'suppliers', label: 'تامین‌کنندگان' },
+    39→          { key: 'items', label: 'اقلام' },
+    40→        ]}
+    41→      />
+    42→      {tab === 'purchases' && <PurchasesTab />}
+    43→      {tab === 'stock' && <StockTab />}
+    44→      {tab === 'goods' && <GoodsTab />}
+    45→      {tab === 'suppliers' && <SuppliersTab />}
+    46→      {tab === 'items' && <ItemsTab />}
+    47→    </div>
+    48→  )
+    49→}
+    50→
+    51→function PurchasesTab() {
+    52→  const purchases = useTable<Purchase>('purchases')
+    53→  const materials = useTable<Material>('materials')
+    54→  const goods = useTable<Good>('goods')
+    55→  const suppliers = useTable<Supplier>('suppliers')
+    56→  const [open, setOpen] = useState(false)
+    57→  const [form, setForm] = useState({
+    58→    date: todayJalali(), itemKind: 'MATERIAL' as 'MATERIAL' | 'GOOD', materialId: '',
+    59→    unit: 'PIECE' as 'PIECE' | 'BOX',
+    60→    quantity: '', cost: '', pricePerBox: '',
+    61→    supplierId: '', settledStatus: 'PAID' as Purchase['settledStatus'], paidAmount: '', note: '',
+    62→  })
+    63→  const mat = form.itemKind === 'MATERIAL' ? materials.find(m => m.id === form.materialId) : undefined
+    64→  const good = form.itemKind === 'GOOD' ? goods.find(g => g.id === form.materialId) : undefined
+    65→  const ppb = good?.piecesPerBox || 0
+    66→  const boxMode = form.itemKind === 'GOOD' && form.unit === 'BOX' && ppb > 0
+    67→  const qtyNum = parseFloat(form.quantity || '0')
+    68→  const costNum = boxMode ? qtyNum * (parseFloat(form.pricePerBox || '0') || 0) : parseFloat(form.cost || '0')
+    69→  const piecesNum = boxMode ? qtyNum * ppb : qtyNum
+    70→
+    71→  const switchKind = (kind: 'MATERIAL' | 'GOOD') => setForm(f => ({ ...f, itemKind: kind, materialId: '', unit: 'PIECE', quantity: '', cost: '', pricePerBox: '' }))
+    72→
+    73→  const save = async () => {
+    74→    if (!form.materialId || qtyNum <= 0 || costNum <= 0) { toast({ title: 'قلم، مقدار و هزینه را وارد کنید', variant: 'destructive' }); return }
+    75→    if (form.itemKind === 'GOOD' && form.unit === 'BOX' && ppb <= 0) { toast({ title: 'اول «تعداد در جعبه» را در تب کالاها تنظیم کنید', variant: 'destructive' }); return }
+    76→    const paid = form.settledStatus === 'PAID' ? costNum : parseFloat(form.paidAmount || '0')
+    77→    await putRecord<Purchase>('purchases', {
+    78→      id: uid(),
+    79→      date: form.date,
+    80→      materialId: form.materialId,
+    81→      quantity: piecesNum,
+    82→      cost: costNum,
+    83→      supplierId: form.supplierId || null,
+    84→      settledStatus: form.settledStatus === 'PAID' || paid >= costNum - 0.5 ? 'PAID' : paid > 0.5 ? 'PARTIAL' : 'UNPAID',
+    85→      paidAmount: Math.min(paid, costNum),
+    86→      itemKind: form.itemKind,
+    87→      boxesCount: boxMode ? qtyNum : 0,
+    88→      note: form.note || null,
+    89→      createdBy: getActiveUser() || null,
+    90→      updatedAt: 0, deleted: 0,
+    91→    })
+    92→    toast({ title: 'خرید ثبت شد', description: `${(form.itemKind === 'GOOD' ? good?.name : mat?.name) || ''}: ${faDigits(piecesNum)} عدد — ${faMoney(costNum)} تومان` })
+    93→    setOpen(false)
+    94→    setForm(f => ({ ...f, quantity: '', cost: '', pricePerBox: '', paidAmount: '', note: '' }))
+    95→  }
+    96→
+    97→  const list = [...purchases].filter(p => !p.deleted).sort((a, b) => (b.date + b.updatedAt).localeCompare(a.date + a.updatedAt)).slice(0, 50)
+    98→  const matOf = (id: string) => materials.find(m => m.id === id)
+    99→  const gOf = (id: string) => goods.find(g => g.id === id)
+   100→  const supOf = (id: string | null) => suppliers.find(s => s.id === id)
+   101→
+   102→  return (
+   103→    <div className="space-y-4">
+   104→      <div className="flex justify-end">
+   105→        <Button className="h-11" onClick={() => setOpen(true)}><Plus className="ml-1 h-4 w-4" /> خرید جدید</Button>
+   106→      </div>
+   107→
+   108→      <Card className="waffly-card">
+   109→        <CardContent className="p-3">
+   110→          {list.length === 0 ? (
+   111→            <EmptyState title="خریدی ثبت نشده" desc="مواد اولیه و کالاها را ثبت کنید تا موجودی انبار محاسبه شود." icon={<ShoppingBasket className="h-5 w-5" />} />
+   112→          ) : (
+   113→            <div className="space-y-2">
+   114→              {list.map(p => {
+   115→                const isGood = p.itemKind === 'GOOD'
+   116→                const item = isGood ? gOf(p.materialId) : matOf(p.materialId)
+   117→                const st = effectiveSettled(p)
+   118→                return (
+   119→                  <div key={p.id} className="flex flex-wrap items-center gap-2 rounded-xl border p-3">
+   120→                    <div className="flex-1 min-w-0">
+   121→                      <p className="text-sm font-semibold">
+   122→                        {isGood && <span className="ml-1 rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-700">کالا</span>}
+   123→                        {item?.name || 'نامشخص'} — <Num value={p.quantity} /> {isGood ? 'عدد' : (item as Material | undefined)?.unit}
+   124→                        {isGood && p.boxesCount ? <span className="text-[11px] font-normal text-muted-foreground waffly-num"> ({faDigits(p.boxesCount)} جعبه)</span> : null}
+   125→                      </p>
+   126→                      <p className="text-[11px] text-muted-foreground waffly-num">
+   127→                        {prettyJalali(p.date)}{p.supplierId && ` • ${supOf(p.supplierId)?.name || ''}`}{p.createdBy && ` • ${p.createdBy}`}
+   128→                      </p>
+   129→                    </div>
+   130→                    <SettleBadge status={st} paid={p.paidAmount} total={p.cost} />
+   131→                    <Money value={p.cost} className="font-bold text-sm" />
+   132→                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" aria-label="حذف"
+   133→                      onClick={() => void removeRecord('purchases', p.id)}>
+   134→                      <Trash2 className="h-4 w-4" />
+   135→                    </Button>
+   136→                  </div>
+   137→                )
+   138→              })}
+   139→            </div>
+   140→          )}
+   141→        </CardContent>
+   142→      </Card>
+   143→
+   144→      <Dialog open={open} onOpenChange={setOpen}>
+   145→        <DialogContent className="max-w-md max-h-[90dvh] overflow-y-auto">
+   146→          <DialogHeader>
+   147→            <DialogTitle>ثبت خرید</DialogTitle>
+   148→          </DialogHeader>
+   149→          <div className="space-y-4">
+   150→            <FormRow label="نوع قلم">
+   151→              <InlinePicker
+   152→                value={form.itemKind}
+   153→                options={[{ value: 'MATERIAL', label: 'ماده اولیه' }, { value: 'GOOD', label: 'کالا (خرید و فروشی)' }]}
+   154→                onChange={v => switchKind(v as 'MATERIAL' | 'GOOD')}
+   155→              />
+   156→            </FormRow>
+   157→            <FormRow label={form.itemKind === 'GOOD' ? 'کالا' : 'ماده اولیه'}>
+   158→              {form.itemKind === 'GOOD' ? (
+   159→                <InlinePicker
+   160→                  value={form.materialId}
+   161→                  options={active(goods).filter(g => g.active !== 0).map(g => ({ value: g.id, label: g.name, hint: g.piecesPerBox > 0 ? `${faDigits(g.piecesPerBox)} عددی` : 'کالا' }))}
+   162→                  onChange={v => setForm(f => ({ ...f, materialId: v, unit: 'PIECE', quantity: '', cost: '', pricePerBox: '' }))}
+   163→                  placeholder="انتخاب کالا"
+   164→                />
+   165→              ) : (
+   166→                <InlinePicker
+   167→                  value={form.materialId}
+   168→                  options={active(materials).filter(m => m.active !== 0).map(m => ({ value: m.id, label: m.name, hint: m.unit }))}
+   169→                  onChange={v => setForm(f => ({ ...f, materialId: v }))}
+   170→                  placeholder="انتخاب کنید"
+   171→                />
+   172→              )}
+   173→            </FormRow>
+   174→            {form.itemKind === 'GOOD' && good && ppb > 0 && (
+   175→              <FormRow label="واحد خرید">
+   176→                <InlinePicker
+   177→                  value={form.unit}
+   178→                  options={[{ value: 'BOX', label: `جعبه (${faDigits(ppb)} عددی)` }, { value: 'PIECE', label: 'عدد' }]}
+   179→                  onChange={v => setForm(f => ({ ...f, unit: v as 'PIECE' | 'BOX', quantity: '', cost: '', pricePerBox: '' }))}
+   180→                />
+   181→              </FormRow>
+   182→            )}
+   183→            {form.itemKind === 'GOOD' && good && ppb <= 0 && (
+   184→              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
+   185→                برای خرید جعبه‌ای، اول «تعداد در جعبه» را در تب «کالاها» تنظیم کنید — فعلاً خرید عددی فعال است.
+   186→              </p>
+   187→            )}
+   188→            <div className="grid grid-cols-2 gap-3">
+   189→              <FormRow label={boxMode ? 'تعداد جعبه' : form.itemKind === 'GOOD' ? 'تعداد (عدد)' : 'مقدار'} hint={boxMode ? `${faDigits(ppb)} عدد در هر جعبه` : mat ? `واحد: ${mat.unit}` : undefined}>
+   190→                <Input inputMode="decimal" className="waffly-num-input h-11" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} />
+   191→              </FormRow>
+   192→              {boxMode ? (
+   193→                <FormRow label="قیمت هر جعبه (تومان)" hint={`جمع: ${faMoney(costNum)} تومان` + (piecesNum > 0 ? ` — معادل ${faDigits(piecesNum)} عدد` : '')}>
+   194→                  <Input inputMode="decimal" className="waffly-num-input h-11" value={form.pricePerBox} onChange={e => setForm(f => ({ ...f, pricePerBox: e.target.value }))} />
+   195→                </FormRow>
+   196→              ) : (
+   197→                <FormRow label="هزینه کل (تومان)">
+   198→                  <Input inputMode="decimal" className="waffly-num-input h-11" value={form.cost} onChange={e => setForm(f => ({ ...f, cost: e.target.value }))} />
+   199→                </FormRow>
+   200→              )}
+   201→            </div>
+   202→            <FormRow label="تامین‌کننده">
+   203→              <InlinePicker
+   204→                value={form.supplierId || 'none'}
+   205→                options={[{ value: 'none', label: 'بدون تامین‌کننده' }, ...active(suppliers).map(s => ({ value: s.id, label: s.name }))]}
+   206→                onChange={v => setForm(f => ({ ...f, supplierId: v === 'none' ? '' : v }))}
+   207→                placeholder="انتخاب کنید (اختیاری)"
+   208→              />
+   209→            </FormRow>
+   210→            <FormRow label="تاریخ خرید">
+   211→              <JalaliDateInput value={form.date} onChange={v => setForm(f => ({ ...f, date: v }))} />
+   212→            </FormRow>
+   213→            <FormRow label="وضعیت تسویه">
+   214→              <InlinePicker
+   215→                value={form.settledStatus}
+   216→                options={[
+   217→                  { value: 'PAID', label: 'پرداخت‌شده' },
+   218→                  { value: 'PARTIAL', label: 'پرداخت جزئی' },
+   219→                  { value: 'UNPAID', label: 'پرداخت‌نشده' },
+   220→                ]}
+   221→                onChange={v => setForm(f => ({ ...f, settledStatus: v as Purchase['settledStatus'] }))}
+   222→              />
+   223→            </FormRow>
+   224→            {form.settledStatus === 'PARTIAL' && (
+   225→              <FormRow label="مبلغ پرداخت‌شده">
+   226→                <Input inputMode="decimal" className="waffly-num-input h-11" value={form.paidAmount} onChange={e => setForm(f => ({ ...f, paidAmount: e.target.value }))} />
+   227→              </FormRow>
+   228→            )}
+   229→            <FormRow label="یادداشت">
+   230→              <Input value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} className="h-11" />
+   231→            </FormRow>
+   232→          </div>
+   233→          <DialogFooter>
+   234→            <Button variant="outline" onClick={() => setOpen(false)}>انصراف</Button>
+   235→            <Button onClick={save}>ثبت خرید</Button>
+   236→          </DialogFooter>
+   237→        </DialogContent>
+   238→      </Dialog>
+   239→    </div>
+   240→  )
+   241→}
+   242→
+   243→function StockTab() {
+   244→  const materials = useTable<Material>('materials')
+   245→  const goods = useTable<Good>('goods')
+   246→  const purchases = useTable<Purchase>('purchases')
+   247→  const consumptions = useTable<Consumption>('consumptions')
+   248→  const sales = useTable<Sale>('sales')
+   249→  const stocks = useMemo(() => materialStocks({
+   250→    materials, goods: [], purchases, consumptions,
+   251→    breadTypes: [], productions: [], customers: [], sales: [], suppliers: [], machines: [],
+   252→    machineCosts: [], expenseCategories: [], expenses: [], otherFunds: [],
+   253→    setting: { id: 'main', businessName: '', monthStartDay: 1, badDebtDays: 30, checkAlertDays: 7, updatedAt: 0, deleted: 0 },
+   254→  }), [materials, purchases, consumptions])
+   255→  const goodStocks = useMemo(() => goodsStocks({
+   256→    goods, purchases, sales,
+   257→    breadTypes: [], productions: [], materials: [], consumptions: [], customers: [], suppliers: [], machines: [],
+   258→    machineCosts: [], expenseCategories: [], expenses: [], otherFunds: [],
+   259→    setting: { id: 'main', businessName: '', monthStartDay: 1, badDebtDays: 30, checkAlertDays: 7, updatedAt: 0, deleted: 0 },
+   260→  }), [goods, purchases, sales])
+   261→
+   262→  const setMin = async (m: Material, value: string) => {
+   263→    const v = parseFloat(value) || 0
+   264→    await putRecord<Material>('materials', { ...m, minStock: v })
+   265→  }
+   266→  const setGoodMin = async (g: Good, value: string) => {
+   267→    const v = parseFloat(value) || 0
+   268→    await putRecord<Good>('goods', { ...g, minStock: v })
+   269→  }
+   270→
+   271→  const lowCount = stocks.filter(s => s.low).length + goodStocks.filter(s => s.low).length
+   272→
+   273→  return (
+   274→    <div className="space-y-4">
+   275→    <Card className="waffly-card">
+   276→      <CardHeader className="pb-2">
+   277→        <CardTitle className="text-sm flex items-center gap-2">
+   278→          <Warehouse className="h-4 w-4" /> موجودی انبار
+   279→          {lowCount > 0 && (
+   280→            <span className="rounded-lg bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 text-[11px] waffly-num">
+   281→              {faDigits(lowCount)} قلم زیر حد بحرانی
+   282→            </span>
+   283→          )}
+   284→        </CardTitle>
+   285→      </CardHeader>
+   286→      <CardContent>
+   287→        {stocks.length === 0 ? (
+   288→          <EmptyState title="قلمی ثبت نشده" desc="از تب «اقلام» مواد اولیه را اضافه کنید." icon={<PackageSearch className="h-5 w-5" />} />
+   289→        ) : (
+   290→          <div className="space-y-2">
+   291→            {stocks.map(st => (
+   292→              <div key={st.material.id} className={cn('rounded-xl border p-3', st.low ? 'border-amber-300 bg-amber-50/50' : '')}>
+   293→                <div className="flex flex-wrap items-center gap-2">
+   294→                  {st.low && <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />}
+   295→                  <p className="text-sm font-semibold flex-1">{st.material.name}</p>
+   296→                  <span className={cn('text-sm font-bold waffly-num', st.stock <= 0 ? 'text-red-600' : st.low ? 'text-amber-700' : 'text-green-700')}>
+   297→                    {faDigits(Math.round(st.stock * 100) / 100)} <span className="text-[10px] font-normal text-muted-foreground">{st.material.unit}</span>
+   298→                  </span>
+   299→                </div>
+   300→                <div className="flex flex-wrap items-center gap-3 mt-1.5 text-[11px] text-muted-foreground waffly-num">
+   301→                  <span>خرید: {faDigits(Math.round(st.purchased * 100) / 100)}</span>
+   302→                  <span>مصرف: {faDigits(Math.round(st.consumed * 100) / 100)}</span>
+   303→                  {st.avgPrice > 0 && <span>میانگین قیمت: {faMoney(st.avgPrice)}</span>}
+   304→                  <label className="flex items-center gap-1.5 mr-auto">
+   305→                    حد بحرانی:
+   306→                    <Input
+   307→                      inputMode="decimal"
+   308→                      defaultValue={st.material.minStock || ''}
+   309→                      onBlur={e => void setMin(st.material, e.target.value)}
+   310→                      className="waffly-num-input h-7 w-20 text-[11px]"
+   311→                    />
+   312→                  </label>
+   313→                </div>
+   314→              </div>
+   315→            ))}
+   316→          </div>
+   317→        )}
+   318→      </CardContent>
+   319→    </Card>
+   320→
+   321→    <Card className="waffly-card">
+   322→      <CardHeader className="pb-2">
+   323→        <CardTitle className="text-sm flex items-center gap-2">
+   324→          <PackageSearch className="h-4 w-4" /> موجودی کالاها
+   325→          {goodStocks.filter(s => s.low).length > 0 && (
+   326→            <span className="rounded-lg bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 text-[11px] waffly-num">
+   327→              {faDigits(goodStocks.filter(s => s.low).length)} کالا زیر حد بحرانی
+   328→            </span>
+   329→          )}
+   330→        </CardTitle>
+   331→      </CardHeader>
+   332→      <CardContent>
+   333→        {goodStocks.length === 0 ? (
+   334→          <EmptyState title="کالایی ثبت نشده" desc="از تب «کالاها» کالای خرید و فروشی (مثل نان مشعلی) اضافه کنید." icon={<PackageSearch className="h-5 w-5" />} />
+   335→        ) : (
+   336→          <div className="space-y-2">
+   337→            {goodStocks.map(st => (
+   338→              <div key={st.good.id} className={cn('rounded-xl border p-3', st.low ? 'border-amber-300 bg-amber-50/50' : '')}>
+   339→                <div className="flex flex-wrap items-center gap-2">
+   340→                  {st.low && <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />}
+   341→                  <span className="rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-700">کالا</span>
+   342→                  <p className="text-sm font-semibold flex-1">{st.good.name}</p>
+   343→                  <span className={cn('text-sm font-bold waffly-num', st.stock <= 0 ? 'text-red-600' : st.low ? 'text-amber-700' : 'text-green-700')}>
+   344→                    {faDigits(Math.round(st.stock * 100) / 100)} <span className="text-[10px] font-normal text-muted-foreground">عدد</span>
+   345→                  </span>
+   346→                </div>
+   347→                <div className="flex flex-wrap items-center gap-3 mt-1.5 text-[11px] text-muted-foreground waffly-num">
+   348→                  <span>خرید: {faDigits(st.purchased)}</span>
+   349→                  <span>فروش: {faDigits(st.sold)}</span>
+   350→                  {st.good.piecesPerBox > 0 && <span>معادل: {faDigits(Math.floor(Math.max(0, st.stock) / st.good.piecesPerBox))} جعبه</span>}
+   351→                  {st.avgPrice > 0 && <span>میانگین بهای هر عدد: {faMoney(st.avgPrice)}</span>}
+   352→                  <label className="flex items-center gap-1.5 mr-auto">
+   353→                    حد بحرانی:
+   354→                    <Input
+   355→                      inputMode="decimal"
+   356→                      defaultValue={st.good.minStock || ''}
+   357→                      onBlur={e => void setGoodMin(st.good, e.target.value)}
+   358→                      className="waffly-num-input h-7 w-20 text-[11px]"
+   359→                    />
+   360→                  </label>
+   361→                </div>
+   362→              </div>
+   363→            ))}
+   364→          </div>
+   365→        )}
+   366→      </CardContent>
+   367→    </Card>
+   368→    </div>
+   369→  )
+   370→}
+   371→
+   372→function GoodsTab() {
+   373→  const goods = useTable<Good>('goods')
+   374→  const [form, setForm] = useState({ name: '', piecesPerBox: '', minStock: '' })
+   375→
+   376→  const save = async () => {
+   377→    if (!form.name.trim()) { toast({ title: 'نام کالا لازم است', variant: 'destructive' }); return }
+   378→    await putRecord<Good>('goods', {
+   379→      id: uid(), name: form.name.trim(),
+   380→      piecesPerBox: parseFloat(form.piecesPerBox || '0') || 0,
+   381→      minStock: parseFloat(form.minStock || '0') || 0,
+   382→      active: 1, updatedAt: 0, deleted: 0,
+   383→    })
+   384→    setForm({ name: '', piecesPerBox: '', minStock: '' })
+   385→    toast({ title: 'کالا اضافه شد' })
+   386→  }
+   387→
+   388→  const setPpb = async (g: Good, value: string) => {
+   389→    const v = parseFloat(value) || 0
+   390→    if (v === (g.piecesPerBox || 0)) return
+   391→    await putRecord<Good>('goods', { ...g, piecesPerBox: v })
+   392→  }
+   393→
+   394→  return (
+   395→    <div className="grid lg:grid-cols-5 gap-4">
+   396→      <Card className="waffly-card lg:col-span-2 h-fit">
+   397→        <CardHeader className="pb-2">
+   398→          <CardTitle className="text-sm">کالای جدید (خرید و فروش بدون تولید)</CardTitle>
+   399→        </CardHeader>
+   400→        <CardContent className="space-y-3">
+   401→          <FormRow label="نام کالا" hint="مثلاً: نان مشعلی">
+   402→            <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="h-11" />
+   403→          </FormRow>
+   404→          <FormRow label="تعداد در هر جعبه" hint="برای خرید جعبه‌ای — ۰ یعنی فعلاً فقط عددی">
+   405→            <Input inputMode="decimal" className="waffly-num-input h-11" value={form.piecesPerBox} onChange={e => setForm(f => ({ ...f, piecesPerBox: e.target.value }))} />
+   406→          </FormRow>
+   407→          <FormRow label="حد بحرانی هشدار (عدد)" hint="وقتی موجودی به این تعداد برسد هشدار می‌دهد">
+   408→            <Input inputMode="decimal" className="waffly-num-input h-11" value={form.minStock} onChange={e => setForm(f => ({ ...f, minStock: e.target.value }))} />
+   409→          </FormRow>
+   410→          <Button className="w-full h-11" onClick={save}>افزودن کالا</Button>
+   411→          <p className="text-[11px] text-muted-foreground leading-5">
+   412→            کالاها در همان فاکتور فروش کنار نان‌ها می‌آیند و بهای خریدشان (میانگین موزون) از سود کم می‌شود — بدون نیاز به رسپی و تولید.
+   413→          </p>
+   414→        </CardContent>
+   415→      </Card>
+   416→      <Card className="waffly-card lg:col-span-3">
+   417→        <CardHeader className="pb-2"><CardTitle className="text-sm">کالاها ({faDigits(active(goods).filter(g => g.active !== 0).length)} فعال)</CardTitle></CardHeader>
+   418→        <CardContent>
+   419→          {goods.filter(g => !g.deleted).length === 0 ? (
+   420→            <EmptyState title="کالایی ثبت نشده" desc="نان مشعلی و کالاهای مشابه را اینجا اضافه کنید." icon={<PackageSearch className="h-5 w-5" />} />
+   421→          ) : (
+   422→            <div className="space-y-1.5">
+   423→              {[...goods].filter(g => !g.deleted).sort((a, b) => (b.active || 0) - (a.active || 0) || a.name.localeCompare(b.name, 'fa')).map(g => (
+   424→                <div key={g.id} className={cn('flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2.5', g.active === 0 && 'opacity-60')}>
+   425→                  <span className="text-sm font-medium flex-1">{g.name}</span>
+   426→                  {g.active === 0 && <span className="rounded-full bg-muted text-muted-foreground text-[10px] px-2 py-0.5">غیرفعال</span>}
+   427→                  <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+   428→                    تعداد در جعبه:
+   429→                    <Input
+   430→                      inputMode="decimal"
+   431→                      defaultValue={g.piecesPerBox || ''}
+   432→                      placeholder="۰"
+   433→                      onBlur={e => void setPpb(g, e.target.value)}
+   434→                      className="waffly-num-input h-7 w-16 text-[11px]"
+   435→                    />
+   436→                  </label>
+   437→                  <span className="text-[11px] text-muted-foreground waffly-num">حد: {faDigits(g.minStock)}</span>
+   438→                  <Button
+   439→                    variant="ghost" size="sm" className="h-8 shrink-0 text-[11px]"
+   440→                    onClick={() => void putRecord<Good>('goods', { ...g, active: g.active === 0 ? 1 : 0 })}
+   441→                  >
+   442→                    {g.active === 0 ? 'فعال‌سازی' : 'غیرفعال'}
+   443→                  </Button>
+   444→                  <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-red-600" aria-label="حذف"
+   445→                    onClick={() => void removeRecord('goods', g.id)}>
+   446→                    <Trash2 className="h-4 w-4" />
+   447→                  </Button>
+   448→                </div>
+   449→              ))}
+   450→            </div>
+   451→          )}
+   452→        </CardContent>
+   453→      </Card>
+   454→    </div>
+   455→  )
+   456→}
+   457→
+   458→function SuppliersTab() {
+   459→  const suppliers = useTable<Supplier>('suppliers')
+   460→  const purchases = useTable<Purchase>('purchases')
+   461→  const [form, setForm] = useState({ name: '', phone: '', address: '' })
+   462→
+   463→  const save = async () => {
+   464→    if (!form.name.trim()) { toast({ title: 'نام تامین‌کننده لازم است', variant: 'destructive' }); return }
+   465→    await putRecord<Supplier>('suppliers', {
+   466→      id: uid(), name: form.name.trim(), phone: form.phone || null, address: form.address || null,
+   467→      updatedAt: 0, deleted: 0,
+   468→    })
+   469→    setForm({ name: '', phone: '', address: '' })
+   470→    toast({ title: 'تامین‌کننده ذخیره شد' })
+   471→  }
+   472→
+   473→  const stats = useMemo(() => {
+   474→    const m = new Map<string, { count: number; total: number; due: number }>()
+   475→    for (const p of active(purchases)) {
+   476→      if (!p.supplierId) continue
+   477→      const st = m.get(p.supplierId) || { count: 0, total: 0, due: 0 }
+   478→      st.count++
+   479→      st.total += p.cost || 0
+   480→      st.due += Math.max(0, (p.cost || 0) - (p.paidAmount || 0))
+   481→      m.set(p.supplierId, st)
+   482→    }
+   483→    return m
+   484→  }, [purchases])
+   485→
+   486→  return (
+   487→    <div className="grid lg:grid-cols-5 gap-4">
+   488→      <Card className="waffly-card lg:col-span-2 h-fit">
+   489→        <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Truck className="h-4 w-4" /> تامین‌کننده جدید</CardTitle></CardHeader>
+   490→        <CardContent className="space-y-3">
+   491→          <FormRow label="نام"><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="h-11" /></FormRow>
+   492→          <FormRow label="تلفن"><Input inputMode="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="waffly-num h-11" dir="ltr" /></FormRow>
+   493→          <FormRow label="آدرس"><Input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} className="h-11" /></FormRow>
+   494→          <Button className="w-full h-11" onClick={save}>ذخیره</Button>
+   495→        </CardContent>
+   496→      </Card>
+   497→      <Card className="waffly-card lg:col-span-3">
+   498→        <CardHeader className="pb-2"><CardTitle className="text-sm">تامین‌کنندگان ({faDigits(active(suppliers).length)})</CardTitle></CardHeader>
+   499→        <CardContent>
+   500→          {active(suppliers).length === 0 ? (
+   501→            <EmptyState title="تامین‌کننده‌ای ثبت نشده" icon={<Truck className="h-5 w-5" />} />
+   502→          ) : (
+   503→            <div className="space-y-1.5">
+   504→              {active(suppliers).map(s => {
+   505→                const st = stats.get(s.id)
+   506→                return (
+   507→                  <div key={s.id} className="flex items-center gap-3 rounded-lg border px-3 py-2.5">
+   508→                    <div className="flex-1 min-w-0">
+   509→                      <p className="text-sm font-semibold">{s.name}</p>
+   510→                      <p className="text-[11px] text-muted-foreground waffly-num">
+   511→                        {s.phone && <span dir="ltr">{s.phone}</span>}
+   512→                        {st && ` • ${faDigits(st.count)} خرید`}
+   513→                      </p>
+   514→                    </div>
+   515→                    {st && (
+   516→                      <div className="text-left shrink-0">
+   517→                        {st.due > 0.5 && <p className="text-[11px] text-red-600 font-bold waffly-num">بدهی: {faMoney(st.due)}</p>}
+   518→                        <p className="text-[10px] text-muted-foreground waffly-num">مجموع: {faMoney(st.total)}</p>
+   519→                      </div>
+   520→                    )}
+   521→                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" aria-label="حذف"
+   522→                      onClick={() => void removeRecord('suppliers', s.id)}>
+   523→                      <Trash2 className="h-4 w-4" />
+   524→                    </Button>
+   525→                  </div>
+   526→                )
+   527→              })}
+   528→            </div>
+   529→          )}
+   530→        </CardContent>
+   531→      </Card>
+   532→    </div>
+   533→  )
+   534→}
+   535→
+   536→function ItemsTab() {
+   537→  const materials = useTable<Material>('materials')
+   538→  const [form, setForm] = useState({ name: '', unit: UNITS[0], minStock: '' })
+   539→
+   540→  const save = async () => {
+   541→    if (!form.name.trim()) { toast({ title: 'نام قلم لازم است', variant: 'destructive' }); return }
+   542→    await putRecord<Material>('materials', {
+   543→      id: uid(), name: form.name.trim(), unit: form.unit, minStock: parseFloat(form.minStock || '0') || 0,
+   544→      active: 1, updatedAt: 0, deleted: 0,
+   545→    })
+   546→    setForm({ name: '', unit: UNITS[0], minStock: '' })
+   547→    toast({ title: 'قلم اضافه شد' })
+   548→  }
+   549→
+   550→  return (
+   551→    <div className="grid lg:grid-cols-5 gap-4">
+   552→      <Card className="waffly-card lg:col-span-2 h-fit">
+   553→        <CardHeader className="pb-2"><CardTitle className="text-sm">قلم جدید مواد اولیه</CardTitle></CardHeader>
+   554→        <CardContent className="space-y-3">
+   555→          <FormRow label="نام قلم"><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="h-11" /></FormRow>
+   556→          <FormRow label="واحد اندازه‌گیری" hint="هر قلم واحد مخصوص خودش را دارد">
+   557→            <InlinePicker
+   558→              value={form.unit}
+   559→              options={UNITS.map(u => ({ value: u, label: u }))}
+   560→              onChange={v => setForm(f => ({ ...f, unit: v }))}
+   561→            />
+   562→          </FormRow>
+   563→          <FormRow label="حد بحرانی هشدار" hint="وقتی موجودی به این مقدار برسد هشدار می‌دهد">
+   564→            <Input inputMode="decimal" className="waffly-num-input h-11" value={form.minStock} onChange={e => setForm(f => ({ ...f, minStock: e.target.value }))} />
+   565→          </FormRow>
+   566→          <Button className="w-full h-11" onClick={save}>افزودن قلم</Button>
+   567→        </CardContent>
+   568→      </Card>
+   569→      <Card className="waffly-card lg:col-span-3">
+   570→        <CardHeader className="pb-2"><CardTitle className="text-sm">اقلام ({faDigits(active(materials).filter(m => m.active !== 0).length)} فعال)</CardTitle></CardHeader>
+   571→        <CardContent>
+   572→          <div className="space-y-1.5">
+   573→            {[...materials].filter(m => !m.deleted).sort((a, b) => (b.active || 0) - (a.active || 0) || a.name.localeCompare(b.name, 'fa')).map(m => (
+   574→              <div key={m.id} className={cn('flex items-center gap-3 rounded-lg border px-3 py-2.5', m.active === 0 && 'opacity-60')}>
+   575→                <span className="text-sm font-medium flex-1">{m.name}</span>
+   576→                {m.active === 0 && <span className="rounded-full bg-muted text-muted-foreground text-[10px] px-2 py-0.5">غیرفعال</span>}
+   577→                <span className="text-[11px] text-muted-foreground">واحد: {m.unit}</span>
+   578→                <span className="text-[11px] text-muted-foreground waffly-num">حد: {faDigits(m.minStock)}</span>
+   579→                <Button
+   580→                  variant="ghost" size="sm" className="h-8 shrink-0 text-[11px]"
+   581→                  onClick={() => void putRecord<Material>('materials', { ...m, active: m.active === 0 ? 1 : 0 })}
+   582→                >
+   583→                  {m.active === 0 ? 'فعال‌سازی' : 'غیرفعال'}
+   584→                </Button>
+   585→                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-red-600" aria-label="حذف"
+   586→                  onClick={() => void removeRecord('materials', m.id)}>
+   587→                  <Trash2 className="h-4 w-4" />
+   588→                </Button>
+   589→              </div>
+   590→            ))}
+   591→          </div>
+   592→        </CardContent>
+   593→      </Card>
+   594→    </div>
+   595→  )
+   596→}
+   597→
