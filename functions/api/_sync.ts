@@ -44,6 +44,7 @@ const n = (v: unknown, dflt = 0): number => {
   const x = typeof v === 'number' ? v : parseFloat(String(v))
   return Number.isFinite(x) ? x : dflt
 }
+const r4 = (x: number): number => Math.round(x * 10000) / 10000
 
 // ===== مهاجرت خودکار اسکیما (v2.4 — کالاهای بازرگانی) =====
 // idempotent و در سطح isolate مموایز — اولین درخواست بعد از دیپلوی مهاجرت را انجام می‌دهد
@@ -71,17 +72,85 @@ export async function ensureSchema(db: Client): Promise<void> {
   if (!names.has('boxesCount')) {
     await db.execute(`ALTER TABLE "Purchase" ADD COLUMN "boxesCount" REAL NOT NULL DEFAULT 0`)
   }
-  // ۳) seed مشعلی برای دیتابیس‌های موجود (دیتابیس خالی در ensureSeed گرفته می‌شود)
+  // ۳) seed مشعلی برای دیتابیس‌های موجود (دیتابیس خالی در ensureSeed گرفته می‌شود) — واحد از v2.5 جعبه است
   const g = await db.execute({ sql: `SELECT id FROM "Good" WHERE id = ?`, args: ['seed-gd-01'] })
   if (g.rows.length === 0) {
     const now = Date.now()
     await db.execute({
-      sql: `INSERT INTO "Good" ("id","name","piecesPerBox","minStock","active","updatedAt","deleted") VALUES (?, ?, 0, 0, 1, ?, 0)`,
+      sql: `INSERT INTO "Good" ("id","name","piecesPerBox","minStock","active","updatedAt","deleted") VALUES (?, ?, 1, 0, 1, ?, 0)`,
       args: ['seed-gd-01', 'نان مشعلی', now],
     })
     await db.execute({ sql: 'INSERT INTO SyncLog (tbl, rid, ts) VALUES (?, ?, ?)', args: ['goods', 'seed-gd-01', now] })
   }
+  // ۴) نرمال‌سازی واحدهای کالا به «جعبه» (v2.5) — دادهٔ v2.4 عددی بود؛ idempotent (بعد از تبدیل piecesPerBox = 1)
+  await normalizeGoodsBoxes(db)
   schemaReady = true
+}
+
+/** تبدیل یک‌بارهٔ کالاهای عددی‌مانده (piecesPerBox > 1) به واحد جعبه — خرید/فروش/حد بحرانی */
+export async function normalizeGoodsBoxes(db: Client): Promise<void> {
+  const goods = await db.execute({
+    sql: `SELECT id, minStock, piecesPerBox FROM "Good" WHERE deleted = 0 AND piecesPerBox > 1`,
+    args: [],
+  })
+  for (const gr of goods.rows) {
+    const gid = String(gr['id'])
+    const ppb = n(gr['piecesPerBox'], 1)
+    if (ppb <= 1) continue
+    const now = Date.now()
+
+    // خریدهای این کالا: quantity → تعداد جعبه (مبلغ کل ثابت)
+    const ps = await db.execute({
+      sql: `SELECT id, quantity, boxesCount FROM "Purchase" WHERE deleted = 0 AND itemKind = 'GOOD' AND materialId = ?`,
+      args: [gid],
+    })
+    for (const pr of ps.rows) {
+      const bc = n(pr['boxesCount'], 0)
+      const boxes = bc > 0 ? bc : r4(n(pr['quantity'], 0) / ppb)
+      await db.execute({
+        sql: `UPDATE "Purchase" SET quantity = ?, updatedAt = ? WHERE id = ?`,
+        args: [boxes, now, String(pr['id'])],
+      })
+      await db.execute({ sql: 'INSERT INTO SyncLog (tbl, rid, ts) VALUES (?, ?, ?)', args: ['purchases', String(pr['id']), now] })
+    }
+
+    // فروش‌های این کالا: qty/delivered/returned ÷ ppb و unitPrice × ppb (ضرب‌در‌جمع پول ثابت)
+    const ss = await db.execute({ sql: `SELECT id, items FROM "Sale" WHERE deleted = 0`, args: [] })
+    for (const sr of ss.rows) {
+      const raw = String(sr['items'] || '[]')
+      if (!raw.includes(gid)) continue
+      let items: Array<Record<string, unknown>>
+      try { items = JSON.parse(raw) as Array<Record<string, unknown>> } catch { continue }
+      if (!Array.isArray(items)) continue
+      let changed = false
+      const next = items.map((it) => {
+        if (!it || it.kind !== 'GOOD' || it.breadTypeId !== gid) return it
+        changed = true
+        return {
+          ...it,
+          qty: r4(n(it.qty, 0) / ppb),
+          delivered: r4(n(it.delivered, 0) / ppb),
+          returned: r4(n(it.returned, 0) / ppb),
+          unitPrice: Math.round(n(it.unitPrice, 0) * ppb),
+        }
+      })
+      if (!changed) continue
+      await db.execute({
+        sql: `UPDATE "Sale" SET items = ?, updatedAt = ? WHERE id = ?`,
+        args: [JSON.stringify(next), now, String(sr['id'])],
+      })
+      await db.execute({ sql: 'INSERT INTO SyncLog (tbl, rid, ts) VALUES (?, ?, ?)', args: ['sales', String(sr['id']), now] })
+    }
+
+    // خود کالا: حد بحرانی به جعبه + piecesPerBox = 1
+    const minOld = n(gr['minStock'], 0)
+    const minNew = minOld > 0 ? Math.max(1, Math.round(minOld / ppb)) : 0
+    await db.execute({
+      sql: `UPDATE "Good" SET piecesPerBox = 1, minStock = ?, updatedAt = ? WHERE id = ?`,
+      args: [minNew, now, gid],
+    })
+    await db.execute({ sql: 'INSERT INTO SyncLog (tbl, rid, ts) VALUES (?, ?, ?)', args: ['goods', gid, now] })
+  }
 }
 const i = (v: unknown, dflt = 0): number => Math.round(n(v, dflt))
 const sn = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v : null)
@@ -146,8 +215,8 @@ export async function ensureSeed(db: Client): Promise<boolean> {
     { tbl: 'materials', id: 'seed-mt-07', data: { name: 'لسیتین', unit: 'گرم', minStock: 500, active: 1, updatedAt: now, deleted: 0 } },
     { tbl: 'materials', id: 'seed-mt-08', data: { name: 'وانیل', unit: 'گرم', minStock: 200, active: 1, updatedAt: now, deleted: 0 } },
     { tbl: 'materials', id: 'seed-mt-09', data: { name: 'آرد سبوس‌دار', unit: 'کیلوگرم', minStock: 25, active: 1, updatedAt: now, deleted: 0 } },
-    // کالای بازرگانی — نان مشعلی (تعداد در جعبه را کاربر تکمیل می‌کند)
-    { tbl: 'goods', id: 'seed-gd-01', data: { name: 'نان مشعلی', piecesPerBox: 0, minStock: 0, active: 1, updatedAt: now, deleted: 0 } },
+    // کالای بازرگانی — نان مشعلی (واحد از v2.5 فقط جعبه است)
+    { tbl: 'goods', id: 'seed-gd-01', data: { name: 'نان مشعلی', piecesPerBox: 1, minStock: 0, active: 1, updatedAt: now, deleted: 0 } },
     { tbl: 'expenseCategories', id: 'seed-ec-01', data: { name: 'دستمزد کارگران', includeInProfit: 1, updatedAt: now, deleted: 0 } },
     { tbl: 'expenseCategories', id: 'seed-ec-02', data: { name: 'برداشت صاحب کار', includeInProfit: 0, updatedAt: now, deleted: 0 } },
     { tbl: 'expenseCategories', id: 'seed-ec-03', data: { name: 'حمل‌ونقل', includeInProfit: 1, updatedAt: now, deleted: 0 } },

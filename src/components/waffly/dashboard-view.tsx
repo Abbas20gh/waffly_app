@@ -239,7 +239,7 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: ViewKey) => void
                   <div className="flex flex-wrap gap-2">
                     {lowGoods.map(s => (
                       <span key={s.good.id} className="rounded-lg bg-amber-50 border border-amber-200 text-amber-800 px-2.5 py-1 text-[11px] waffly-num">
-                        {s.good.name}: {faDigits(Math.round(s.stock * 100) / 100)} عدد (حد: {faDigits(s.good.minStock)})
+                        {s.good.name}: {faDigits(Math.round(s.stock * 100) / 100)} جعبه (حد: {faDigits(s.good.minStock)})
                       </span>
                     ))}
                   </div>

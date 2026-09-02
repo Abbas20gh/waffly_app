@@ -104,8 +104,8 @@ export async function ensureSeed() {
     { tbl: 'materials', id: 'seed-mt-07', data: { name: 'لسیتین', unit: 'گرم', minStock: 500, active: 1, updatedAt: now, deleted: 0 } },
     { tbl: 'materials', id: 'seed-mt-08', data: { name: 'وانیل', unit: 'گرم', minStock: 200, active: 1, updatedAt: now, deleted: 0 } },
     { tbl: 'materials', id: 'seed-mt-09', data: { name: 'آرد سبوس‌دار', unit: 'کیلوگرم', minStock: 25, active: 1, updatedAt: now, deleted: 0 } },
-    // کالای بازرگانی — نان مشعلی (تعداد در جعبه را کاربر تکمیل می‌کند)
-    { tbl: 'goods', id: 'seed-gd-01', data: { name: 'نان مشعلی', piecesPerBox: 0, minStock: 0, active: 1, updatedAt: now, deleted: 0 } },
+    // کالای بازرگانی — نان مشعلی (واحد از v2.5 فقط جعبه است)
+    { tbl: 'goods', id: 'seed-gd-01', data: { name: 'نان مشعلی', piecesPerBox: 1, minStock: 0, active: 1, updatedAt: now, deleted: 0 } },
     // سرفصل هزینه‌ها
     { tbl: 'expenseCategories', id: 'seed-ec-01', data: { name: 'دستمزد کارگران', includeInProfit: 1, updatedAt: now, deleted: 0 } },
     { tbl: 'expenseCategories', id: 'seed-ec-02', data: { name: 'برداشت صاحب کار', includeInProfit: 0, updatedAt: now, deleted: 0 } },

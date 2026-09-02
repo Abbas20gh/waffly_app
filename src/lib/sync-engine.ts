@@ -6,7 +6,7 @@ import { io, type Socket } from 'socket.io-client'
 import {
   dexie, getOutboxBatch, clearOutboxUpTo, getCursor, setCursor,
   isBootstrapped, markBootstrapped, putRemoteRows, replaceAllFromServer,
-  outboxCount, TABLES, type SyncTbl,
+  outboxCount, normalizeGoodsUnits, TABLES, type SyncTbl,
 } from './localdb'
 
 interface SyncState {
@@ -240,9 +240,12 @@ export function startSyncEngine(): () => void {
     } catch { /* پلاگین در وب نصب‌مانده نیست — بی‌اثر */ }
   })()
 
-  // شمارش صف اولیه + سینک اول
+  // شمارش صف اولیه + نرمال‌سازی واحدهای کالا به جعبه (v2.5) + سینک اول
   void outboxCount().then(n => setState({ pendingCount: n }))
-  void syncNow()
+  void (async () => {
+    try { await normalizeGoodsUnits() } catch { /* دیتابیس شاید هنوز آماده نباشد — بی‌اثر */ }
+    void syncNow()
+  })()
 
   return () => {
     window.removeEventListener('online', onOnline)

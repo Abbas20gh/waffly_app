@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { MODELS, ensureSeed } from '@/lib/server/sync-tables'
+import { normalizeGoodsUnitsServer } from '@/lib/server/goods-units'
 import { TABLES, type SyncTbl } from '@/lib/types'
 import { jsonWithCors, optionsWithCors } from '@/lib/server/cors'
 
@@ -35,6 +36,7 @@ export async function POST() {
 
 async function handleFull() {
   await ensureSeed()
+  try { await normalizeGoodsUnitsServer() } catch { /* مهاجرت واحدها — خطا سینک را نبندد */ }
   const rows: { tbl: SyncTbl; row: Record<string, unknown> }[] = []
   for (const tbl of TABLES) {
     const all = await delegate(tbl).findMany()

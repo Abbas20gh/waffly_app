@@ -68,7 +68,7 @@ export function AccountingView() {
         ['شرح', 'مقدار/مبلغ', 'توضیح'],
         [
           ['دوره گزارش', period.rangeLabel, ''],
-          ['فروش کل (تومان)', rep.salesAmount, `${faDigits(rep.salesQty)} نان${rep.goodsQty ? ` + ${faDigits(rep.goodsQty)} عدد کالا` : ''}`],
+          ['فروش کل (تومان)', rep.salesAmount, `${faDigits(rep.salesQty)} نان${rep.goodsQty ? ` + ${faDigits(Math.round(rep.goodsQty * 100) / 100)} جعبه کالا` : ''}`],
           ['وصول‌شده در دوره', rep.collected, ''],
           ['مانده مطالبات (کل)', rep.outstandingTotal, ''],
           ['هزینه مواد دوره', rep.materialCost, 'مصرف × میانگین قیمت خرید'],
@@ -143,7 +143,7 @@ export function AccountingView() {
 
         {/* KPIها */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <StatCard title="فروش کل دوره" value={faMoney(rep.salesAmount)} sub={`${faDigits(rep.salesQty)} نان${rep.goodsQty ? ` + ${faDigits(rep.goodsQty)} عدد کالا` : ''}`} icon={<Wallet className="h-4 w-4" />} />
+          <StatCard title="فروش کل دوره" value={faMoney(rep.salesAmount)} sub={`${faDigits(rep.salesQty)} نان${rep.goodsQty ? ` + ${faDigits(Math.round(rep.goodsQty * 100) / 100)} جعبه کالا` : ''}`} icon={<Wallet className="h-4 w-4" />} />
           <StatCard title="وصول‌شده دوره" value={faMoney(rep.collected)} tone="positive" />
           <StatCard title="هزینه مواد دوره" value={faMoney(rep.materialCost)} tone="warning" sub="مصرف × میانگین قیمت خرید" />
           <StatCard

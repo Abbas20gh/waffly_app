@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { MODELS } from '@/lib/server/sync-tables'
+import { normalizeGoodsUnitsServer } from '@/lib/server/goods-units'
 import type { SyncTbl } from '@/lib/types'
 import { jsonWithCors, optionsWithCors } from '@/lib/server/cors'
 
@@ -18,6 +19,8 @@ const delegate = (tbl: SyncTbl): Delegate =>
 // GET و POST هر دو پشتیبانی می‌شوند — POST در APK از مسیر نیتیو CapacitorHttp می‌رود
 async function handlePull(since: number, limit: number) {
   limit = Math.min(Math.max(limit, 1), 1000)
+
+  try { await normalizeGoodsUnitsServer() } catch { /* مهاجرت واحدها — خطا سینک را نبندد */ }
 
   const logs = await db.syncLog.findMany({
     where: { seq: { gt: since } },

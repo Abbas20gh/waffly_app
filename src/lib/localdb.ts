@@ -4,7 +4,8 @@
 import Dexie, { type Table } from 'dexie'
 import { liveQuery } from 'dexie'
 import { useEffect, useState } from 'react'
-import { TABLES, type SyncTbl, type BaseRow, type Setting } from './types'
+import { TABLES, type SyncTbl, type BaseRow, type Setting, type Good, type Purchase, type Sale } from './types'
+import { planGoodsToBoxes } from './goods-units'
 
 export { TABLES }
 export type { SyncTbl }
@@ -79,6 +80,46 @@ export function uid(): string {
     if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
   } catch { /* ignore */ }
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+// ===== نرمال‌سازی واحدهای کالا به «جعبه» (v2.5) =====
+// داده‌های v2.4 برای کالاها به «عدد» ذخیره می‌شدند؛ این تابع یک‌بار آن‌ها را به جعبه تبدیل می‌کند
+// (idempotent — بعد از تبدیل piecesPerBox = 1 می‌شود و دوباره اجرا کاری نمی‌کند) و ردیف‌ها را برای سینک صف می‌کند.
+export async function normalizeGoodsUnits(): Promise<number> {
+  const [goods, purchases, sales] = await Promise.all([
+    dexie.goods.toArray() as Promise<Good[]>,
+    dexie.purchases.toArray() as Promise<Purchase[]>,
+    dexie.sales.toArray() as Promise<Sale[]>,
+  ])
+  const plan = planGoodsToBoxes(goods, purchases, sales)
+  const total = plan.goods.length + plan.purchases.length + plan.sales.length
+  if (total === 0) return 0
+  const now = Date.now()
+  await dexie.transaction('rw', dexie.goods, dexie.purchases, dexie.sales, dexie.outbox, async () => {
+    for (const g of plan.goods) {
+      const row = await dexie.goods.get(g.id)
+      if (!row) continue
+      const next = { ...row, piecesPerBox: 1, minStock: g.minStock, updatedAt: now }
+      await dexie.goods.put(next)
+      await dexie.outbox.add({ tbl: 'goods', row: next, ts: now })
+    }
+    for (const p of plan.purchases) {
+      const row = await dexie.purchases.get(p.id)
+      if (!row) continue
+      const next = { ...row, quantity: p.quantity, updatedAt: now }
+      await dexie.purchases.put(next)
+      await dexie.outbox.add({ tbl: 'purchases', row: next, ts: now })
+    }
+    for (const s of plan.sales) {
+      const row = await dexie.sales.get(s.id)
+      if (!row) continue
+      const next = { ...row, items: s.items, updatedAt: now }
+      await dexie.sales.put(next)
+      await dexie.outbox.add({ tbl: 'sales', row: next, ts: now })
+    }
+  })
+  notifyChange()
+  return total
 }
 
 // ===== کاربر فعال =====

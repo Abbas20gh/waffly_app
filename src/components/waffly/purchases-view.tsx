@@ -56,40 +56,40 @@ function PurchasesTab() {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState({
     date: todayJalali(), itemKind: 'MATERIAL' as 'MATERIAL' | 'GOOD', materialId: '',
-    unit: 'PIECE' as 'PIECE' | 'BOX',
     quantity: '', cost: '', pricePerBox: '',
     supplierId: '', settledStatus: 'PAID' as Purchase['settledStatus'], paidAmount: '', note: '',
   })
   const mat = form.itemKind === 'MATERIAL' ? materials.find(m => m.id === form.materialId) : undefined
   const good = form.itemKind === 'GOOD' ? goods.find(g => g.id === form.materialId) : undefined
-  const ppb = good?.piecesPerBox || 0
-  const boxMode = form.itemKind === 'GOOD' && form.unit === 'BOX' && ppb > 0
+  // کالا همیشه جعبه‌ای است (v2.5) — تعداد جعبه × قیمت هر جعبه
+  const isGood = form.itemKind === 'GOOD'
   const qtyNum = parseFloat(form.quantity || '0')
-  const costNum = boxMode ? qtyNum * (parseFloat(form.pricePerBox || '0') || 0) : parseFloat(form.cost || '0')
-  const piecesNum = boxMode ? qtyNum * ppb : qtyNum
+  const costNum = isGood ? qtyNum * (parseFloat(form.pricePerBox || '0') || 0) : parseFloat(form.cost || '0')
 
-  const switchKind = (kind: 'MATERIAL' | 'GOOD') => setForm(f => ({ ...f, itemKind: kind, materialId: '', unit: 'PIECE', quantity: '', cost: '', pricePerBox: '' }))
+  const switchKind = (kind: 'MATERIAL' | 'GOOD') => setForm(f => ({ ...f, itemKind: kind, materialId: '', quantity: '', cost: '', pricePerBox: '' }))
 
   const save = async () => {
     if (!form.materialId || qtyNum <= 0 || costNum <= 0) { toast({ title: 'قلم، مقدار و هزینه را وارد کنید', variant: 'destructive' }); return }
-    if (form.itemKind === 'GOOD' && form.unit === 'BOX' && ppb <= 0) { toast({ title: 'اول «تعداد در جعبه» را در تب کالاها تنظیم کنید', variant: 'destructive' }); return }
     const paid = form.settledStatus === 'PAID' ? costNum : parseFloat(form.paidAmount || '0')
     await putRecord<Purchase>('purchases', {
       id: uid(),
       date: form.date,
       materialId: form.materialId,
-      quantity: piecesNum,
+      quantity: qtyNum,
       cost: costNum,
       supplierId: form.supplierId || null,
       settledStatus: form.settledStatus === 'PAID' || paid >= costNum - 0.5 ? 'PAID' : paid > 0.5 ? 'PARTIAL' : 'UNPAID',
       paidAmount: Math.min(paid, costNum),
       itemKind: form.itemKind,
-      boxesCount: boxMode ? qtyNum : 0,
+      boxesCount: isGood ? qtyNum : 0,
       note: form.note || null,
       createdBy: getActiveUser() || null,
       updatedAt: 0, deleted: 0,
     })
-    toast({ title: 'خرید ثبت شد', description: `${(form.itemKind === 'GOOD' ? good?.name : mat?.name) || ''}: ${faDigits(piecesNum)} عدد — ${faMoney(costNum)} تومان` })
+    toast({
+      title: 'خرید ثبت شد',
+      description: `${(isGood ? good?.name : mat?.name) || ''}: ${isGood ? `${faDigits(qtyNum)} جعبه` : `${faDigits(qtyNum)} ${(mat?.unit || '')}`} — ${faMoney(costNum)} تومان`,
+    })
     setOpen(false)
     setForm(f => ({ ...f, quantity: '', cost: '', pricePerBox: '', paidAmount: '', note: '' }))
   }
@@ -112,16 +112,15 @@ function PurchasesTab() {
           ) : (
             <div className="space-y-2">
               {list.map(p => {
-                const isGood = p.itemKind === 'GOOD'
-                const item = isGood ? gOf(p.materialId) : matOf(p.materialId)
+                const isGoodRow = p.itemKind === 'GOOD'
+                const item = isGoodRow ? gOf(p.materialId) : matOf(p.materialId)
                 const st = effectiveSettled(p)
                 return (
                   <div key={p.id} className="flex flex-wrap items-center gap-2 rounded-xl border p-3">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold">
-                        {isGood && <span className="ml-1 rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-700">کالا</span>}
-                        {item?.name || 'نامشخص'} — <Num value={p.quantity} /> {isGood ? 'عدد' : (item as Material | undefined)?.unit}
-                        {isGood && p.boxesCount ? <span className="text-[11px] font-normal text-muted-foreground waffly-num"> ({faDigits(p.boxesCount)} جعبه)</span> : null}
+                        {isGoodRow && <span className="ml-1 rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-700">کالا</span>}
+                        {item?.name || 'نامشخص'} — <Num value={p.quantity} /> {isGoodRow ? 'جعبه' : (item as Material | undefined)?.unit}
                       </p>
                       <p className="text-[11px] text-muted-foreground waffly-num">
                         {prettyJalali(p.date)}{p.supplierId && ` • ${supOf(p.supplierId)?.name || ''}`}{p.createdBy && ` • ${p.createdBy}`}
@@ -154,43 +153,32 @@ function PurchasesTab() {
                 onChange={v => switchKind(v as 'MATERIAL' | 'GOOD')}
               />
             </FormRow>
-            <FormRow label={form.itemKind === 'GOOD' ? 'کالا' : 'ماده اولیه'}>
-              {form.itemKind === 'GOOD' ? (
+            {form.itemKind === 'GOOD' && (
+              <FormRow label="کالا">
                 <InlinePicker
                   value={form.materialId}
-                  options={active(goods).filter(g => g.active !== 0).map(g => ({ value: g.id, label: g.name, hint: g.piecesPerBox > 0 ? `${faDigits(g.piecesPerBox)} عددی` : 'کالا' }))}
-                  onChange={v => setForm(f => ({ ...f, materialId: v, unit: 'PIECE', quantity: '', cost: '', pricePerBox: '' }))}
+                  options={active(goods).filter(g => g.active !== 0).map(g => ({ value: g.id, label: g.name, hint: 'جعبه‌ای' }))}
+                  onChange={v => setForm(f => ({ ...f, materialId: v, quantity: '', cost: '', pricePerBox: '' }))}
                   placeholder="انتخاب کالا"
                 />
-              ) : (
+              </FormRow>
+            )}
+            {form.itemKind !== 'GOOD' && (
+              <FormRow label="ماده اولیه">
                 <InlinePicker
                   value={form.materialId}
                   options={active(materials).filter(m => m.active !== 0).map(m => ({ value: m.id, label: m.name, hint: m.unit }))}
                   onChange={v => setForm(f => ({ ...f, materialId: v }))}
                   placeholder="انتخاب کنید"
                 />
-              )}
-            </FormRow>
-            {form.itemKind === 'GOOD' && good && ppb > 0 && (
-              <FormRow label="واحد خرید">
-                <InlinePicker
-                  value={form.unit}
-                  options={[{ value: 'BOX', label: `جعبه (${faDigits(ppb)} عددی)` }, { value: 'PIECE', label: 'عدد' }]}
-                  onChange={v => setForm(f => ({ ...f, unit: v as 'PIECE' | 'BOX', quantity: '', cost: '', pricePerBox: '' }))}
-                />
               </FormRow>
-            )}
-            {form.itemKind === 'GOOD' && good && ppb <= 0 && (
-              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
-                برای خرید جعبه‌ای، اول «تعداد در جعبه» را در تب «کالاها» تنظیم کنید — فعلاً خرید عددی فعال است.
-              </p>
             )}
             <div className="grid grid-cols-2 gap-3">
-              <FormRow label={boxMode ? 'تعداد جعبه' : form.itemKind === 'GOOD' ? 'تعداد (عدد)' : 'مقدار'} hint={boxMode ? `${faDigits(ppb)} عدد در هر جعبه` : mat ? `واحد: ${mat.unit}` : undefined}>
+              <FormRow label={form.itemKind === 'GOOD' ? 'تعداد جعبه' : 'مقدار'} hint={mat ? `واحد: ${mat.unit}` : undefined}>
                 <Input inputMode="decimal" className="waffly-num-input h-11" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} />
               </FormRow>
-              {boxMode ? (
-                <FormRow label="قیمت هر جعبه (تومان)" hint={`جمع: ${faMoney(costNum)} تومان` + (piecesNum > 0 ? ` — معادل ${faDigits(piecesNum)} عدد` : '')}>
+              {form.itemKind === 'GOOD' ? (
+                <FormRow label="قیمت هر جعبه (تومان)" hint={`جمع: ${faMoney(costNum)} تومان`}>
                   <Input inputMode="decimal" className="waffly-num-input h-11" value={form.pricePerBox} onChange={e => setForm(f => ({ ...f, pricePerBox: e.target.value }))} />
                 </FormRow>
               ) : (
@@ -341,16 +329,15 @@ function StockTab() {
                   <span className="rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-700">کالا</span>
                   <p className="text-sm font-semibold flex-1">{st.good.name}</p>
                   <span className={cn('text-sm font-bold waffly-num', st.stock <= 0 ? 'text-red-600' : st.low ? 'text-amber-700' : 'text-green-700')}>
-                    {faDigits(Math.round(st.stock * 100) / 100)} <span className="text-[10px] font-normal text-muted-foreground">عدد</span>
+                    {faDigits(Math.round(st.stock * 100) / 100)} <span className="text-[10px] font-normal text-muted-foreground">جعبه</span>
                   </span>
                 </div>
                 <div className="flex flex-wrap items-center gap-3 mt-1.5 text-[11px] text-muted-foreground waffly-num">
-                  <span>خرید: {faDigits(st.purchased)}</span>
-                  <span>فروش: {faDigits(st.sold)}</span>
-                  {st.good.piecesPerBox > 0 && <span>معادل: {faDigits(Math.floor(Math.max(0, st.stock) / st.good.piecesPerBox))} جعبه</span>}
-                  {st.avgPrice > 0 && <span>میانگین بهای هر عدد: {faMoney(st.avgPrice)}</span>}
+                  <span>خرید: {faDigits(Math.round(st.purchased * 100) / 100)} جعبه</span>
+                  <span>فروش: {faDigits(Math.round(st.sold * 100) / 100)} جعبه</span>
+                  {st.avgPrice > 0 && <span>میانگین بهای هر جعبه: {faMoney(st.avgPrice)}</span>}
                   <label className="flex items-center gap-1.5 mr-auto">
-                    حد بحرانی:
+                    حد بحرانی (جعبه):
                     <Input
                       inputMode="decimal"
                       defaultValue={st.good.minStock || ''}
@@ -371,24 +358,18 @@ function StockTab() {
 
 function GoodsTab() {
   const goods = useTable<Good>('goods')
-  const [form, setForm] = useState({ name: '', piecesPerBox: '', minStock: '' })
+  const [form, setForm] = useState({ name: '', minStock: '' })
 
   const save = async () => {
     if (!form.name.trim()) { toast({ title: 'نام کالا لازم است', variant: 'destructive' }); return }
     await putRecord<Good>('goods', {
       id: uid(), name: form.name.trim(),
-      piecesPerBox: parseFloat(form.piecesPerBox || '0') || 0,
+      piecesPerBox: 1, // منسوخ — واحد همه‌جا جعبه است (v2.5)
       minStock: parseFloat(form.minStock || '0') || 0,
       active: 1, updatedAt: 0, deleted: 0,
     })
-    setForm({ name: '', piecesPerBox: '', minStock: '' })
+    setForm({ name: '', minStock: '' })
     toast({ title: 'کالا اضافه شد' })
-  }
-
-  const setPpb = async (g: Good, value: string) => {
-    const v = parseFloat(value) || 0
-    if (v === (g.piecesPerBox || 0)) return
-    await putRecord<Good>('goods', { ...g, piecesPerBox: v })
   }
 
   return (
@@ -398,18 +379,15 @@ function GoodsTab() {
           <CardTitle className="text-sm">کالای جدید (خرید و فروش بدون تولید)</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <FormRow label="نام کالا" hint="مثلاً: نان مشعلی">
+          <FormRow label="نام کالا" hint="مثلاً: نان مشعلی، نان فانتزی">
             <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="h-11" />
           </FormRow>
-          <FormRow label="تعداد در هر جعبه" hint="برای خرید جعبه‌ای — ۰ یعنی فعلاً فقط عددی">
-            <Input inputMode="decimal" className="waffly-num-input h-11" value={form.piecesPerBox} onChange={e => setForm(f => ({ ...f, piecesPerBox: e.target.value }))} />
-          </FormRow>
-          <FormRow label="حد بحرانی هشدار (عدد)" hint="وقتی موجودی به این تعداد برسد هشدار می‌دهد">
+          <FormRow label="حد بحرانی هشدار (جعبه)" hint="وقتی موجودی به این تعداد جعبه رسید هشدار می‌دهد">
             <Input inputMode="decimal" className="waffly-num-input h-11" value={form.minStock} onChange={e => setForm(f => ({ ...f, minStock: e.target.value }))} />
           </FormRow>
           <Button className="w-full h-11" onClick={save}>افزودن کالا</Button>
           <p className="text-[11px] text-muted-foreground leading-5">
-            کالاها در همان فاکتور فروش کنار نان‌ها می‌آیند و بهای خریدشان (میانگین موزون) از سود کم می‌شود — بدون نیاز به رسپی و تولید.
+            کالاها همیشه با واحد «جعبه» ثبت می‌شوند — خرید و فروش جعبه‌ای، بدون نیاز به تعداد داخل جعبه. در همان فاکتور فروش کنار نان‌ها می‌آیند و بهای خریدشان (میانگین موزون هر جعبه) از سود کم می‌شود.
           </p>
         </CardContent>
       </Card>
@@ -417,24 +395,14 @@ function GoodsTab() {
         <CardHeader className="pb-2"><CardTitle className="text-sm">کالاها ({faDigits(active(goods).filter(g => g.active !== 0).length)} فعال)</CardTitle></CardHeader>
         <CardContent>
           {goods.filter(g => !g.deleted).length === 0 ? (
-            <EmptyState title="کالایی ثبت نشده" desc="نان مشعلی و کالاهای مشابه را اینجا اضافه کنید." icon={<PackageSearch className="h-5 w-5" />} />
+            <EmptyState title="کالایی ثبت نشده" desc="نان مشعلی، نان فانتزی و کالاهای مشابه را اینجا اضافه کنید." icon={<PackageSearch className="h-5 w-5" />} />
           ) : (
             <div className="space-y-1.5">
               {[...goods].filter(g => !g.deleted).sort((a, b) => (b.active || 0) - (a.active || 0) || a.name.localeCompare(b.name, 'fa')).map(g => (
                 <div key={g.id} className={cn('flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2.5', g.active === 0 && 'opacity-60')}>
                   <span className="text-sm font-medium flex-1">{g.name}</span>
                   {g.active === 0 && <span className="rounded-full bg-muted text-muted-foreground text-[10px] px-2 py-0.5">غیرفعال</span>}
-                  <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                    تعداد در جعبه:
-                    <Input
-                      inputMode="decimal"
-                      defaultValue={g.piecesPerBox || ''}
-                      placeholder="۰"
-                      onBlur={e => void setPpb(g, e.target.value)}
-                      className="waffly-num-input h-7 w-16 text-[11px]"
-                    />
-                  </label>
-                  <span className="text-[11px] text-muted-foreground waffly-num">حد: {faDigits(g.minStock)}</span>
+                  <span className="text-[11px] text-muted-foreground waffly-num">واحد: جعبه • حد: {faDigits(g.minStock)}</span>
                   <Button
                     variant="ghost" size="sm" className="h-8 shrink-0 text-[11px]"
                     onClick={() => void putRecord<Good>('goods', { ...g, active: g.active === 0 ? 1 : 0 })}

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { MODELS, sanitizeRow } from '@/lib/server/sync-tables'
+import { normalizeGoodsUnitsServer } from '@/lib/server/goods-units'
 import { TABLES, type SyncTbl } from '@/lib/types'
 import { jsonWithCors, optionsWithCors } from '@/lib/server/cors'
 
@@ -23,6 +24,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => null)
     const ops = Array.isArray(body?.ops) ? body.ops : []
     if (ops.length === 0) return jsonWithCors({ accepted: 0, skipped: 0, serverTime: Date.now() })
+
+    try { await normalizeGoodsUnitsServer() } catch { /* مهاجرت واحدها — خطا سینک را نبندد */ }
 
     let accepted = 0
     let skipped = 0

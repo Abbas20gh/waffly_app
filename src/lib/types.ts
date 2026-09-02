@@ -25,11 +25,12 @@ export interface Box extends BaseRow {
 }
 export interface Material extends BaseRow { name: string; unit: string; minStock: number; active?: number }
 
-/** کالای بازرگانی — خرید و فروش بدون تولید (مثل نان مشعلی) */
+/** کالای بازرگانی — خرید و فروش بدون تولید (مثل نان مشعلی) — از v2.5 همهٔ مقادیر با واحد «جعبه» */
 export interface Good extends BaseRow {
   name: string
-  piecesPerBox: number // تعداد در هر جعبه — ۰ یعنی هنوز تعیین نشده
-  minStock: number // حد بحرانی هشدار (به عدد)
+  /** منسوخ (v2.5) — واحد همه‌جا جعبه است؛ فقط برای سازگاری سینک نگه داشته شده و همیشه ۱ نوشته می‌شود */
+  piecesPerBox?: number
+  minStock: number // حد بحرانی هشدار (جعبه)
   active?: number
 }
 export interface Consumption extends BaseRow {
@@ -41,8 +42,7 @@ export interface Customer extends BaseRow {
 /**
  * قلم فاکتور فروش
  * kind=BREAD: breadTypeId = شناسه نان (پیش‌فرض — سازگار با رکوردهای قدیمی)
- * kind=GOOD: breadTypeId = شناسه کالا و همه مقادیر (qty/delivered/returned) همیشه به «عدد» ذخیره می‌شوند؛
- *   ورود جعبه‌ای فقط راحتی UI است و قبل از ذخیره به عدد تبدیل می‌شود.
+ * kind=GOOD: breadTypeId = شناسه کالا و همهٔ مقادیر (qty/delivered/returned) با واحد «جعبه» و unitPrice قیمت هر جعبه (از v2.5)
  */
 export interface SaleItem {
   breadTypeId: string; qty: number; unitPrice: number
@@ -59,13 +59,13 @@ export interface Sale extends BaseRow {
 export interface Supplier extends BaseRow { name: string; phone?: string | null; address?: string | null }
 /**
  * خرید — itemKind=MATERIAL (پیش‌فرض): materialId = ماده اولیه
- * itemKind=GOOD: materialId = شناسه کالا، quantity = تعداد عدد (بعد از تبدیل جعبه)، boxesCount برای نمایش
+ * itemKind=GOOD: materialId = شناسه کالا، quantity = تعداد جعبه و cost مبلغ کل (از v2.5)؛ boxesCount منسوخ (= quantity)
  */
 export interface Purchase extends BaseRow {
   date: string; materialId: string; quantity: number; cost: number; supplierId?: string | null
   settledStatus: 'PAID' | 'PARTIAL' | 'UNPAID'; paidAmount: number
   itemKind?: 'MATERIAL' | 'GOOD'
-  boxesCount?: number // فقط کالای جعبه‌ای — برای نمایش
+  boxesCount?: number // منسوخ (v2.5) — برای سازگاری سینک، همیشه = quantity برای کالا
   note?: string | null; createdBy?: string | null
 }
 export interface Machine extends BaseRow {
