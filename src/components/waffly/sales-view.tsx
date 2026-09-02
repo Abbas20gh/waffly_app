@@ -16,7 +16,7 @@ import { PageHeader, FormRow, TabsBar, EmptyState, SettleBadge, Money, Num } fro
 import { JalaliDateInput } from './jalali-date'
 import { InlinePicker } from './inline-picker'
 import { useTable, useSetting, putRecord, removeRecord, uid, getActiveUser } from '@/lib/localdb'
-import type { Sale, Customer, BreadType, SaleItem } from '@/lib/types'
+import type { Sale, Customer, BreadType, Good, SaleItem } from '@/lib/types'
 import { todayJalali, faDigits, faMoney, prettyJalali } from '@/lib/jalali'
 import { active, saleDue, effectiveSettled, isBadDebt, daysSince, effectivePaymentDate } from '@/lib/calc'
 import { cn } from '@/lib/utils'
@@ -58,10 +58,11 @@ function SalesTab() {
   const sales = useTable<Sale>('sales')
   const customers = useTable<Customer>('customers')
   const breadTypes = useTable<BreadType>('breadTypes')
+  const goods = useTable<Good>('goods')
   const [open, setOpen] = useState(false)
   const [filter, setFilter] = useState<'all' | 'unpaid' | 'checks'>('all')
 
-  const emptyItem: SaleItem = { breadTypeId: '', qty: 0, unitPrice: 0, delivered: 0, returned: 0, returnCost: 0 }
+  const emptyItem: SaleItem = { breadTypeId: '', qty: 0, unitPrice: 0, delivered: 0, returned: 0, returnCost: 0, kind: 'BREAD' }
   const [form, setForm] = useState({
     date: todayJalali(),
     customerId: '',
@@ -146,6 +147,8 @@ function SalesTab() {
     .slice(0, 60)
   const cName = (id: string) => customers.find(c => c.id === id)?.name || 'نامشخص'
   const btLabel = (id: string) => {
+    const g = goods.find(x => x.id === id)
+    if (g) return g.name
     const b = breadTypes.find(x => x.id === id)
     return b ? b.name : 'کالا'
   }
@@ -215,7 +218,7 @@ function SalesTab() {
       <SaleFormDialog
         open={open} onOpenChange={setOpen}
         form={form} setForm={setForm}
-        customers={active(customers)} breadTypes={active(breadTypes)}
+        customers={active(customers)} breadTypes={active(breadTypes)} goods={active(goods).filter(g => g.active !== 0)}
         itemsTotal={itemsTotal} returnTotal={returnTotal} grandTotal={grandTotal}
         onSave={save}
         onQuickAddCustomer={async (name) => {
@@ -229,7 +232,7 @@ function SalesTab() {
   )
 }
 
-function SaleFormDialog({ open, onOpenChange, form, setForm, customers, breadTypes, itemsTotal, returnTotal, grandTotal, onSave, onQuickAddCustomer }: {
+function SaleFormDialog({ open, onOpenChange, form, setForm, customers, breadTypes, goods, itemsTotal, returnTotal, grandTotal, onSave, onQuickAddCustomer }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   form: {
@@ -246,6 +249,7 @@ function SaleFormDialog({ open, onOpenChange, form, setForm, customers, breadTyp
   }>>
   customers: Customer[]
   breadTypes: BreadType[]
+  goods: Good[]
   itemsTotal: number
   returnTotal: number
   grandTotal: number
@@ -253,15 +257,23 @@ function SaleFormDialog({ open, onOpenChange, form, setForm, customers, breadTyp
   onQuickAddCustomer: (name: string) => void
 }) {
   const [newCustomer, setNewCustomer] = useState('')
+  const [boxEntry, setBoxEntry] = useState<Record<number, boolean>>({})
   const updateItem = (idx: number, patch: Partial<SaleItem>) => {
     setForm(f => ({ ...f, items: f.items.map((it, i) => i === idx ? { ...it, ...patch } : it) }))
   }
+  const isGoodItem = (it: SaleItem) => it.kind === 'GOOD' || goods.some(g => g.id === it.breadTypeId)
+  const ppbOf = (it: SaleItem) => goods.find(g => g.id === it.breadTypeId)?.piecesPerBox || 0
+  const inBoxEntry = (idx: number, it: SaleItem) => !!boxEntry[idx] && isGoodItem(it) && ppbOf(it) > 0
+  const itemOptions = [
+    ...breadTypes.map(b => ({ value: b.id, label: b.name })),
+    ...goods.map(g => ({ value: g.id, label: g.name, hint: 'کالا' })),
+  ]
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[92dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>ثبت فروش</DialogTitle>
-          <DialogDescription>اقلام را انتخاب کنید، قیمت هر نان را وارد کنید؛ جمع خودکار حساب می‌شود.</DialogDescription>
+          <DialogDescription>نان‌ها و کالاها (مثل مشعلی) را انتخاب کنید؛ کالا را می‌توانید عددی یا جعبه‌ای وارد کنید و جمع خودکار حساب می‌شود.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="grid sm:grid-cols-2 gap-3">
@@ -296,31 +308,95 @@ function SaleFormDialog({ open, onOpenChange, form, setForm, customers, breadTyp
           {/* اقلام */}
           <div className="space-y-2">
             <p className="text-sm font-medium">اقلام فروش</p>
-            {form.items.map((it, idx) => (
+            {form.items.map((it, idx) => {
+              const good = goods.find(g => g.id === it.breadTypeId)
+              const isGood = isGoodItem(it)
+              const ppb = good?.piecesPerBox || 0
+              const boxMode = inBoxEntry(idx, it)
+              return (
               <div key={idx} className="rounded-xl border p-3 space-y-2">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <InlinePicker
                     value={it.breadTypeId}
-                    options={active(breadTypes).map(b => ({ value: b.id, label: b.name }))}
-                    onChange={v => updateItem(idx, { breadTypeId: v })}
+                    options={itemOptions}
+                    onChange={v => {
+                      const g = goods.some(x => x.id === v)
+                      updateItem(idx, { breadTypeId: v, kind: g ? 'GOOD' : 'BREAD' })
+                      setBoxEntry(m => ({ ...m, [idx]: false }))
+                    }}
                     placeholder="کالا"
                     buttonClassName="h-10 text-xs"
                   />
-                  <Input inputMode="decimal" className="waffly-num-input h-10 text-xs" placeholder="تعداد" value={it.qty || ''} onChange={e => updateItem(idx, { qty: parseFloat(e.target.value) || 0, delivered: parseFloat(e.target.value) || 0 })} />
-                  <Input inputMode="decimal" className="waffly-num-input h-10 text-xs" placeholder="قیمت هر نان" value={it.unitPrice || ''} onChange={e => updateItem(idx, { unitPrice: parseFloat(e.target.value) || 0 })} />
+                  <Input
+                    inputMode="decimal" className="waffly-num-input h-10 text-xs"
+                    placeholder={boxMode ? 'تعداد جعبه' : isGood ? 'تعداد (عدد)' : 'تعداد'}
+                    value={boxMode ? (ppb ? Math.round((it.qty / ppb) * 100) / 100 || '' : '') : (it.qty || '')}
+                    onChange={e => {
+                      const v = parseFloat(e.target.value) || 0
+                      const q = boxMode && ppb ? v * ppb : v
+                      updateItem(idx, { qty: q, delivered: q })
+                    }}
+                  />
+                  <Input
+                    inputMode="decimal" className="waffly-num-input h-10 text-xs"
+                    placeholder={boxMode ? 'قیمت هر جعبه' : isGood ? 'قیمت هر عدد' : 'قیمت هر نان'}
+                    value={boxMode ? (ppb ? Math.round((it.unitPrice || 0) * ppb) || '' : '') : (it.unitPrice || '')}
+                    onChange={e => {
+                      const v = parseFloat(e.target.value) || 0
+                      updateItem(idx, { unitPrice: boxMode && ppb ? v / ppb : v })
+                    }}
+                  />
                   <Button variant="ghost" size="icon" className="h-10 w-10 text-muted-foreground hover:text-red-600" aria-label="حذف قلم"
                     onClick={() => setForm(f => ({ ...f, items: f.items.filter((_, i) => i !== idx) }))}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
+                {isGood && ppb > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10px] text-muted-foreground">ورود به:</span>
+                    {([['piece', 'عدد'], ['box', `جعبه (${faDigits(ppb)} عددی)`]] as const).map(([k, label]) => (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => setBoxEntry(m => ({ ...m, [idx]: k === 'box' }))}
+                        className={cn('rounded-lg px-2.5 py-1 text-[11px] border min-h-8',
+                          (k === 'box') === boxMode ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-muted-foreground')}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                    {boxMode && (it.unitPrice || 0) > 0 && (
+                      <span className="text-[10px] text-muted-foreground waffly-num">بهای هر عدد: {faMoney((it.unitPrice || 0))}</span>
+                    )}
+                  </div>
+                )}
+                {isGood && ppb <= 0 && it.breadTypeId && (
+                  <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                    برای فروش جعبه‌ای این کالا، «تعداد در جعبه» را در بخش خرید ← تب «کالاها» تنظیم کنید. فعلاً عددی ثبت می‌شود.
+                  </p>
+                )}
                 <div className="grid grid-cols-3 gap-2">
                   <label className="text-[10px] text-muted-foreground space-y-1">
                     <span>تحویل واقعی</span>
-                    <Input inputMode="decimal" className="waffly-num-input h-9 text-xs" value={it.delivered || ''} onChange={e => updateItem(idx, { delivered: parseFloat(e.target.value) || 0 })} />
+                    <Input
+                      inputMode="decimal" className="waffly-num-input h-9 text-xs"
+                      value={boxMode ? (ppb ? Math.round(((it.delivered || 0) / ppb) * 100) / 100 || '' : '') : (it.delivered || '')}
+                      onChange={e => {
+                        const v = parseFloat(e.target.value) || 0
+                        updateItem(idx, { delivered: boxMode && ppb ? v * ppb : v })
+                      }}
+                    />
                   </label>
                   <label className="text-[10px] text-muted-foreground space-y-1">
                     <span>برگشتی/خراب</span>
-                    <Input inputMode="decimal" className="waffly-num-input h-9 text-xs" value={it.returned || ''} onChange={e => updateItem(idx, { returned: parseFloat(e.target.value) || 0 })} />
+                    <Input
+                      inputMode="decimal" className="waffly-num-input h-9 text-xs"
+                      value={boxMode ? (ppb ? Math.round(((it.returned || 0) / ppb) * 100) / 100 || '' : '') : (it.returned || '')}
+                      onChange={e => {
+                        const v = parseFloat(e.target.value) || 0
+                        updateItem(idx, { returned: boxMode && ppb ? v * ppb : v })
+                      }}
+                    />
                   </label>
                   <label className="text-[10px] text-muted-foreground space-y-1">
                     <span>هزینه برگشتی (تومان)</span>
@@ -328,8 +404,9 @@ function SaleFormDialog({ open, onOpenChange, form, setForm, customers, breadTyp
                   </label>
                 </div>
               </div>
-            ))}
-            <Button variant="outline" className="w-full h-10" onClick={() => setForm(f => ({ ...f, items: [...f.items, { ...form.items[0], breadTypeId: '', qty: 0, unitPrice: 0, delivered: 0, returned: 0, returnCost: 0 }] }))}>
+              )
+            })}
+            <Button variant="outline" className="w-full h-10" onClick={() => setForm(f => ({ ...f, items: [...f.items, { ...form.items[0], breadTypeId: '', qty: 0, unitPrice: 0, delivered: 0, returned: 0, returnCost: 0, kind: 'BREAD' }] }))}>
               <Plus className="h-4 w-4" /> افزودن قلم
             </Button>
           </div>

@@ -61,6 +61,17 @@ model Material {
   deleted   Int    @default(0)
 }
 
+// کالای بازرگانی — خرید و فروش بدون تولید (مثل نان مشعلی)
+model Good {
+  id          String @id
+  name        String
+  piecesPerBox Float @default(0) // تعداد در هر جعبه — ۰ یعنی هنوز تعیین نشده
+  minStock    Float  @default(0) // حد بحرانی (به عدد)
+  active      Int    @default(1)
+  updatedAt   Float
+  deleted     Int    @default(0)
+}
+
 model Consumption {
   id         String  @id
   date       String
@@ -87,7 +98,7 @@ model Sale {
   id             String  @id
   date           String
   customerId     String
-  items          String  @default("[]") // JSON [{breadTypeId, qty, unitPrice, delivered, returned, returnCost}]
+  items          String  @default("[]") // JSON [{breadTypeId, kind?, qty, unitPrice, delivered, returned, returnCost}]
   totalAmount    Float   @default(0)
   settledStatus  String  @default("UNPAID") // PAID | PARTIAL | UNPAID
   paidAmount     Float   @default(0)
@@ -117,11 +128,13 @@ model Purchase {
   id            String  @id
   date          String
   materialId    String
-  quantity      Float   @default(0)
+  quantity      Float   @default(0) // ماده: به واحد ماده | کالا: تعداد عدد
   cost          Float   @default(0)
   supplierId    String?
   settledStatus String  @default("UNPAID")
   paidAmount    Float   @default(0)
+  itemKind      String  @default("MATERIAL") // MATERIAL | GOOD
+  boxesCount    Float   @default(0) // فقط کالای جعبه‌ای — برای نمایش
   note          String?
   createdBy     String?
   updatedAt     Float

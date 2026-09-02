@@ -1,6 +1,6 @@
 // تایپ‌های مشترک Waffly — رکوردهای سینک‌پذیر
 export const TABLES = [
-  'breadTypes', 'productions', 'boxes', 'materials', 'consumptions',
+  'breadTypes', 'productions', 'boxes', 'materials', 'goods', 'consumptions',
   'customers', 'sales', 'suppliers', 'purchases',
   'machines', 'machineCosts', 'expenseCategories', 'expenses', 'otherFunds', 'settings',
 ] as const
@@ -24,15 +24,30 @@ export interface Box extends BaseRow {
   hasEssence?: number; essenceType?: string | null; note?: string | null
 }
 export interface Material extends BaseRow { name: string; unit: string; minStock: number; active?: number }
+
+/** کالای بازرگانی — خرید و فروش بدون تولید (مثل نان مشعلی) */
+export interface Good extends BaseRow {
+  name: string
+  piecesPerBox: number // تعداد در هر جعبه — ۰ یعنی هنوز تعیین نشده
+  minStock: number // حد بحرانی هشدار (به عدد)
+  active?: number
+}
 export interface Consumption extends BaseRow {
   date: string; materialId: string; quantity: number; note?: string | null; createdBy?: string | null
 }
 export interface Customer extends BaseRow {
   name: string; phone?: string | null; address?: string | null; cooperationType?: string | null
 }
+/**
+ * قلم فاکتور فروش
+ * kind=BREAD: breadTypeId = شناسه نان (پیش‌فرض — سازگار با رکوردهای قدیمی)
+ * kind=GOOD: breadTypeId = شناسه کالا و همه مقادیر (qty/delivered/returned) همیشه به «عدد» ذخیره می‌شوند؛
+ *   ورود جعبه‌ای فقط راحتی UI است و قبل از ذخیره به عدد تبدیل می‌شود.
+ */
 export interface SaleItem {
   breadTypeId: string; qty: number; unitPrice: number
   delivered: number; returned: number; returnCost: number
+  kind?: 'BREAD' | 'GOOD'
 }
 export interface Sale extends BaseRow {
   date: string; customerId: string; items: string // JSON SaleItem[]
@@ -42,9 +57,15 @@ export interface Sale extends BaseRow {
   paymentDate?: string | null; note?: string | null; createdBy?: string | null
 }
 export interface Supplier extends BaseRow { name: string; phone?: string | null; address?: string | null }
+/**
+ * خرید — itemKind=MATERIAL (پیش‌فرض): materialId = ماده اولیه
+ * itemKind=GOOD: materialId = شناسه کالا، quantity = تعداد عدد (بعد از تبدیل جعبه)، boxesCount برای نمایش
+ */
 export interface Purchase extends BaseRow {
   date: string; materialId: string; quantity: number; cost: number; supplierId?: string | null
   settledStatus: 'PAID' | 'PARTIAL' | 'UNPAID'; paidAmount: number
+  itemKind?: 'MATERIAL' | 'GOOD'
+  boxesCount?: number // فقط کالای جعبه‌ای — برای نمایش
   note?: string | null; createdBy?: string | null
 }
 export interface Machine extends BaseRow {

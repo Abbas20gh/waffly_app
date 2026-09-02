@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatCard, EmptyState } from './bits'
 import { useDataBundle } from '@/lib/hooks'
 import { todayJalali, faDigits, faMoney, faMoneyShort, J_MONTHS, lastPeriods, periodOf } from '@/lib/jalali'
-import { materialStocks, periodReport, buyerStats, isBadDebt, saleDue, active, daysSince, otherFundsTotals, type DataBundle } from '@/lib/calc'
+import { materialStocks, goodsStocks, periodReport, buyerStats, isBadDebt, saleDue, active, daysSince, otherFundsTotals, type DataBundle } from '@/lib/calc'
 import type { ViewKey } from './app-shell'
 import { useSetting } from '@/lib/localdb'
 import { cn } from '@/lib/utils'
@@ -55,7 +55,8 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: ViewKey) => void
     [d])
 
   // هشدارها
-  const lowStock = materialStocks(d).filter(s => s.low)
+  const lowStock = useMemo(() => materialStocks(d).filter(s => s.low), [d])
+  const lowGoods = useMemo(() => goodsStocks(d).filter(s => s.low), [d])
   const badDebtors = useMemo(() => {
     const map = new Map<string, { name: string; amount: number; days: number }>()
     for (const s of active(d.sales)) {
@@ -208,12 +209,12 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: ViewKey) => void
             <AlertTriangle className="h-4 w-4 text-amber-500" />
             هشدارهای فعال
             <span className="text-[11px] font-normal text-muted-foreground">
-              ({faDigits(lowStock.length + badDebtors.length + nearChecks.length)} مورد)
+              ({faDigits(lowStock.length + lowGoods.length + badDebtors.length + nearChecks.length)} مورد)
             </span>
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {lowStock.length === 0 && badDebtors.length === 0 && nearChecks.length === 0 ? (
+          {lowStock.length === 0 && lowGoods.length === 0 && badDebtors.length === 0 && nearChecks.length === 0 ? (
             <p className="text-xs text-muted-foreground flex items-center gap-2 py-2">
               <CheckCircle2 className="h-4 w-4 text-green-500" />
               همه‌چیز مرتب است — هشداری وجود ندارد.
@@ -227,6 +228,18 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: ViewKey) => void
                     {lowStock.map(s => (
                       <span key={s.material.id} className="rounded-lg bg-amber-50 border border-amber-200 text-amber-800 px-2.5 py-1 text-[11px] waffly-num">
                         {s.material.name}: {faDigits(Math.round(s.stock * 100) / 100)} {s.material.unit} (حد: {faDigits(s.material.minStock)})
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {lowGoods.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold text-amber-700 mb-1.5">کالاها رو به اتمام (زیر حد بحرانی)</p>
+                  <div className="flex flex-wrap gap-2">
+                    {lowGoods.map(s => (
+                      <span key={s.good.id} className="rounded-lg bg-amber-50 border border-amber-200 text-amber-800 px-2.5 py-1 text-[11px] waffly-num">
+                        {s.good.name}: {faDigits(Math.round(s.stock * 100) / 100)} عدد (حد: {faDigits(s.good.minStock)})
                       </span>
                     ))}
                   </div>

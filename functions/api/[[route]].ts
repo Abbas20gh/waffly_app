@@ -1,7 +1,7 @@
 // Cloudflare Pages Functions — معادل کامل API های Next.js
 // /api — /api/sync/push — /api/sync/pull — /api/sync/full — /api/backup
 import { createClient, type Client } from '@libsql/client'
-import { pushOps, pullRows, fullSnapshot } from './_sync'
+import { pushOps, pullRows, fullSnapshot, ensureSchema } from './_sync'
 
 // ⚠️ CORS — حیاتی برای اپ اندروید (Capacitor WebView با origin https://localhost)
 // بدون این هدرها، fetch های سمت APK توسط مرورگر بلاک می‌شوند:
@@ -68,6 +68,7 @@ export async function onRequest(ctx: Ctx): Promise<Response> {
 
     // ثبت تغییرات
     if (path === 'sync/push' && ctx.request.method === 'POST') {
+      await ensureSchema(db)
       const body = await ctx.request.json().catch(() => null) as { ops?: unknown } | null
       const ops = Array.isArray(body?.ops) ? body!.ops : []
       if (ops.length === 0) return json({ accepted: 0, skipped: 0, serverTime: Date.now() })
@@ -78,6 +79,7 @@ export async function onRequest(ctx: Ctx): Promise<Response> {
     // دریافت افزایشی — GET و POST هر دو پشتیبانی می‌شوند
     // (POST در APK از مسیر نیتیو CapacitorHttp می‌رود — قابل‌اتکاترین مسیر)
     if (path === 'sync/pull' && (ctx.request.method === 'GET' || ctx.request.method === 'POST')) {
+      await ensureSchema(db)
       let since = 0
       let limit = 300
       if (ctx.request.method === 'POST') {
@@ -95,6 +97,7 @@ export async function onRequest(ctx: Ctx): Promise<Response> {
 
     // اسنپ‌شات کامل (bootstrap دستگاه جدید) — GET و POST هر دو
     if (path === 'sync/full' && (ctx.request.method === 'GET' || ctx.request.method === 'POST')) {
+      await ensureSchema(db)
       const result = await fullSnapshot(db)
       return json({ ...result, serverTime: Date.now() })
     }

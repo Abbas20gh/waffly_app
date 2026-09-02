@@ -30,3 +30,4 @@ upload/
 # build artifacts
 tsconfig.tsbuildinfo
 *.tsbuildinfo
+.shot-*.png

@@ -26,6 +26,7 @@ class WafflyDB extends Dexie {
   productions!: Table<BaseRow, string>
   boxes!: Table<BaseRow, string>
   materials!: Table<BaseRow, string>
+  goods!: Table<BaseRow, string>
   consumptions!: Table<BaseRow, string>
   customers!: Table<BaseRow, string>
   sales!: Table<BaseRow, string>
@@ -63,6 +64,10 @@ class WafflyDB extends Dexie {
     // v2: جدول سایر وجوه (خارج از حساب سود) + اسانس/یادداشت جعبه‌ها (فیلدهای غیرایندکسی — بدون ایندکس جدید)
     this.version(2).stores({
       otherFunds: 'id, updatedAt, date',
+    })
+    // v3: کالاهای بازرگانی (خرید و فروش بدون تولید — مثل نان مشعلی)
+    this.version(3).stores({
+      goods: 'id, updatedAt, name',
     })
   }
 }

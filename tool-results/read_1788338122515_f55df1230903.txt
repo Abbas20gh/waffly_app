@@ -1,0 +1,605 @@
+     1→     1→'use client'
+     2→     2→
+     3→     3→// فروش — ثبت فروش چندقلمی، تسویه (کامل/جزئی)، چک، مشتریان، بدحساب‌ها
+     4→     4→import { useMemo, useState } from 'react'
+     5→     5→import { toast } from '@/hooks/use-toast'
+     6→     6→import {
+     7→     7→  ShoppingCart, Plus, Trash2, Users, Landmark, AlertOctagon, Check, Wallet, Phone,
+     8→     8→} from 'lucide-react'
+     9→     9→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+    10→    10→import { Button } from '@/components/ui/button'
+    11→    11→import { Input } from '@/components/ui/input'
+    12→    12→import {
+    13→    13→  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+    14→    14→} from '@/components/ui/dialog'
+    15→    15→import { PageHeader, FormRow, TabsBar, EmptyState, SettleBadge, Money, Num } from './bits'
+    16→    16→import { JalaliDateInput } from './jalali-date'
+    17→    17→import { InlinePicker } from './inline-picker'
+    18→    18→import { useTable, useSetting, putRecord, removeRecord, uid, getActiveUser } from '@/lib/localdb'
+    19→    19→import type { Sale, Customer, BreadType, SaleItem } from '@/lib/types'
+    20→    20→import { todayJalali, faDigits, faMoney, prettyJalali } from '@/lib/jalali'
+    21→    21→import { active, saleDue, effectiveSettled, isBadDebt, daysSince, effectivePaymentDate } from '@/lib/calc'
+    22→    22→import { cn } from '@/lib/utils'
+    23→    23→
+    24→    24→type Tab = 'sales' | 'customers' | 'checks' | 'debts'
+    25→    25→
+    26→    26→const PAY_METHODS = [
+    27→    27→  { key: 'CASH', label: 'نقدی' },
+    28→    28→  { key: 'CARD', label: 'کارت به کارت' },
+    29→    29→  { key: 'TRANSFER', label: 'حواله بانکی' },
+    30→    30→  { key: 'CHECK', label: 'چک' },
+    31→    31→] as const
+    32→    32→
+    33→    33→export function SalesView() {
+    34→    34→  const [tab, setTab] = useState<Tab>('sales')
+    35→    35→  return (
+    36→    36→    <div>
+    37→    37→      <PageHeader title="فروش" subtitle="ثبت فروش، تسویه مشتریان، چک‌ها و پیگیری بدهی" icon={<ShoppingCart className="h-5 w-5" />} />
+    38→    38→      <TabsBar<Tab>
+    39→    39→        value={tab}
+    40→    40→        onChange={setTab}
+    41→    41→        tabs={[
+    42→    42→          { key: 'sales', label: 'فروش‌ها' },
+    43→    43→          { key: 'customers', label: 'مشتریان' },
+    44→    44→          { key: 'checks', label: 'چک‌ها' },
+    45→    45→          { key: 'debts', label: 'بدحساب‌ها' },
+    46→    46→        ]}
+    47→    47→      />
+    48→    48→      {tab === 'sales' && <SalesTab />}
+    49→    49→      {tab === 'customers' && <CustomersTab />}
+    50→    50→      {tab === 'checks' && <ChecksTab />}
+    51→    51→      {tab === 'debts' && <DebtsTab />}
+    52→    52→    </div>
+    53→    53→  )
+    54→    54→}
+    55→    55→
+    56→    56→// ================= فرم/لیست فروش‌ها =================
+    57→    57→function SalesTab() {
+    58→    58→  const sales = useTable<Sale>('sales')
+    59→    59→  const customers = useTable<Customer>('customers')
+    60→    60→  const breadTypes = useTable<BreadType>('breadTypes')
+    61→    61→  const [open, setOpen] = useState(false)
+    62→    62→  const [filter, setFilter] = useState<'all' | 'unpaid' | 'checks'>('all')
+    63→    63→
+    64→    64→  const emptyItem: SaleItem = { breadTypeId: '', qty: 0, unitPrice: 0, delivered: 0, returned: 0, returnCost: 0 }
+    65→    65→  const [form, setForm] = useState({
+    66→    66→    date: todayJalali(),
+    67→    67→    customerId: '',
+    68→    68→    items: [{ ...emptyItem } as SaleItem],
+    69→    69→    settledStatus: 'UNPAID' as Sale['settledStatus'],
+    70→    70→    paidAmount: '',
+    71→    71→    paymentMethod: 'CASH' as Sale['paymentMethod'],
+    72→    72→    checkDueDate: '',
+    73→    73→    checkNumber: '',
+    74→    74→    checkBank: '',
+    75→    75→    paymentDate: '',
+    76→    76→    note: '',
+    77→    77→  })
+    78→    78→
+    79→    79→  const itemsTotal = form.items.reduce((a, it) => a + (it.qty || 0) * (it.unitPrice || 0), 0)
+    80→    80→  const returnTotal = form.items.reduce((a, it) => a + (it.returnCost || 0), 0)
+    81→    81→  const grandTotal = Math.max(0, itemsTotal - returnTotal)
+    82→    82→
+    83→    83→  const openNew = () => {
+    84→    84→    setForm({
+    85→    85→      date: todayJalali(),
+    86→    86→      customerId: '',
+    87→    87→      items: [{ ...emptyItem }],
+    88→    88→      settledStatus: 'UNPAID',
+    89→    89→      paidAmount: '',
+    90→    90→      paymentMethod: 'CASH',
+    91→    91→      checkDueDate: '',
+    92→    92→      checkNumber: '',
+    93→    93→      checkBank: '',
+    94→    94→      paymentDate: '',
+    95→    95→      note: '',
+    96→    96→    })
+    97→    97→    setOpen(true)
+    98→    98→  }
+    99→    99→
+   100→   100→  const updateItem = (idx: number, patch: Partial<SaleItem>) => {
+   101→   101→    setForm(f => {
+   102→   102→      const items = f.items.map((it, i) => i === idx ? { ...it, ...patch } : it)
+   103→   103→      return { ...f, items }
+   104→   104→    })
+   105→   105→  }
+   106→   106→
+   107→   107→  const save = async () => {
+   108→   108→    if (!form.customerId) { toast({ title: 'مشتری را انتخاب کنید', variant: 'destructive' }); return }
+   109→   109→    const items = form.items.filter(it => it.breadTypeId && (it.qty > 0 || it.delivered > 0))
+   110→   110→    if (items.length === 0) { toast({ title: 'حداقل یک قلم کالا اضافه کنید', variant: 'destructive' }); return }
+   111→   111→    const paid = form.settledStatus === 'PAID' ? grandTotal : parseFloat(form.paidAmount || '0')
+   112→   112→    const status: Sale['settledStatus'] = form.settledStatus === 'PAID' || paid >= grandTotal - 0.5
+   113→   113→      ? 'PAID'
+   114→   114→      : paid > 0.5 ? 'PARTIAL' : 'UNPAID'
+   115→   115→    await putRecord<Sale>('sales', {
+   116→   116→      id: uid(),
+   117→   117→      date: form.date,
+   118→   118→      customerId: form.customerId,
+   119→   119→      items: JSON.stringify(items),
+   120→   120→      totalAmount: grandTotal,
+   121→   121→      settledStatus: status,
+   122→   122→      paidAmount: Math.min(paid, grandTotal),
+   123→   123→      paymentMethod: form.paymentMethod,
+   124→   124→      checkDueDate: form.paymentMethod === 'CHECK' ? (form.checkDueDate || null) : null,
+   125→   125→      checkNumber: form.paymentMethod === 'CHECK' ? (form.checkNumber || null) : null,
+   126→   126→      checkBank: form.paymentMethod === 'CHECK' ? (form.checkBank || null) : null,
+   127→   127→      paymentDate: status === 'PAID' ? (form.paymentDate || null) : (form.paymentDate || null),
+   128→   128→      note: form.note || null,
+   129→   129→      createdBy: getActiveUser() || null,
+   130→   130→      updatedAt: 0,
+   131→   131→      deleted: 0,
+   132→   132→    })
+   133→   133→    toast({ title: 'فروش ثبت شد', description: `${faMoney(grandTotal)} تومان` })
+   134→   134→    setOpen(false)
+   135→   135→  }
+   136→   136→
+   137→   137→  const quickSettle = async (s: Sale) => {
+   138→   138→    await putRecord<Sale>('sales', { ...s, settledStatus: 'PAID', paidAmount: s.totalAmount, paymentDate: s.paymentDate || todayJalali() })
+   139→   139→    toast({ title: 'تسویه شد', description: `${faMoney(saleDue(s))} تومان` })
+   140→   140→  }
+   141→   141→
+   142→   142→  const list = [...sales]
+   143→   143→    .filter(s => !s.deleted)
+   144→   144→    .filter(s => filter === 'all' || (filter === 'unpaid' ? effectiveSettled(s) !== 'PAID' : s.paymentMethod === 'CHECK'))
+   145→   145→    .sort((a, b) => (b.date + b.updatedAt).localeCompare(a.date + a.updatedAt))
+   146→   146→    .slice(0, 60)
+   147→   147→  const cName = (id: string) => customers.find(c => c.id === id)?.name || 'نامشخص'
+   148→   148→  const btLabel = (id: string) => {
+   149→   149→    const b = breadTypes.find(x => x.id === id)
+   150→   150→    return b ? b.name : 'کالا'
+   151→   151→  }
+   152→   152→
+   153→   153→  return (
+   154→   154→    <div className="space-y-4">
+   155→   155→      <div className="flex flex-wrap items-center justify-between gap-2">
+   156→   156→        <div className="flex gap-1.5">
+   157→   157→          {([['all', 'همه'], ['unpaid', 'تسویه‌نشده'], ['checks', 'چکی']] as const).map(([k, label]) => (
+   158→   158→            <button
+   159→   159→              key={k}
+   160→   160→              onClick={() => setFilter(k)}
+   161→   161→              className={cn('rounded-lg px-3 py-1.5 text-xs font-medium border min-h-9',
+   162→   162→                filter === k ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-muted-foreground')}
+   163→   163→            >
+   164→   164→              {label}
+   165→   165→            </button>
+   166→   166→          ))}
+   167→   167→        </div>
+   168→   168→        <Button onClick={openNew} className="h-11"><Plus className="ml-1 h-4 w-4" /> فروش جدید</Button>
+   169→   169→      </div>
+   170→   170→
+   171→   171→      <Card className="waffly-card">
+   172→   172→        <CardContent className="p-3">
+   173→   173→          {list.length === 0 ? (
+   174→   174→            <EmptyState title="فروشی یافت نشد" desc="با دکمه «فروش جدید» اولین فروش را ثبت کنید." icon={<ShoppingCart className="h-5 w-5" />} />
+   175→   175→          ) : (
+   176→   176→            <div className="space-y-2">
+   177→   177→              {list.map(s => {
+   178→   178→                const items = (() => { try { return JSON.parse(s.items || '[]') as SaleItem[] } catch { return [] } })()
+   179→   179→                const st = effectiveSettled(s)
+   180→   180→                return (
+   181→   181→                  <div key={s.id} className="rounded-xl border p-3 space-y-2">
+   182→   182→                    <div className="flex flex-wrap items-center gap-2">
+   183→   183→                      <p className="text-sm font-bold">{cName(s.customerId)}</p>
+   184→   184→                      <span className="text-[11px] text-muted-foreground waffly-num">{prettyJalali(s.date)}</span>
+   185→   185→                      <span className="text-[10px] rounded bg-muted px-1.5 py-0.5">{PAY_METHODS.find(p => p.key === s.paymentMethod)?.label}</span>
+   186→   186→                      {s.paymentMethod === 'CHECK' && s.checkDueDate && (
+   187→   187→                        <span className="text-[10px] rounded bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.5 waffly-num">چک: {prettyJalali(s.checkDueDate)}</span>
+   188→   188→                      )}
+   189→   189→                      <div className="flex-1" />
+   190→   190→                      <SettleBadge status={st} paid={s.paidAmount} total={s.totalAmount} />
+   191→   191→                      <Money value={s.totalAmount} className="font-bold text-sm" />
+   192→   192→                      <span className="text-[10px] text-muted-foreground">تومان</span>
+   193→   193→                    </div>
+   194→   194→                    <p className="text-[11px] text-muted-foreground waffly-num">
+   195→   195→                      {items.map((it, i) => `${btLabel(it.breadTypeId)} × ${faDigits(it.delivered || it.qty)}`).join(' • ')}
+   196→   196→                      {s.paymentDate && ` • وصول: ${prettyJalali(s.paymentDate)}`}
+   197→   197→                      {s.createdBy && ` • ${s.createdBy}`}
+   198→   198→                    </p>
+   199→   199→                    {st !== 'PAID' && (
+   200→   200→                      <div className="flex items-center gap-2 pt-1">
+   201→   201→                        <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => void quickSettle(s)}>
+   202→   202→                          <Check className="h-3.5 w-3.5" /> تسویه کامل
+   203→   203→                        </Button>
+   204→   204→                        <span className="text-[11px] text-red-600 waffly-num">مانده: {faMoney(saleDue(s))}</span>
+   205→   205→                      </div>
+   206→   206→                    )}
+   207→   207→                  </div>
+   208→   208→                )
+   209→   209→              })}
+   210→   210→            </div>
+   211→   211→          )}
+   212→   212→        </CardContent>
+   213→   213→      </Card>
+   214→   214→
+   215→   215→      <SaleFormDialog
+   216→   216→        open={open} onOpenChange={setOpen}
+   217→   217→        form={form} setForm={setForm}
+   218→   218→        customers={active(customers)} breadTypes={active(breadTypes)}
+   219→   219→        itemsTotal={itemsTotal} returnTotal={returnTotal} grandTotal={grandTotal}
+   220→   220→        onSave={save}
+   221→   221→        onQuickAddCustomer={async (name) => {
+   222→   222→          const id = uid()
+   223→   223→          await putRecord<Customer>('customers', { id, name, phone: null, address: null, cooperationType: null, updatedAt: 0, deleted: 0 })
+   224→   224→          setForm(f => ({ ...f, customerId: id }))
+   225→   225→          toast({ title: 'مشتری اضافه شد', description: name })
+   226→   226→        }}
+   227→   227→      />
+   228→   228→    </div>
+   229→   229→  )
+   230→   230→}
+   231→   231→
+   232→   232→function SaleFormDialog({ open, onOpenChange, form, setForm, customers, breadTypes, itemsTotal, returnTotal, grandTotal, onSave, onQuickAddCustomer }: {
+   233→   233→  open: boolean
+   234→   234→  onOpenChange: (v: boolean) => void
+   235→   235→  form: {
+   236→   236→    date: string; customerId: string; items: SaleItem[]
+   237→   237→    settledStatus: Sale['settledStatus']; paidAmount: string
+   238→   238→    paymentMethod: Sale['paymentMethod']; checkDueDate: string; checkNumber: string; checkBank: string
+   239→   239→    paymentDate: string; note: string
+   240→   240→  }
+   241→   241→  setForm: React.Dispatch<React.SetStateAction<{
+   242→   242→    date: string; customerId: string; items: SaleItem[]
+   243→   243→    settledStatus: Sale['settledStatus']; paidAmount: string
+   244→   244→    paymentMethod: Sale['paymentMethod']; checkDueDate: string; checkNumber: string; checkBank: string
+   245→   245→    paymentDate: string; note: string
+   246→   246→  }>>
+   247→   247→  customers: Customer[]
+   248→   248→  breadTypes: BreadType[]
+   249→   249→  itemsTotal: number
+   250→   250→  returnTotal: number
+   251→   251→  grandTotal: number
+   252→   252→  onSave: () => void
+   253→   253→  onQuickAddCustomer: (name: string) => void
+   254→   254→}) {
+   255→   255→  const [newCustomer, setNewCustomer] = useState('')
+   256→   256→  const updateItem = (idx: number, patch: Partial<SaleItem>) => {
+   257→   257→    setForm(f => ({ ...f, items: f.items.map((it, i) => i === idx ? { ...it, ...patch } : it) }))
+   258→   258→  }
+   259→   259→  return (
+   260→   260→    <Dialog open={open} onOpenChange={onOpenChange}>
+   261→   261→      <DialogContent className="max-w-2xl max-h-[92dvh] overflow-y-auto">
+   262→   262→        <DialogHeader>
+   263→   263→          <DialogTitle>ثبت فروش</DialogTitle>
+   264→   264→          <DialogDescription>اقلام را انتخاب کنید، قیمت هر نان را وارد کنید؛ جمع خودکار حساب می‌شود.</DialogDescription>
+   265→   265→        </DialogHeader>
+   266→   266→        <div className="space-y-4">
+   267→   267→          <div className="grid sm:grid-cols-2 gap-3">
+   268→   268→            <FormRow label="تاریخ فروش">
+   269→   269→              <JalaliDateInput value={form.date} onChange={v => setForm(f => ({ ...f, date: v }))} />
+   270→   270→            </FormRow>
+   271→   271→            <FormRow label="مشتری">
+   272→   272→              <InlinePicker
+   273→   273→                value={form.customerId}
+   274→   274→                options={customers.map(c => ({ value: c.id, label: c.name }))}
+   275→   275→                onChange={v => setForm(f => ({ ...f, customerId: v }))}
+   276→   276→                placeholder="انتخاب مشتری"
+   277→   277→              />
+   278→   278→            </FormRow>
+   279→   279→          </div>
+   280→   280→          <div className="flex gap-2">
+   281→   281→            <Input
+   282→   282→              value={newCustomer}
+   283→   283→              onChange={e => setNewCustomer(e.target.value)}
+   284→   284→              placeholder="نام مشتری جدید…"
+   285→   285→              className="h-10"
+   286→   286→            />
+   287→   287→            <Button
+   288→   288→              type="button" variant="outline" className="h-10 shrink-0"
+   289→   289→              disabled={!newCustomer.trim()}
+   290→   290→              onClick={() => { onQuickAddCustomer(newCustomer.trim()); setNewCustomer('') }}
+   291→   291→            >
+   292→   292→              <Plus className="h-4 w-4" /> افزودن
+   293→   293→            </Button>
+   294→   294→          </div>
+   295→   295→
+   296→   296→          {/* اقلام */}
+   297→   297→          <div className="space-y-2">
+   298→   298→            <p className="text-sm font-medium">اقلام فروش</p>
+   299→   299→            {form.items.map((it, idx) => (
+   300→   300→              <div key={idx} className="rounded-xl border p-3 space-y-2">
+   301→   301→                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+   302→   302→                  <InlinePicker
+   303→   303→                    value={it.breadTypeId}
+   304→   304→                    options={active(breadTypes).map(b => ({ value: b.id, label: b.name }))}
+   305→   305→                    onChange={v => updateItem(idx, { breadTypeId: v })}
+   306→   306→                    placeholder="کالا"
+   307→   307→                    buttonClassName="h-10 text-xs"
+   308→   308→                  />
+   309→   309→                  <Input inputMode="decimal" className="waffly-num-input h-10 text-xs" placeholder="تعداد" value={it.qty || ''} onChange={e => updateItem(idx, { qty: parseFloat(e.target.value) || 0, delivered: parseFloat(e.target.value) || 0 })} />
+   310→   310→                  <Input inputMode="decimal" className="waffly-num-input h-10 text-xs" placeholder="قیمت هر نان" value={it.unitPrice || ''} onChange={e => updateItem(idx, { unitPrice: parseFloat(e.target.value) || 0 })} />
+   311→   311→                  <Button variant="ghost" size="icon" className="h-10 w-10 text-muted-foreground hover:text-red-600" aria-label="حذف قلم"
+   312→   312→                    onClick={() => setForm(f => ({ ...f, items: f.items.filter((_, i) => i !== idx) }))}>
+   313→   313→                    <Trash2 className="h-4 w-4" />
+   314→   314→                  </Button>
+   315→   315→                </div>
+   316→   316→                <div className="grid grid-cols-3 gap-2">
+   317→   317→                  <label className="text-[10px] text-muted-foreground space-y-1">
+   318→   318→                    <span>تحویل واقعی</span>
+   319→   319→                    <Input inputMode="decimal" className="waffly-num-input h-9 text-xs" value={it.delivered || ''} onChange={e => updateItem(idx, { delivered: parseFloat(e.target.value) || 0 })} />
+   320→   320→                  </label>
+   321→   321→                  <label className="text-[10px] text-muted-foreground space-y-1">
+   322→   322→                    <span>برگشتی/خراب</span>
+   323→   323→                    <Input inputMode="decimal" className="waffly-num-input h-9 text-xs" value={it.returned || ''} onChange={e => updateItem(idx, { returned: parseFloat(e.target.value) || 0 })} />
+   324→   324→                  </label>
+   325→   325→                  <label className="text-[10px] text-muted-foreground space-y-1">
+   326→   326→                    <span>هزینه برگشتی (تومان)</span>
+   327→   327→                    <Input inputMode="decimal" className="waffly-num-input h-9 text-xs" value={it.returnCost || ''} onChange={e => updateItem(idx, { returnCost: parseFloat(e.target.value) || 0 })} />
+   328→   328→                  </label>
+   329→   329→                </div>
+   330→   330→              </div>
+   331→   331→            ))}
+   332→   332→            <Button variant="outline" className="w-full h-10" onClick={() => setForm(f => ({ ...f, items: [...f.items, { ...form.items[0], breadTypeId: '', qty: 0, unitPrice: 0, delivered: 0, returned: 0, returnCost: 0 }] }))}>
+   333→   333→              <Plus className="h-4 w-4" /> افزودن قلم
+   334→   334→            </Button>
+   335→   335→          </div>
+   336→   336→
+   337→   337→          {/* جمع */}
+   338→   338→          <div className="rounded-xl bg-muted/60 border p-3 space-y-1 text-xs waffly-num">
+   339→   339→            <div className="flex justify-between"><span>جمع اقلام</span><span>{faMoney(itemsTotal)}</span></div>
+   340→   340→            {returnTotal > 0 && <div className="flex justify-between text-red-600"><span>هزینه برگشتی</span><span>−{faMoney(returnTotal)}</span></div>}
+   341→   341→            <div className="flex justify-between font-bold text-sm pt-1 border-t"><span>مبلغ نهایی</span><span>{faMoney(grandTotal)} تومان</span></div>
+   342→   342→          </div>
+   343→   343→
+   344→   344→          {/* تسویه */}
+   345→   345→          <div className="grid sm:grid-cols-2 gap-3">
+   346→   346→            <FormRow label="وضعیت تسویه">
+   347→   347→              <InlinePicker
+   348→   348→                value={form.settledStatus}
+   349→   349→                options={[
+   350→   350→                  { value: 'PAID', label: 'تسویه‌شده کامل' },
+   351→   351→                  { value: 'PARTIAL', label: 'پرداخت جزئی' },
+   352→   352→                  { value: 'UNPAID', label: 'پرداخت‌نشده' },
+   353→   353→                ]}
+   354→   354→                onChange={v => setForm(f => ({ ...f, settledStatus: v as Sale['settledStatus'] }))}
+   355→   355→              />
+   356→   356→            </FormRow>
+   357→   357→            {form.settledStatus === 'PARTIAL' && (
+   358→   358→              <FormRow label="مبلغ پرداخت‌شده (تومان)">
+   359→   359→                <Input inputMode="decimal" className="waffly-num-input h-11" value={form.paidAmount} onChange={e => setForm(f => ({ ...f, paidAmount: e.target.value }))} />
+   360→   360→              </FormRow>
+   361→   361→            )}
+   362→   362→          </div>
+   363→   363→          <div className="grid sm:grid-cols-2 gap-3">
+   364→   364→            <FormRow label="روش پرداخت">
+   365→   365→              <InlinePicker
+   366→   366→                value={form.paymentMethod}
+   367→   367→                options={PAY_METHODS.map(p => ({ value: p.key, label: p.label }))}
+   368→   368→                onChange={v => setForm(f => ({ ...f, paymentMethod: v as Sale['paymentMethod'] }))}
+   369→   369→              />
+   370→   370→            </FormRow>
+   371→   371→            <FormRow label="تاریخ وصول واقعی" hint="اگر با تاریخ فروش متفاوت است">
+   372→   372→              <JalaliDateInput value={form.paymentDate} onChange={v => setForm(f => ({ ...f, paymentDate: v }))} />
+   373→   373→            </FormRow>
+   374→   374→          </div>
+   375→   375→          {form.paymentMethod === 'CHECK' && (
+   376→   376→            <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-3 grid sm:grid-cols-3 gap-3">
+   377→   377→              <FormRow label="سررسید چک">
+   378→   378→                <JalaliDateInput value={form.checkDueDate} onChange={v => setForm(f => ({ ...f, checkDueDate: v }))} />
+   379→   379→              </FormRow>
+   380→   380→              <FormRow label="شماره چک">
+   381→   381→                <Input value={form.checkNumber} onChange={e => setForm(f => ({ ...f, checkNumber: e.target.value }))} className="waffly-num h-11" dir="ltr" />
+   382→   382→              </FormRow>
+   383→   383→              <FormRow label="بانک">
+   384→   384→                <Input value={form.checkBank} onChange={e => setForm(f => ({ ...f, checkBank: e.target.value }))} className="h-11" />
+   385→   385→              </FormRow>
+   386→   386→            </div>
+   387→   387→          )}
+   388→   388→          <FormRow label="یادداشت">
+   389→   389→            <Input value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} className="h-11" />
+   390→   390→          </FormRow>
+   391→   391→        </div>
+   392→   392→        <DialogFooter>
+   393→   393→          <Button variant="outline" onClick={() => onOpenChange(false)}>انصراف</Button>
+   394→   394→          <Button onClick={onSave}>ثبت فروش</Button>
+   395→   395→        </DialogFooter>
+   396→   396→      </DialogContent>
+   397→   397→    </Dialog>
+   398→   398→  )
+   399→   399→}
+   400→   400→
+   401→   401→// ================= مشتریان =================
+   402→   402→function CustomersTab() {
+   403→   403→  const customers = useTable<Customer>('customers')
+   404→   404→  const sales = useTable<Sale>('sales')
+   405→   405→  const [form, setForm] = useState({ name: '', phone: '', address: '', cooperationType: '' })
+   406→   406→
+   407→   407→  const save = async () => {
+   408→   408→    if (!form.name.trim()) { toast({ title: 'نام مشتری لازم است', variant: 'destructive' }); return }
+   409→   409→    await putRecord<Customer>('customers', {
+   410→   410→      id: uid(),
+   411→   411→      name: form.name.trim(),
+   412→   412→      phone: form.phone || null,
+   413→   413→      address: form.address || null,
+   414→   414→      cooperationType: form.cooperationType || null,
+   415→   415→      updatedAt: 0, deleted: 0,
+   416→   416→    })
+   417→   417→    setForm({ name: '', phone: '', address: '', cooperationType: '' })
+   418→   418→    toast({ title: 'مشتری ذخیره شد' })
+   419→   419→  }
+   420→   420→
+   421→   421→  const stats = useMemo(() => {
+   422→   422→    const m = new Map<string, { count: number; total: number; due: number; last: string }>()
+   423→   423→    for (const s of active(sales)) {
+   424→   424→      const st = m.get(s.customerId) || { count: 0, total: 0, due: 0, last: '' }
+   425→   425→      st.count++
+   426→   426→      st.total += s.totalAmount || 0
+   427→   427→      st.due += saleDue(s)
+   428→   428→      if (s.date > st.last) st.last = s.date
+   429→   429→      m.set(s.customerId, st)
+   430→   430→    }
+   431→   431→    return m
+   432→   432→  }, [sales])
+   433→   433→
+   434→   434→  return (
+   435→   435→    <div className="grid lg:grid-cols-5 gap-4">
+   436→   436→      <Card className="waffly-card lg:col-span-2 h-fit">
+   437→   437→        <CardHeader className="pb-2">
+   438→   438→          <CardTitle className="text-sm flex items-center gap-2"><Users className="h-4 w-4" /> مشتری جدید</CardTitle>
+   439→   439→        </CardHeader>
+   440→   440→        <CardContent className="space-y-3">
+   441→   441→          <FormRow label="نام و نام خانوادگی / نام مغازه">
+   442→   442→            <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="h-11" />
+   443→   443→          </FormRow>
+   444→   444→          <FormRow label="تلفن">
+   445→   445→            <Input inputMode="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="waffly-num h-11" dir="ltr" />
+   446→   446→          </FormRow>
+   447→   447→          <FormRow label="نوع همکاری" hint="مثلاً: روزانه، هفتگی، عمده">
+   448→   448→            <Input value={form.cooperationType} onChange={e => setForm(f => ({ ...f, cooperationType: e.target.value }))} className="h-11" />
+   449→   449→          </FormRow>
+   450→   450→          <FormRow label="آدرس">
+   451→   451→            <Input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} className="h-11" />
+   452→   452→          </FormRow>
+   453→   453→          <Button className="w-full h-11" onClick={save}>ذخیره مشتری</Button>
+   454→   454→        </CardContent>
+   455→   455→      </Card>
+   456→   456→
+   457→   457→      <Card className="waffly-card lg:col-span-3">
+   458→   458→        <CardHeader className="pb-2"><CardTitle className="text-sm">مشتریان ({faDigits(active(customers).length)})</CardTitle></CardHeader>
+   459→   459→        <CardContent>
+   460→   460→          {active(customers).length === 0 ? (
+   461→   461→            <EmptyState title="مشتری ثبت نشده" icon={<Users className="h-5 w-5" />} />
+   462→   462→          ) : (
+   463→   463→            <div className="max-h-[480px] overflow-y-auto thin-scroll space-y-1.5">
+   464→   464→              {active(customers).map(c => {
+   465→   465→                const st = stats.get(c.id)
+   466→   466→                return (
+   467→   467→                  <div key={c.id} className="flex items-center gap-3 rounded-lg border px-3 py-2.5">
+   468→   468→                    <div className="flex-1 min-w-0">
+   469→   469→                      <p className="text-sm font-semibold">{c.name}</p>
+   470→   470→                      <p className="text-[11px] text-muted-foreground waffly-num">
+   471→   471→                        {c.phone && <span dir="ltr">{c.phone}</span>}
+   472→   472→                        {c.cooperationType && ` • ${c.cooperationType}`}
+   473→   473→                        {st && ` • ${faDigits(st.count)} فروش • آخرین: ${prettyJalali(st.last)}`}
+   474→   474→                      </p>
+   475→   475→                    </div>
+   476→   476→                    <div className="text-left shrink-0">
+   477→   477→                      {st && st.due > 0.5 && <p className="text-[11px] text-red-600 font-bold waffly-num">بدهی: {faMoney(st.due)}</p>}
+   478→   478→                      {st && <p className="text-[10px] text-muted-foreground waffly-num">مجموع: {faMoney(st.total)}</p>}
+   479→   479→                    </div>
+   480→   480→                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" aria-label="حذف"
+   481→   481→                      onClick={() => void removeRecord('customers', c.id)}>
+   482→   482→                      <Trash2 className="h-4 w-4" />
+   483→   483→                    </Button>
+   484→   484→                  </div>
+   485→   485→                )
+   486→   486→              })}
+   487→   487→            </div>
+   488→   488→          )}
+   489→   489→        </CardContent>
+   490→   490→      </Card>
+   491→   491→    </div>
+   492→   492→  )
+   493→   493→}
+   494→   494→
+   495→   495→// ================= چک‌ها =================
+   496→   496→function ChecksTab() {
+   497→   497→  const sales = useTable<Sale>('sales')
+   498→   498→  const customers = useTable<Customer>('customers')
+   499→   499→  const checks = active(sales)
+   500→   500→    .filter(s => s.paymentMethod === 'CHECK')
+   501→   501→    .sort((a, b) => (a.checkDueDate || a.date).localeCompare(b.checkDueDate || b.date))
+   502→   502→  const cName = (id: string) => customers.find(c => c.id === id)?.name || 'نامشخص'
+   503→   503→
+   504→   504→  const collect = async (s: Sale) => {
+   505→   505→    await putRecord<Sale>('sales', { ...s, settledStatus: 'PAID', paidAmount: s.totalAmount, paymentDate: todayJalali() })
+   506→   506→    toast({ title: 'چک وصول شد' })
+   507→   507→  }
+   508→   508→
+   509→   509→  const statusChip = (s: Sale) => {
+   510→   510→    const st = effectiveSettled(s)
+   511→   511→    if (st === 'PAID') return <span className="rounded bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 text-[10px]">وصول‌شده</span>
+   512→   512→    const days = daysSince(s.checkDueDate || s.date)
+   513→   513→    if (s.checkDueDate && days > 0 || (!s.checkDueDate && days > 0)) {
+   514→   514→      return <span className="rounded bg-red-50 text-red-700 border border-red-200 px-2 py-0.5 text-[10px] waffly-num">{faDigits(days)} روز گذشته</span>
+   515→   515→    }
+   516→   516→    if (days >= -7) return <span className="rounded bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 text-[10px] waffly-num">نزدیک سررسید</span>
+   517→   517→    return <span className="rounded bg-muted px-2 py-0.5 text-[10px] waffly-num">{faDigits(-days)} روز مانده</span>
+   518→   518→  }
+   519→   519→
+   520→   520→  return (
+   521→   521→    <Card className="waffly-card">
+   522→   522→      <CardHeader className="pb-2">
+   523→   523→        <CardTitle className="text-sm flex items-center gap-2"><Landmark className="h-4 w-4" /> فروش‌های چکی</CardTitle>
+   524→   524→      </CardHeader>
+   525→   525→      <CardContent>
+   526→   526→        {checks.length === 0 ? (
+   527→   527→          <EmptyState title="چکی ثبت نشده" desc="در ثبت فروش، روش پرداخت «چک» را انتخاب کنید." icon={<Landmark className="h-5 w-5" />} />
+   528→   528→        ) : (
+   529→   529→          <div className="space-y-2">
+   530→   530→            {checks.map(s => (
+   531→   531→              <div key={s.id} className="flex flex-wrap items-center gap-2 rounded-xl border p-3">
+   532→   532→                <div className="flex-1 min-w-0">
+   533→   533→                  <p className="text-sm font-semibold">{cName(s.customerId)}</p>
+   534→   534→                  <p className="text-[11px] text-muted-foreground waffly-num">
+   535→   535→                    فروش {prettyJalali(s.date)}
+   536→   536→                    {s.checkDueDate && ` • سررسید ${prettyJalali(s.checkDueDate)}`}
+   537→   537→                    {s.checkNumber && ` • چک ${s.checkNumber}`}
+   538→   538→                    {s.checkBank && ` • ${s.checkBank}`}
+   539→   539→                  </p>
+   540→   540→                </div>
+   541→   541→                {statusChip(s)}
+   542→   542→                <Money value={s.totalAmount} className="font-bold text-sm" />
+   543→   543→                {effectiveSettled(s) !== 'PAID' && (
+   544→   544→                  <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => void collect(s)}>
+   545→   545→                    <Wallet className="h-3.5 w-3.5" /> وصول شد
+   546→   546→                  </Button>
+   547→   547→                )}
+   548→   548→              </div>
+   549→   549→            ))}
+   550→   550→          </div>
+   551→   551→        )}
+   552→   552→      </CardContent>
+   553→   553→    </Card>
+   554→   554→  )
+   555→   555→}
+   556→   556→
+   557→   557→// ================= بدحساب‌ها =================
+   558→   558→function DebtsTab() {
+   559→   559→  const sales = useTable<Sale>('sales')
+   560→   560→  const customers = useTable<Customer>('customers')
+   561→   561→  const setting = useSetting()
+   562→   562→  const badDays = setting.badDebtDays || 30
+   563→   563→  const debts = active(sales)
+   564→   564→    .filter(s => isBadDebt(s, badDays))
+   565→   565→    .map(s => ({ s, c: customers.find(x => x.id === s.customerId), days: daysSince(s.date) }))
+   566→   566→    .sort((a, b) => b.days - a.days)
+   567→   567→
+   568→   568→  const total = debts.reduce((a, d) => a + saleDue(d.s), 0)
+   569→   569→
+   570→   570→  return (
+   571→   571→    <Card className="waffly-card">
+   572→   572→      <CardHeader className="pb-2">
+   573→   573→        <CardTitle className="text-sm flex items-center gap-2">
+   574→   574→          <AlertOctagon className="h-4 w-4 text-red-500" /> بدهکاران (بیش از {faDigits(badDays)} روز)
+   575→   575→          {debts.length > 0 && <span className="text-red-600 waffly-num mr-auto">جمع: {faMoney(total)} تومان</span>}
+   576→   576→        </CardTitle>
+   577→   577→      </CardHeader>
+   578→   578→      <CardContent>
+   579→   579→        {debts.length === 0 ? (
+   580→   580→          <EmptyState title="بدحسابی ثبت نشده" desc="مشتریانی که بیش از ۳۰ روز بدهی داشته باشند اینجا نمایش داده می‌شوند." icon={<Check className="h-5 w-5" />} />
+   581→   581→        ) : (
+   582→   582→          <div className="space-y-2">
+   583→   583→            {debts.map(({ s, c, days }) => (
+   584→   584→              <div key={s.id} className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50/40 p-3">
+   585→   585→                <div className="flex-1 min-w-0">
+   586→   586→                  <p className="text-sm font-semibold">{c?.name || 'نامشخص'}</p>
+   587→   587→                  <p className="text-[11px] text-muted-foreground waffly-num">
+   588→   588→                    فروش {prettyJalali(s.date)} • {faDigits(days)} روز بی‌تسویه
+   589→   589→                    {c?.phone && <span dir="ltr"> • {c.phone}</span>}
+   590→   590→                  </p>
+   591→   591→                </div>
+   592→   592→                <span className="text-sm font-bold text-red-700 waffly-num">{faMoney(saleDue(s))}</span>
+   593→   593→                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" aria-label="حذف"
+   594→   594→                  onClick={() => void removeRecord('sales', s.id)}>
+   595→   595→                  <Trash2 className="h-4 w-4" />
+   596→   596→                </Button>
+   597→   597→              </div>
+   598→   598→            ))}
+   599→   599→          </div>
+   600→   600→        )}
+   601→   601→      </CardContent>
+   602→   602→    </Card>
+   603→   603→  )
+   604→   604→}
+   605→   605→

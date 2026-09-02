@@ -3,7 +3,7 @@
 import type { Client } from '@libsql/client'
 
 export const TABLES = [
-  'breadTypes', 'productions', 'boxes', 'materials', 'consumptions',
+  'breadTypes', 'productions', 'boxes', 'materials', 'goods', 'consumptions',
   'customers', 'sales', 'suppliers', 'purchases',
   'machines', 'machineCosts', 'expenseCategories', 'expenses', 'otherFunds', 'settings',
 ] as const
@@ -12,7 +12,7 @@ export type SyncTbl = (typeof TABLES)[number]
 // نام فیزیکی جدول در دیتابیس (بدون @@map → نام مدل)
 export const PHYS: Record<SyncTbl, string> = {
   breadTypes: 'BreadType', productions: 'Production', boxes: 'Box',
-  materials: 'Material', consumptions: 'Consumption', customers: 'Customer',
+  materials: 'Material', goods: 'Good', consumptions: 'Consumption', customers: 'Customer',
   sales: 'Sale', suppliers: 'Supplier', purchases: 'Purchase',
   machines: 'Machine', machineCosts: 'MachineCost',
   expenseCategories: 'ExpenseCategory', expenses: 'Expense', otherFunds: 'OtherFund', settings: 'Setting',
@@ -25,11 +25,12 @@ export const FIELDS: Record<SyncTbl, Record<string, FieldType>> = {
   productions: { date: 'str', breadTypeId: 'str', totalProduced: 'num', boxesCount: 'num', perBoxCount: 'num', waste: 'num', carriedFrom: 'strNull', note: 'strNull', createdBy: 'strNull' },
   boxes: { code: 'str', productionId: 'str', breadTypeId: 'str', count: 'num', date: 'str', hasEssence: 'int', essenceType: 'strNull', note: 'strNull' },
   materials: { name: 'str', unit: 'str', minStock: 'num', active: 'int' },
+  goods: { name: 'str', piecesPerBox: 'num', minStock: 'num', active: 'int' },
   consumptions: { date: 'str', materialId: 'str', quantity: 'num', note: 'strNull', createdBy: 'strNull' },
   customers: { name: 'str', phone: 'strNull', address: 'strNull', cooperationType: 'strNull' },
   sales: { date: 'str', customerId: 'str', items: 'str', totalAmount: 'num', settledStatus: 'str', paidAmount: 'num', paymentMethod: 'str', checkDueDate: 'strNull', checkNumber: 'strNull', checkBank: 'strNull', paymentDate: 'strNull', note: 'strNull', createdBy: 'strNull' },
   suppliers: { name: 'str', phone: 'strNull', address: 'strNull' },
-  purchases: { date: 'str', materialId: 'str', quantity: 'num', cost: 'num', supplierId: 'strNull', settledStatus: 'str', paidAmount: 'num', note: 'strNull', createdBy: 'strNull' },
+  purchases: { date: 'str', materialId: 'str', quantity: 'num', cost: 'num', supplierId: 'strNull', settledStatus: 'str', paidAmount: 'num', itemKind: 'str', boxesCount: 'num', note: 'strNull', createdBy: 'strNull' },
   machines: { name: 'str', kind: 'str', startDate: 'str', status: 'str', note: 'strNull' },
   machineCosts: { machineId: 'str', kind: 'str', name: 'str', quantity: 'num', date: 'str', cost: 'num', note: 'strNull' },
   expenseCategories: { name: 'str', includeInProfit: 'int' },
@@ -42,6 +43,45 @@ const s = (v: unknown, dflt = ''): string => (typeof v === 'string' ? v : v == n
 const n = (v: unknown, dflt = 0): number => {
   const x = typeof v === 'number' ? v : parseFloat(String(v))
   return Number.isFinite(x) ? x : dflt
+}
+
+// ===== مهاجرت خودکار اسکیما (v2.4 — کالاهای بازرگانی) =====
+// idempotent و در سطح isolate مموایز — اولین درخواست بعد از دیپلوی مهاجرت را انجام می‌دهد
+let schemaReady = false
+export async function ensureSchema(db: Client): Promise<void> {
+  if (schemaReady) return
+  // ۱) جدول کالاها
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS "Good" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "name" TEXT NOT NULL DEFAULT '',
+      "piecesPerBox" REAL NOT NULL DEFAULT 0,
+      "minStock" REAL NOT NULL DEFAULT 0,
+      "active" INTEGER NOT NULL DEFAULT 1,
+      "updatedAt" REAL NOT NULL DEFAULT 0,
+      "deleted" INTEGER NOT NULL DEFAULT 0
+    )
+  `)
+  // ۲) ستون‌های جدید خرید (itemKind / boxesCount)
+  const cols = await db.execute({ sql: `PRAGMA table_info("Purchase")`, args: [] })
+  const names = new Set(cols.rows.map((r) => String(r['name'])))
+  if (!names.has('itemKind')) {
+    await db.execute(`ALTER TABLE "Purchase" ADD COLUMN "itemKind" TEXT NOT NULL DEFAULT 'MATERIAL'`)
+  }
+  if (!names.has('boxesCount')) {
+    await db.execute(`ALTER TABLE "Purchase" ADD COLUMN "boxesCount" REAL NOT NULL DEFAULT 0`)
+  }
+  // ۳) seed مشعلی برای دیتابیس‌های موجود (دیتابیس خالی در ensureSeed گرفته می‌شود)
+  const g = await db.execute({ sql: `SELECT id FROM "Good" WHERE id = ?`, args: ['seed-gd-01'] })
+  if (g.rows.length === 0) {
+    const now = Date.now()
+    await db.execute({
+      sql: `INSERT INTO "Good" ("id","name","piecesPerBox","minStock","active","updatedAt","deleted") VALUES (?, ?, 0, 0, 1, ?, 0)`,
+      args: ['seed-gd-01', 'نان مشعلی', now],
+    })
+    await db.execute({ sql: 'INSERT INTO SyncLog (tbl, rid, ts) VALUES (?, ?, ?)', args: ['goods', 'seed-gd-01', now] })
+  }
+  schemaReady = true
 }
 const i = (v: unknown, dflt = 0): number => Math.round(n(v, dflt))
 const sn = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v : null)
@@ -106,6 +146,8 @@ export async function ensureSeed(db: Client): Promise<boolean> {
     { tbl: 'materials', id: 'seed-mt-07', data: { name: 'لسیتین', unit: 'گرم', minStock: 500, active: 1, updatedAt: now, deleted: 0 } },
     { tbl: 'materials', id: 'seed-mt-08', data: { name: 'وانیل', unit: 'گرم', minStock: 200, active: 1, updatedAt: now, deleted: 0 } },
     { tbl: 'materials', id: 'seed-mt-09', data: { name: 'آرد سبوس‌دار', unit: 'کیلوگرم', minStock: 25, active: 1, updatedAt: now, deleted: 0 } },
+    // کالای بازرگانی — نان مشعلی (تعداد در جعبه را کاربر تکمیل می‌کند)
+    { tbl: 'goods', id: 'seed-gd-01', data: { name: 'نان مشعلی', piecesPerBox: 0, minStock: 0, active: 1, updatedAt: now, deleted: 0 } },
     { tbl: 'expenseCategories', id: 'seed-ec-01', data: { name: 'دستمزد کارگران', includeInProfit: 1, updatedAt: now, deleted: 0 } },
     { tbl: 'expenseCategories', id: 'seed-ec-02', data: { name: 'برداشت صاحب کار', includeInProfit: 0, updatedAt: now, deleted: 0 } },
     { tbl: 'expenseCategories', id: 'seed-ec-03', data: { name: 'حمل‌ونقل', includeInProfit: 1, updatedAt: now, deleted: 0 } },

@@ -57,9 +57,9 @@ export function AccountingView() {
   }
 
   const modeInfo = {
-    gross: { label: 'ناخالص', desc: 'فروش − هزینه مواد', value: rep.profitGross },
-    beforeOverhead: { label: 'پیش از سربار', desc: 'فروش − هزینه مواد (بدون سایر هزینه‌ها)', value: rep.profitGross },
-    net: { label: 'خالص نهایی', desc: 'فروش − مواد − هزینه‌های مشمول سود', value: rep.profitNet },
+    gross: { label: 'ناخالص', desc: 'فروش − مواد − بهای کالا', value: rep.profitGross },
+    beforeOverhead: { label: 'پیش از سربار', desc: 'فروش − مواد − بهای کالا (بدون سایر هزینه‌ها)', value: rep.profitGross },
+    net: { label: 'خالص نهایی', desc: 'فروش − مواد − بهای کالا − هزینه‌های مشمول سود', value: rep.profitNet },
   } as const
 
   const exportExcel = () => {
@@ -68,13 +68,14 @@ export function AccountingView() {
         ['شرح', 'مقدار/مبلغ', 'توضیح'],
         [
           ['دوره گزارش', period.rangeLabel, ''],
-          ['فروش کل (تومان)', rep.salesAmount, `${faDigits(rep.salesQty)} نان`],
+          ['فروش کل (تومان)', rep.salesAmount, `${faDigits(rep.salesQty)} نان${rep.goodsQty ? ` + ${faDigits(rep.goodsQty)} عدد کالا` : ''}`],
           ['وصول‌شده در دوره', rep.collected, ''],
           ['مانده مطالبات (کل)', rep.outstandingTotal, ''],
           ['هزینه مواد دوره', rep.materialCost, 'مصرف × میانگین قیمت خرید'],
-          ['سود ناخالص', rep.profitGross, 'فروش − مواد'],
+          ['بهای کالای فروش‌رفته', rep.goodsCost, 'تعداد فروش‌رفته × میانگین قیمت خرید'],
+          ['سود ناخالص', rep.profitGross, 'فروش − مواد − بهای کالا'],
           ['هزینه‌های مشمول سود', rep.expensesTotalIncluded, rep.expensesIncluded.map(e => `${e.name}: ${e.amount}`).join('، ') || '—'],
-          ['سود خالص نهایی', rep.profitNet, 'فروش − مواد − هزینه‌های مشمول'],
+          ['سود خالص نهایی', rep.profitNet, 'فروش − مواد − بهای کالا − هزینه‌های مشمول'],
           ['سایر وجوه ورودی دوره (خارج از سود)', funds.incoming, ''],
           ['سایر وجوه خروجی دوره (خارج از سود)', funds.outgoing, ''],
           ['سایر وجوه (خالص)', funds.net, 'خارج از محاسبه سود'],
@@ -142,7 +143,7 @@ export function AccountingView() {
 
         {/* KPIها */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <StatCard title="فروش کل دوره" value={faMoney(rep.salesAmount)} sub={`${faDigits(rep.salesQty)} نان`} icon={<Wallet className="h-4 w-4" />} />
+          <StatCard title="فروش کل دوره" value={faMoney(rep.salesAmount)} sub={`${faDigits(rep.salesQty)} نان${rep.goodsQty ? ` + ${faDigits(rep.goodsQty)} عدد کالا` : ''}`} icon={<Wallet className="h-4 w-4" />} />
           <StatCard title="وصول‌شده دوره" value={faMoney(rep.collected)} tone="positive" />
           <StatCard title="هزینه مواد دوره" value={faMoney(rep.materialCost)} tone="warning" sub="مصرف × میانگین قیمت خرید" />
           <StatCard
@@ -152,6 +153,9 @@ export function AccountingView() {
             sub={modeInfo[mode].desc}
             icon={modeInfo[mode].value >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
           />
+          {rep.goodsCost > 0 && (
+            <StatCard title="بهای کالای فروش‌رفته" value={faMoney(rep.goodsCost)} tone="warning" sub="فروش کالا × میانگین قیمت خرید (مثل نان مشعلی)" />
+          )}
         </div>
 
         {/* انتخاب مبنا */}

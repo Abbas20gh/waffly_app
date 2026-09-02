@@ -1,11 +1,12 @@
 // محاسبات کسب‌وکار — موجودی، بدحسابی، سود دوره، خریداران، سایر وجوه
-import type { Consumption, Customer, Expense, ExpenseCategory, Material, Production, Purchase, Sale, Setting, BreadType, MachineCost, Machine, OtherFund } from './types'
+import type { Consumption, Customer, Expense, ExpenseCategory, Material, Production, Purchase, Sale, Setting, BreadType, MachineCost, Machine, OtherFund, Good } from './types'
 import { inRange, jalaliAbsDays, todayJalali, type Period } from './jalali'
 
 export interface DataBundle {
   breadTypes: BreadType[]
   productions: Production[]
   materials: Material[]
+  goods: Good[]
   consumptions: Consumption[]
   customers: Customer[]
   sales: Sale[]
@@ -26,9 +27,10 @@ export const parseItems = (sale: Sale) => {
 }
 
 // ===== فروش =====
-export const saleDue = (s: Sale) => Math.max(0, (s.totalAmount || 0) - (s.paidAmount || 0))
+export interface Settleable { totalAmount?: number; paidAmount?: number }
+export const saleDue = (s: Settleable) => Math.max(0, (s.totalAmount || 0) - (s.paidAmount || 0))
 
-export function effectiveSettled(s: Sale): 'PAID' | 'PARTIAL' | 'UNPAID' {
+export function effectiveSettled(s: Settleable): 'PAID' | 'PARTIAL' | 'UNPAID' {
   const due = saleDue(s)
   if (due <= 0.5) return 'PAID'
   if ((s.paidAmount || 0) > 0.5) return 'PARTIAL'
@@ -91,6 +93,52 @@ export function periodMaterialCost(d: DataBundle, period: Period): number {
   return cost
 }
 
+// ===== کالاهای بازرگانی (خرید و فروش بدون تولید — مثل نان مشعلی) =====
+export interface GoodStock {
+  good: Good
+  purchased: number // تعداد عدد خریداری‌شده
+  sold: number // تعداد عدد فروخته‌شده خالص (تحویل − برگشتی)
+  stock: number
+  avgPrice: number // بهای هر عدد = میانگین موزون خریدها
+  low: boolean
+}
+
+export function goodsStocks(d: DataBundle): GoodStock[] {
+  return active(d.goods)
+    .filter(g => g.active !== 0)
+    .map(g => {
+      const purchases = active(d.purchases).filter(p => p.itemKind === 'GOOD' && p.materialId === g.id)
+      const purchased = purchases.reduce((a, p) => a + (p.quantity || 0), 0)
+      const totalCost = purchases.reduce((a, p) => a + (p.cost || 0), 0)
+      let sold = 0
+      for (const s of active(d.sales)) {
+        for (const it of parseItems(s)) {
+          if (it.kind !== 'GOOD' || it.breadTypeId !== g.id) continue
+          sold += Math.max(0, (it.delivered || it.qty || 0) - (it.returned || 0))
+        }
+      }
+      const stock = purchased - sold
+      const avgPrice = purchased > 0 ? totalCost / purchased : 0
+      return { good: g, purchased, sold, stock, avgPrice, low: stock <= (g.minStock || 0) }
+    })
+}
+
+/** بهای کالای فروش‌رفته در دوره = تعداد فروش‌رفته × میانگین قیمت خرید (مثل بهای مواد از میانگین) */
+export function periodGoodsCost(d: DataBundle, period: Period): number {
+  const stocks = goodsStocks(d)
+  let cost = 0
+  for (const s of active(d.sales)) {
+    if (!inRange(s.date, period.start, period.end)) continue
+    for (const it of parseItems(s)) {
+      if (it.kind !== 'GOOD') continue
+      const st = stocks.find(x => x.good.id === it.breadTypeId)
+      const netQty = Math.max(0, (it.delivered || it.qty || 0) - (it.returned || 0))
+      cost += netQty * (st?.avgPrice || 0)
+    }
+  }
+  return cost
+}
+
 // ===== خریداران =====
 export interface BuyerStat {
   customer: Customer
@@ -113,7 +161,7 @@ export function buyerStats(d: DataBundle, period?: Period): BuyerStat[] {
       map.set(c.id, st)
     }
     const items = parseItems(s)
-    st.qty += items.reduce((a, it) => a + (it.delivered || it.qty || 0), 0)
+    st.qty += items.reduce((a, it) => a + (it.kind === 'GOOD' ? 0 : (it.delivered || it.qty || 0)), 0)
     st.amount += s.totalAmount || 0
     st.due += saleDue(s)
     st.salesCount += 1
@@ -131,16 +179,19 @@ export type ProfitMode = 'gross' | 'beforeOverhead' | 'net'
 
 export interface PeriodReport {
   salesAmount: number
-  salesQty: number
+  salesQty: number // تعداد نان (بدون کالا)
+  goodsQty: number // تعداد عدد کالای فروش‌رفته
+  goodsSalesAmount: number // فروش کالاها
   collected: number
   outstandingTotal: number // مانده کل مطالبات (همه زمان‌ها)
   materialCost: number
+  goodsCost: number // بهای کالای فروش‌رفته
   expensesIncluded: { id: string; name: string; amount: number }[]
   expensesTotalIncluded: number
   expensesTotalAll: number
-  profitGross: number       // فروش − مواد
+  profitGross: number       // فروش − مواد − بهای کالا
   profitBeforeOverhead: number // همان gross (برای شفافیت)
-  profitNet: number         // فروش − مواد − هزینه‌های مشمول
+  profitNet: number         // فروش − مواد − بهای کالا − هزینه‌های مشمول
   buyers: BuyerStat[]
   badDebts: { sale: Sale; customer: Customer | undefined; days: number }[]
   checks: { sale: Sale; customer: Customer | undefined; status: 'PAST_DUE' | 'NEAR' | 'FUTURE' }[]
@@ -153,7 +204,16 @@ export function periodReport(d: DataBundle, period: Period): PeriodReport {
   const { start, end } = period
   const sales = active(d.sales).filter(s => inRange(s.date, start, end))
   const salesAmount = sales.reduce((a, s) => a + (s.totalAmount || 0), 0)
-  const salesQty = sales.reduce((a, s) => a + parseItems(s).reduce((b, it) => b + (it.delivered || it.qty || 0), 0), 0)
+  let salesQty = 0
+  let goodsQty = 0
+  let goodsSalesAmount = 0
+  for (const s of sales) {
+    for (const it of parseItems(s)) {
+      const q = it.delivered || it.qty || 0
+      if (it.kind === 'GOOD') { goodsQty += q; goodsSalesAmount += q * (it.unitPrice || 0) }
+      else salesQty += q
+    }
+  }
   const collected = sales.reduce((a, s) => {
     const pd = effectivePaymentDate(s)
     return pd && inRange(pd, start, end) ? a + (s.paidAmount || 0) : a
@@ -161,6 +221,7 @@ export function periodReport(d: DataBundle, period: Period): PeriodReport {
   const outstandingTotal = active(d.sales).reduce((a, s) => a + saleDue(s), 0)
 
   const materialCost = periodMaterialCost(d, period)
+  const goodsCost = periodGoodsCost(d, period)
 
   const expenses = active(d.expenses).filter(e => inRange(e.date, start, end))
   const byCat = new Map<string, number>()
@@ -175,7 +236,7 @@ export function periodReport(d: DataBundle, period: Period): PeriodReport {
   }).filter(x => x.included) as { id: string; name: string; amount: number }[]
   const expensesTotalIncluded = expensesIncluded.reduce((a, x) => a + x.amount, 0)
 
-  const profitGross = salesAmount - materialCost
+  const profitGross = salesAmount - materialCost - goodsCost
   const profitNet = profitGross - expensesTotalIncluded
 
   const buyers = buyerStats(d, period)
@@ -213,8 +274,8 @@ export function periodReport(d: DataBundle, period: Period): PeriodReport {
   })
 
   return {
-    salesAmount, salesQty, collected, outstandingTotal,
-    materialCost, expensesIncluded, expensesTotalIncluded, expensesTotalAll,
+    salesAmount, salesQty, goodsQty, goodsSalesAmount, collected, outstandingTotal,
+    materialCost, goodsCost, expensesIncluded, expensesTotalIncluded, expensesTotalAll,
     profitGross, profitBeforeOverhead: profitGross, profitNet,
     buyers, badDebts, checks,
     purchasesTotal, purchasesDue, productionTotals,

@@ -21,7 +21,7 @@ const ok = (cond, name) => {
 
 // ۱) full روی دیتابیس خالی → seed خودکار
 const full1 = await fullSnapshot(db)
-ok(full1.rows.length === 16, `full خالی → seed ۱۶ ردیف (گرفت ${full1.rows.length})`)
+ok(full1.rows.length === 20, `full خالی → seed ۲۰ ردیف (گرفت ${full1.rows.length})`)
 ok(full1.cursor > 0, `cursor > 0 (=${full1.cursor})`)
 
 // ۲) seed دوباره → تکراری نباشد
