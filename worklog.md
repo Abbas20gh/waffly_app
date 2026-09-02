@@ -154,3 +154,25 @@ Work Log:
 Stage Summary:
 - تحویل: download/Waffly-AI-Prompt.md + download/Waffly-Source-v1.0.zip (+ APK موجود از قبل)
 - راهنمای کاربر: پرامپت را اول بده، بعد zip یا لینک ریپو؛ هشدار درباره سکرت‌ها و اینکه داده واقعی در zip نیست (روی Turso/گوشی است)
+
+---
+Task ID: 10
+Agent: Main Agent (Super Z)
+Task: اجرای کامل سند تغییرات Waffly-Changes-v2.md (نسخه ۲.۰ — دو باگ + ۴ فیچر + آپدیت‌پذیری)
+
+Work Log:
+- جواب‌های عباس: روغن=همان روغن مایع؛ لسیتین+وانیل=گرم؛ آرد دوم=«آرد سبوس‌دار»؛ اسانس=فقط پرتقالی فعلا (لیست ESSENCE_TYPES قابل‌گسترش در types.ts)؛ آپدیت=نصب دستی APK با همان امضا؛ نسخه=v2.0/versionCode 3
+- بکاپ کامل Turso قبل از مهاجرت: scripts/backup-turso.mjs → db/turso-backup-*.json (یافته: Production/Box واقعی کاربر روی Turso هست → push سمت سرور سالم، مشکل pull سمت گوشی)
+- اسکیما در ۶ نقطه: prisma (Material.active, Box.hasEssence/essenceType/note, MachineCost.note, مدل OtherFund) + types.ts (TABLES→۱۶، OtherFund، ESSENCE_TYPES) + localdb (Dexie version(2) + otherFunds) + sync-tables.ts + functions/_sync.ts (پاریتی کامل + seed جدید) + hooks/calc (otherFundsTotals جدا از سود؛ materialStocks فقط مواد فعال)
+- مهاجرت Turso با scripts/migrate-v2.mjs: ۵ ستون + جدول OtherFund + مایه خمیر active=0 + لسیتین/وانیل/آرد سبوس‌دار + ۴ ردیف SyncLog ✓
+- باگ ۱.۱ (Select در Dialog): کامپوننت جدید inline-picker.tsx (بدون Portal، position:fixed، ضد WebView) — جایگزین همه Selectهای درون دیالوگ در production/purchases/sales/machines/production
+- باگ ۱.۲ (سینک وب↔گوشی): @capacitor/app + listeners appStateChange/resume (import پویا) + focus listener + گارد socket با NEXT_PUBLIC_SOCKET_URL
+- UI: بخش «جعبه‌های این تولید» در کارت تولید (ویرایش/حذف جعبه + اسانس + هشدار ناهرمانی کد چاپی)، اسانس در فرم تولید (تعداد جعبه اسانس‌دار)، BoxesTab ویرایش/حذف، toggle فعال/غیرفعال اقلام، note در هزینه دستگاه‌ها، بخش «سایر وجوه» در حسابداری + بنر در داشبورد (خارج از فرمول سود)، SW با __WAFFLY_BUILD__ (build-pages تزریق می‌کند)، نسخه ۲.۰ در تنظیمات
+- دیپلوی وب: build-pages → wrangler deploy → تست دود: full با ۱۰ ماده ✓، push otherFund→pull (نرمال‌سازی تاریخ فارسی) ✓، پاکسازی تومب‌استون + ماده تستی قدیمی «تست دیپلوی» ✓
+- APK: JDK21 (Temurin در .jdk21 — جاوای سیستم JRE بود) + SDK36 در .android-sdk؛ NEXT_PUBLIC_API_BASE بیلد → cap sync (پلاگین App@8.1.1) → gradlew assembleRelease → versionCode 3/versionName 2.0 + SHA-256 گواهی یکسان با v1.0 (a31b9080…cda) = آپدیت بدون حذف ✓
+- گیت‌هاب: 91f2ff5 (کد) + 51ebd5e (APK v2.0) + سند پرامپت v2.0؛ zip سورس v2.0 بازسازی شد
+
+Stage Summary:
+- تحویل: https://waffly.pages.dev (v2.0) + download/Waffly-v2.0.apk (+ لینک raw.githubusercontent) + Waffly-AI-Prompt.md و Source-v2.0.zip به‌روز
+- مانده برای عباس: نصب APK جدید روی گوشی (بدون حذف)، تست Selectها و سینک دوطرفه با قطع/وصل اینترنت، ثبت سایر وجوه
+- نکته: بیلد وب بعدی بدون NEXT_PUBLIC_API_BASE (فقط برای APK)
