@@ -13,7 +13,7 @@ import {
 import { PageHeader, FormRow } from './bits'
 import { PwaGuideContent, getPlatform, isStandalone } from './pwa-install'
 import { faDigits, faMoney } from '@/lib/jalali'
-import { forceSyncNow, useSyncStore, repairSync } from '@/lib/sync-engine'
+import { forceSyncNow, useSyncStore, repairSync, forceFullResync } from '@/lib/sync-engine'
 import { downloadTextFile } from '@/lib/export'
 import type { ExpenseCategory } from '@/lib/types'
 import { Button } from '@/components/ui/button'
@@ -28,7 +28,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE || ''
 
 export function SettingsView() {
   const setting = useSetting()
-  const { pendingCount, online, lastSyncAt } = useSyncStore()
+  const { pendingCount, online, lastSyncAt, error, syncing } = useSyncStore()
   const expenseCategories = useTable<ExpenseCategory>('expenseCategories')
 
   const [businessName, setBusinessName] = useState('')
@@ -120,7 +120,7 @@ export function SettingsView() {
   return (
     <div className="space-y-5">
       {/* APP_VERSION — با هر آپدیت APK/وب به‌روز شود */}
-      <PageHeader title="تنظیمات" subtitle="دوره حسابداری، هشدارها، سینک، پشتیبان‌گیری و نصب اپ — نسخه ۲.۱" icon={<SettingsIcon className="h-5 w-5" />} />
+      <PageHeader title="تنظیمات" subtitle="دوره حسابداری، هشدارها، سینک، پشتیبان‌گیری و نصب اپ — نسخه ۲.۲" icon={<SettingsIcon className="h-5 w-5" />} />
 
       <div className="grid lg:grid-cols-2 gap-4 items-start">
         <Card className="waffly-card">
@@ -195,9 +195,14 @@ export function SettingsView() {
                     آخرین سینک: {faDigits(new Date(lastSyncAt).toTimeString().slice(0, 5))}
                   </span>
                 )}
+                {error && (
+                  <span className="rounded-lg bg-red-50 text-red-700 border border-red-200 px-2.5 py-1.5 waffly-num">
+                    خطای سینک: {error}
+                  </span>
+                )}
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button variant="outline" className="h-11" onClick={() => { forceSyncNow(); toast({ title: 'سینک انجام شد' }) }}>
+                <Button variant="outline" className="h-11" disabled={syncing} onClick={() => { forceSyncNow(); toast({ title: 'سینک انجام شد' }) }}>
                   <RefreshCw className="ml-2 h-4 w-4" /> سینک فوری
                 </Button>
                 <Button variant="outline" className="h-11" disabled={busy} onClick={async () => {
@@ -207,6 +212,19 @@ export function SettingsView() {
                   setBusy(false)
                 }}>
                   <DatabaseBackup className="ml-2 h-4 w-4" /> تعمیر سینک
+                </Button>
+                <Button variant="outline" className="h-11 border-primary/40 text-primary" disabled={busy || syncing} onClick={async () => {
+                  setBusy(true)
+                  try {
+                    await forceFullResync()
+                    toast({ title: 'دریافت کامل انجام شد', description: 'همه داده‌ها با سرور هم‌سطح شد — اگر هنوز اختلاف می‌بینید صفحه را ببندید و دوباره باز کنید.' })
+                  } catch {
+                    toast({ title: 'دریافت کامل ناموفق بود', description: 'اینترنت را چک کنید و دوباره تلاش کنید.', variant: 'destructive' })
+                  } finally {
+                    setBusy(false)
+                  }
+                }}>
+                  <HardDriveDownload className="ml-2 h-4 w-4" /> دریافت کامل از سرور
                 </Button>
               </div>
               <p className="text-[11px] text-muted-foreground leading-5">

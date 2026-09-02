@@ -75,16 +75,26 @@ export async function onRequest(ctx: Ctx): Promise<Response> {
       return json({ accepted, skipped, serverTime: Date.now() })
     }
 
-    // دریافت افزایشی
-    if (path === 'sync/pull' && ctx.request.method === 'GET') {
-      const since = Number(url.searchParams.get('since') || 0) || 0
-      const limit = Math.min(Math.max(Number(url.searchParams.get('limit') || 300), 1), 1000)
+    // دریافت افزایشی — GET و POST هر دو پشتیبانی می‌شوند
+    // (POST در APK از مسیر نیتیو CapacitorHttp می‌رود — قابل‌اتکاترین مسیر)
+    if (path === 'sync/pull' && (ctx.request.method === 'GET' || ctx.request.method === 'POST')) {
+      let since = 0
+      let limit = 300
+      if (ctx.request.method === 'POST') {
+        const body = await ctx.request.json().catch(() => null) as { since?: unknown; limit?: unknown } | null
+        since = Number(body?.since || 0) || 0
+        limit = Number(body?.limit || 300) || 300
+      } else {
+        since = Number(url.searchParams.get('since') || 0) || 0
+        limit = Number(url.searchParams.get('limit') || 300) || 300
+      }
+      limit = Math.min(Math.max(limit, 1), 1000)
       const result = await pullRows(db, since, limit)
       return json({ ...result, serverTime: Date.now() })
     }
 
-    // اسنپ‌شات کامل (bootstrap دستگاه جدید)
-    if (path === 'sync/full' && ctx.request.method === 'GET') {
+    // اسنپ‌شات کامل (bootstrap دستگاه جدید) — GET و POST هر دو
+    if (path === 'sync/full' && (ctx.request.method === 'GET' || ctx.request.method === 'POST')) {
       const result = await fullSnapshot(db)
       return json({ ...result, serverTime: Date.now() })
     }

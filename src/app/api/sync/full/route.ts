@@ -14,23 +14,36 @@ type Delegate = { findMany: () => Promise<Record<string, unknown>[]> }
 const delegate = (tbl: SyncTbl): Delegate =>
   (db as unknown as Record<string, Delegate>)[MODELS[tbl]]
 
-// اسنپ‌شات کامل برای دستگاه جدید (bootstrap)
+// اسنپ‌شات کامل برای دستگاه جدید (bootstrap) — GET و POST هر دو
 export async function GET() {
   try {
-    await ensureSeed()
-    const rows: { tbl: SyncTbl; row: Record<string, unknown> }[] = []
-    for (const tbl of TABLES) {
-      const all = await delegate(tbl).findMany()
-      for (const row of all) rows.push({ tbl, row })
-    }
-    const last = await db.syncLog.findFirst({ orderBy: { seq: 'desc' } })
-    return jsonWithCors({
-      rows,
-      cursor: last?.seq ?? 0,
-      serverTime: Date.now(),
-    })
+    return await handleFull()
   } catch (e) {
     console.error('sync/full error', e)
     return jsonWithCors({ error: 'full sync failed' }, { status: 500 })
   }
+}
+
+export async function POST() {
+  try {
+    return await handleFull()
+  } catch (e) {
+    console.error('sync/full error', e)
+    return jsonWithCors({ error: 'full sync failed' }, { status: 500 })
+  }
+}
+
+async function handleFull() {
+  await ensureSeed()
+  const rows: { tbl: SyncTbl; row: Record<string, unknown> }[] = []
+  for (const tbl of TABLES) {
+    const all = await delegate(tbl).findMany()
+    for (const row of all) rows.push({ tbl, row })
+  }
+  const last = await db.syncLog.findFirst({ orderBy: { seq: 'desc' } })
+  return jsonWithCors({
+    rows,
+    cursor: last?.seq ?? 0,
+    serverTime: Date.now(),
+  })
 }

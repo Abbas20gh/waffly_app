@@ -75,7 +75,12 @@ async function pullIncremental(): Promise<void> {
   for (;;) {
     if (guard++ > 200) break
     const since = getCursor()
-    const res = await fetch(`${API_BASE}/api/sync/pull?since=${since}&limit=300`)
+    // POST — در APK از مسیر نیتیو CapacitorHttp می‌رود (بدون CORS/پروکسی WebView)
+    const res = await fetch(`${API_BASE}/api/sync/pull`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ since, limit: 300 }),
+    })
     if (!res.ok) throw new Error(`pull ${res.status}`)
     const data = await res.json() as { rows: { tbl: SyncTbl; row: Record<string, unknown> }[]; cursor: number; hasMore: boolean }
     if (data.rows?.length) await putRemoteRows(data.rows as never)
@@ -84,12 +89,18 @@ async function pullIncremental(): Promise<void> {
   }
 }
 
-async function bootstrap(): Promise<void> {
-  if (isBootstrapped()) return
-  // اگر دستگاه از قبل داده محلی دارد، bootstrap نکن (داده کاربر از بین نرود)
-  const anyData = await dexie.sales.count() + await dexie.productions.count() + await dexie.customers.count()
-  if (anyData > 0) { markBootstrapped(); return }
-  const res = await fetch(`${API_BASE}/api/sync/full`)
+async function bootstrap(force = false): Promise<void> {
+  if (!force && isBootstrapped()) return
+  if (!force) {
+    // اگر دستگاه از قبل داده محلی دارد، bootstrap نکن (داده کاربر از بین نرود)
+    const anyData = await dexie.sales.count() + await dexie.productions.count() + await dexie.customers.count()
+    if (anyData > 0) { markBootstrapped(); return }
+  }
+  const res = await fetch(`${API_BASE}/api/sync/full`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  })
   if (!res.ok) throw new Error(`full ${res.status}`)
   const data = await res.json() as { rows: { tbl: SyncTbl; row: Record<string, unknown> }[]; cursor: number }
   await putRemoteRows(data.rows as never)
@@ -131,6 +142,31 @@ export async function repairSync() {
   const n = await repair()
   scheduleSync()
   return n
+}
+
+/**
+ * دریافت کامل از سرور (تعمیر قطعی همگرایی):
+ * ۱) همه تغییرات محلی push می‌شوند (هیچ چیز از دست نمی‌رود)
+ * ۲) اسنپ‌شات کامل سرور با LWW روی داده‌های محلی می‌نشیند
+ * ۳) کِرسر به انتهای سرور ست می‌شود
+ * رکوردهای محلیِ جدیدتر از سرور حفظ می‌شوند (LWW) — بقیه با سرور هم‌سطح می‌شوند.
+ */
+export async function forceFullResync(): Promise<void> {
+  if (typeof window === 'undefined') return
+  if (running) { syncQueued = true; return }
+  if (!navigator.onLine) throw new Error('offline')
+  running = true
+  setState({ syncing: true, error: null })
+  try {
+    await pushOutbox()
+    await bootstrap(true)
+    await pullIncremental()
+    setState({ lastSyncAt: Date.now(), pendingCount: await outboxCount() })
+  } finally {
+    running = false
+    setState({ syncing: false })
+    if (syncQueued) { syncQueued = false; void syncNow() }
+  }
 }
 
 export function startSyncEngine(): () => void {
