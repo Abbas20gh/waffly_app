@@ -176,3 +176,26 @@ Stage Summary:
 - تحویل: https://waffly.pages.dev (v2.0) + download/Waffly-v2.0.apk (+ لینک raw.githubusercontent) + Waffly-AI-Prompt.md و Source-v2.0.zip به‌روز
 - مانده برای عباس: نصب APK جدید روی گوشی (بدون حذف)، تست Selectها و سینک دوطرفه با قطع/وصل اینترنت، ثبت سایر وجوه
 - نکته: بیلد وب بعدی بدون NEXT_PUBLIC_API_BASE (فقط برای APK)
+
+---
+Task ID: 11
+Agent: Main Agent (Super Z)
+Task: رفع ریشه‌ای مشکل سینک دوطرفه وب↔APK (CORS)
+
+Work Log:
+- علامت کاربر: داده وب در اپ نمی‌آید و داده اپ در وب نمی‌آید (هر دو جهت)
+- ریشه‌یابی: functions/api/[[route]].ts هیچ هدر CORS و هندلر OPTIONS نداشت → WebView اپ (origin https://localhost) همه fetchها را بلاک می‌کرد:
+  * POST push با Content-Type: application/json → preflight OPTIONS → 404 بدون ACAO → شکست → هیچ pushای از گوشی
+  * GET pull → پاسخ ۲۰۰ ولی بدون Access-Control-Allow-Origin → fetch رد می‌شود → هیچ pullای به گوشی
+  * با curl روی production تأیید شد (OPTIONS → 404، GET بدون ACAO). تشخیص قبلی «JS پس‌زمینه» ناقص بود — listenerها سینک را صدا می‌زدند ولی fetchها همیشه CORS-بلاک بودند
+- فیکس کلاینت (تعیین‌کننده): CapacitorHttp.enabled در capacitor.config.ts → همه fetch/XHR اپ از استک HTTP نیتیو اندروید می‌رود و CORS اصلاً اعمال نمی‌شود → APK حتی بدون redeploy سرور سینک دوطرفه می‌شود
+- فیکس سرور (دفاعی/پاریتی): هدرهای CORS (ACAO:*) + هندلر OPTIONS در functions/api/[[route]].ts و در سه روت sync قلمرو Next (src/lib/server/cors.ts جدید)
+- sandbox ریست شده بود: JDK21 (Temurin 21.0.12 در .jdk21) و SDK36 + build-tools 36.0.0 + cmdline-tools دوباره نصب شد
+- بیلد: build-pages با NEXT_PUBLIC_API_BASE → cap sync → gradle assembleRelease → download/Waffly-v2.1.apk (versionCode 4 / versionName 2.1)
+- صحت‌سنجی APK: SHA-256 گواهی یکسان (a31b9080…cda) = آپدیت بدون حذف؛ capacitor.config.json داخل APK دارای CapacitorHttp؛ native-bridge دارای پچ fetch؛ API_BASE در باندل؛ گارد SW سالم
+- گیت: commit 56aa213 + push (کد + APK)
+
+Stage Summary:
+- ریشه مشکل سینک: CORS — نه سرور، نه suspend شدن JS. اپ v2.1 با CapacitorHttp حتی روی نسخه فعلی سرور سینک دوطرفه دارد
+- مانده: دیپلوی فیکس CORS سرور نیازمند توکن Cloudflare است (توکن قبلی در ریست sandbox از بین رفته) — از کاربر خواسته شد
+- نکته: صف outbox گوشی کاربر پر از آپهای ارسال‌نشده است؛ بعد از نصب v2.1 در اولین سینک همه push می‌شوند
