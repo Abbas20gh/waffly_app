@@ -31,3 +31,8 @@ upload/
 tsconfig.tsbuildinfo
 *.tsbuildinfo
 .shot-*.png
+
+# ابزارهای بیلد محلی (سندباکس)
+.jdk/
+.android-sdk/
+tool-results/

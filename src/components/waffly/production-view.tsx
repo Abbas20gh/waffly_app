@@ -18,7 +18,7 @@ import { useTable, useDexie, dexie, putRecord, putMany, removeRecord, uid, getAc
 import type { BreadType, Box, Production, Material, Consumption } from '@/lib/types'
 import { ESSENCE_TYPES } from '@/lib/types'
 import { todayJalali, faDigits, parseJalali, prettyJalali, addJalaliDays } from '@/lib/jalali'
-import { boxCode, parseBoxCode } from '@/lib/boxcode'
+import { boxCode, nextBoxSerial } from '@/lib/boxcode'
 import { active } from '@/lib/calc'
 
 type Tab = 'daily' | 'boxes' | 'consumption' | 'types'
@@ -76,35 +76,36 @@ function DailyTab() {
     setOpen(true)
   }
 
-  // پیش‌نمایش کدهای جعبه
+  // پیش‌نمایش کدهای جعبه — عدد کوتاه ترتیبی (ادامهٔ کدهای موجود)
   const previewCodes = useMemo(() => {
-    const boxes = parseInt(form.boxesCount || '0', 10)
-    const per = parseInt(form.perBoxCount || '0', 10)
-    if (!bt || boxes <= 0) return []
-    const n = Math.min(boxes, 5)
+    const count = parseInt(form.boxesCount || '0', 10)
+    if (!bt || count <= 0) return []
+    const start = nextBoxSerial(boxes.map(b => b.code))
+    const n = Math.min(count, 5)
     const codes: string[] = []
-    for (let i = 0; i < n; i++) codes.push(boxCode(bt.code, form.date, per, i + 1))
+    for (let i = 0; i < n; i++) codes.push(boxCode(start + i))
     return codes
-  }, [bt, form.boxesCount, form.perBoxCount, form.date])
+  }, [bt, boxes, form.boxesCount])
 
   const save = async () => {
     if (!form.breadTypeId || !bt) { toast({ title: 'نوع نان را انتخاب کنید', variant: 'destructive' }); return }
+    const serialStart = nextBoxSerial(boxes.map(b => b.code))
     const total = parseFloat(form.totalProduced || '0')
-    const boxes = parseInt(form.boxesCount || '0', 10)
+    const boxCount = parseInt(form.boxesCount || '0', 10)
     const per = parseInt(form.perBoxCount || '0', 10)
     const waste = parseFloat(form.waste || '0')
-    if (total <= 0 && boxes <= 0) { toast({ title: 'تعداد تولید یا جعبه را وارد کنید', variant: 'destructive' }); return }
+    if (total <= 0 && boxCount <= 0) { toast({ title: 'تعداد تولید یا جعبه را وارد کنید', variant: 'destructive' }); return }
 
     const prodId = uid()
     const essenceCount = form.essenceOn
-      ? Math.max(0, Math.min(boxes, parseInt(form.essenceCount || '0', 10) || 0))
+      ? Math.max(0, Math.min(boxCount, parseInt(form.essenceCount || '0', 10) || 0))
       : 0
     await putRecord<Production>('productions', {
       id: prodId,
       date: form.date,
       breadTypeId: bt.id,
-      totalProduced: total || boxes * per,
-      boxesCount: boxes,
+      totalProduced: total || boxCount * per,
+      boxesCount: boxCount,
       perBoxCount: per,
       waste: waste || 0,
       carriedFrom: form.carriedFrom || null,
@@ -113,14 +114,14 @@ function DailyTab() {
       updatedAt: 0,
       deleted: 0,
     })
-    // ساخت کدهای یکتای جعبه‌ها (اولین جعبه‌ها اسانس‌دار بر اساس ورودی فرم)
-    if (boxes > 0 && per > 0) {
+    // ساخت کدهای کوتاه ترتیبی جعبه‌ها (اولین جعبه‌ها اسانس‌دار بر اساس ورودی فرم)
+    if (boxCount > 0 && per > 0) {
       const boxRows: Box[] = []
-      for (let i = 0; i < boxes; i++) {
+      for (let i = 0; i < boxCount; i++) {
         const withEssence = i < essenceCount
         boxRows.push({
           id: uid(),
-          code: boxCode(bt.code, form.date, per, i + 1),
+          code: boxCode(serialStart + i),
           productionId: prodId,
           breadTypeId: bt.id,
           count: per,
@@ -134,7 +135,7 @@ function DailyTab() {
       }
       await putMany('boxes', boxRows)
     }
-    toast({ title: 'تولید ثبت شد', description: boxes > 0 ? `${faDigits(boxes)} جعبه با کد یکتا ساخته شد${essenceCount > 0 ? ` (${faDigits(essenceCount)} جعبه اسانس‌دار)` : ''}.` : undefined })
+    toast({ title: 'تولید ثبت شد', description: boxCount > 0 ? `${faDigits(boxCount)} جعبه با کد یکتا ساخته شد${essenceCount > 0 ? ` (${faDigits(essenceCount)} جعبه اسانس‌دار)` : ''}.` : undefined })
     setOpen(false)
   }
 
@@ -241,13 +242,13 @@ function DailyTab() {
         <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>ثبت تولید روزانه</DialogTitle>
-            <DialogDescription>کدهای جعبه به‌صورت خودکار ساخته می‌شوند: کد نوع + روز + ماه + تعداد + سری</DialogDescription>
+            <DialogDescription>کد جعبه‌ها خودکار ساخته می‌شود: عدد کوتاه ۵ رقمی و ترتیبی</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <FormRow label="نوع نان">
               <InlinePicker
                 value={form.breadTypeId}
-                options={active(breadTypes).map(b => ({ value: b.id, label: b.name, hint: `کد ${b.code}` }))}
+                options={active(breadTypes).map(b => ({ value: b.id, label: b.name }))}
                 onChange={v => setForm(f => ({ ...f, breadTypeId: v }))}
                 placeholder="انتخاب کنید"
               />
@@ -352,7 +353,7 @@ function BoxesTab() {
       </CardHeader>
       <CardContent>
         <p className="text-[11px] text-muted-foreground mb-3 leading-5">
-          فرمت کد: <code className="waffly-num" dir="ltr">TT DD MM NN SS</code> — نوع نان، روز، ماه، تعداد در جعبه، شماره سری.
+          کد جعبه یک عدد کوتاه ۵ رقمی است (مثلاً <code className="waffly-num" dir="ltr">00123</code>) که خودکار و ترتیبی ساخته می‌شود — معنای خاصی ندارد، فقط شناسهٔ جعبه است؛ کدهای قدیمی ۱۰ رقمی هم معتبرند.
           با دکمه ویرایش، نوع نان/اسانس/یادداشت هر جعبه را جدا تنظیم کنید؛ کد چاپی ثابت می‌ماند.
         </p>
         {list.length === 0 ? (
@@ -478,14 +479,16 @@ function ConsumptionTab() {
 // ================= انواع نان =================
 function TypesTab() {
   const breadTypes = useTable<BreadType>('breadTypes')
-  const [form, setForm] = useState({ name: '', code: '' })
+  const [form, setForm] = useState({ name: '' })
 
   const save = async () => {
     const name = form.name.trim()
-    const code = form.code.trim().replace(/\D/g, '').slice(0, 2)
-    if (!name || code.length !== 2) { toast({ title: 'نام و کد ۲ رقمی لازم است', variant: 'destructive' }); return }
+    if (!name) { toast({ title: 'نام نوع نان را وارد کنید', variant: 'destructive' }); return }
+    // کد داخلی ۲ رقمی فقط برای سازگاری سینک نگه داشته می‌شود و دیگر در کد جعبه نقشی ندارد
+    const maxCode = breadTypes.reduce((m, b) => Math.max(m, parseInt(b.code || '0', 10) || 0), 0)
+    const code = String(Math.min(99, maxCode + 1)).padStart(2, '0')
     await putRecord<BreadType>('breadTypes', { id: uid(), name, code, active: 1, updatedAt: 0, deleted: 0 })
-    setForm({ name: '', code: '' })
+    setForm({ name: '' })
     toast({ title: 'نوع نان اضافه شد' })
   }
 
@@ -499,9 +502,6 @@ function TypesTab() {
           <FormRow label="نام نوع نان" hint="مثلاً: نان بزرگ، کاسه‌ای، با طعم وانیل…">
             <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="h-11" />
           </FormRow>
-          <FormRow label="کد ۲ رقمی (برای کد جعبه)" hint="با کدهای موجود تکراری نباشد">
-            <Input inputMode="numeric" value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value }))} className="waffly-num-input h-11" placeholder="۰۶" dir="ltr" />
-          </FormRow>
           <Button className="w-full h-11" onClick={save}><Plus className="ml-1 h-4 w-4" /> افزودن</Button>
         </CardContent>
       </Card>
@@ -512,7 +512,6 @@ function TypesTab() {
           <div className="space-y-1.5">
             {active(breadTypes).map(b => (
               <div key={b.id} className="flex items-center gap-3 rounded-lg border px-3 py-2.5">
-                <code className="rounded bg-primary/10 text-primary px-2 py-0.5 text-xs font-bold waffly-num" dir="ltr">{b.code}</code>
                 <span className="text-sm font-medium flex-1">{b.name}</span>
                 <Button
                   variant="ghost" size="sm" className="h-8 text-[11px]"
@@ -554,9 +553,6 @@ function BoxEditDialog({ box, breadTypes, onClose }: {
   }, [box])
 
   if (!box) return null
-  const parsed = parseBoxCode(box.code)
-  const currentBt = breadTypes.find(b => b.id === breadTypeId)
-  const codeMismatch = !!(parsed && currentBt && parsed.typeCode !== currentBt.code)
 
   const save = async () => {
     await putRecord<Box>('boxes', {
@@ -586,16 +582,11 @@ function BoxEditDialog({ box, breadTypes, onClose }: {
           <FormRow label="نوع نان این جعبه">
             <InlinePicker
               value={breadTypeId}
-              options={active(breadTypes).map(b => ({ value: b.id, label: b.name, hint: `کد ${b.code}` }))}
+              options={active(breadTypes).map(b => ({ value: b.id, label: b.name }))}
               onChange={setBreadTypeId}
               placeholder="انتخاب کنید"
             />
           </FormRow>
-          {codeMismatch && (
-            <p className="rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-[11px] leading-5 px-3 py-2">
-              هشدار: کد چاپی این جعبه مربوط به کد نوع «{parsed?.typeCode}» است و با نوع انتخابی «{currentBt?.code}» یکی نیست؛ کد ثابت می‌ماند و فقط نوع داخلی عوض می‌شود.
-            </p>
-          )}
           <div className="flex items-center justify-between rounded-xl border p-3">
             <div>
               <p className="text-xs font-bold flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> اسانس‌دار</p>
