@@ -35,7 +35,7 @@ export function InlinePicker({
     if (!el) return
     const r = el.getBoundingClientRect()
     const below = window.innerHeight - r.bottom
-    const openUp = below < 220 && r.top > 260 // اگر جا نیست، منو رو به بالا باز شود
+    const openUp = below < 300 && r.top > 320 // اگر جا نیست، منو رو به بالا باز شود (ارتفاع منو تا ~۲۷۰px)
     setRect({
       top: openUp ? undefined : r.bottom + 4,
       bottom: openUp ? window.innerHeight - r.top + 4 : undefined,
@@ -51,14 +51,21 @@ export function InlinePicker({
       if (btnRef.current?.contains(t) || menuRef.current?.contains(t)) return
       setOpen(false)
     }
-    const onScrollOrResize = () => setOpen(false)
+    // ⚠️ فقط اسکرولِ «بیرون» از منو ببندد — اسکرول خودِ لیست (تلاش کاربر برای بالا/پایین کردن)
+    // نباید منو را ببندد. capture:true رویداد خودِ منو را هم می‌گیرد؛ پس target را چک می‌کنیم.
+    const onScroll = (e: Event) => {
+      const t = e.target as Node | null
+      if (t && (t === menuRef.current || (menuRef.current?.contains(t) ?? false))) return
+      setOpen(false)
+    }
+    const onResize = () => setOpen(false)
     document.addEventListener('pointerdown', close, true)
-    window.addEventListener('scroll', onScrollOrResize, true)
-    window.addEventListener('resize', onScrollOrResize)
+    window.addEventListener('scroll', onScroll, true)
+    window.addEventListener('resize', onResize)
     return () => {
       document.removeEventListener('pointerdown', close, true)
-      window.removeEventListener('scroll', onScrollOrResize, true)
-      window.removeEventListener('resize', onScrollOrResize)
+      window.removeEventListener('scroll', onScroll, true)
+      window.removeEventListener('resize', onResize)
     }
   }, [open])
 
@@ -97,7 +104,7 @@ export function InlinePicker({
             width: Math.max(rect.width, 180),
             zIndex: 9999,
           }}
-          className="max-h-56 overflow-y-auto overscroll-contain rounded-md border bg-popover p-1 shadow-lg"
+          className="max-h-[17rem] overflow-y-auto overscroll-contain rounded-md border bg-popover p-1 shadow-lg"
           dir="rtl"
         >
           {options.length === 0 && (

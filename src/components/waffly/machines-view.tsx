@@ -10,9 +10,6 @@ import { Input } from '@/components/ui/input'
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
 import { PageHeader, FormRow, EmptyState, Money, Num } from './bits'
 import { JalaliDateInput } from './jalali-date'
 import { InlinePicker } from './inline-picker'
@@ -166,14 +163,16 @@ function MachinesBody({ machines, machineCosts }: { machines: Machine[]; machine
                     <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => setCostDlgFor(m)}>
                       <DollarSign className="h-3.5 w-3.5" /> ثبت هزینه
                     </Button>
-                    <Select value={m.status} onValueChange={v => void putRecord<Machine>('machines', { ...m, status: v as Machine['status'] })}>
-                      <SelectTrigger className="h-8 w-32 text-[11px]"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="IN_PROGRESS">در حال ساخت</SelectItem>
-                        <SelectItem value="DONE">تکمیل شد</SelectItem>
-                        <SelectItem value="PAUSED">متوقف</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <InlinePicker
+                      className="w-32 [&>button]:h-8 [&>button]:text-[11px]"
+                      value={m.status}
+                      options={[
+                        { value: 'IN_PROGRESS', label: 'در حال ساخت' },
+                        { value: 'DONE', label: 'تکمیل شد' },
+                        { value: 'PAUSED', label: 'متوقف' },
+                      ]}
+                      onChange={v => void putRecord<Machine>('machines', { ...m, status: v as Machine['status'] })}
+                    />
                     <div className="flex-1" />
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" aria-label="حذف دستگاه"
                       onClick={() => void removeRecord('machines', m.id)}>

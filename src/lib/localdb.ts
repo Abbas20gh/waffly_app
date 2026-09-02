@@ -142,6 +142,28 @@ export async function putRemoteRows(rows: { tbl: SyncTbl; row: BaseRow }[]) {
   })
 }
 
+/**
+ * جایگزینی کامل محلی با اسنپ‌شات سرور (حالت «سرور مرجع»).
+ * برخلاف putRemoteRows (ادغام LWW)، ردیف‌های محلیِ خارج از سرور (مثل seed قدیمی گوشی)
+ * هم حذف می‌شوند → گوشی دقیقاً هم‌سطح سرور می‌شود و اقلام تکراری/موازی از بین می‌رود.
+ * فقط بعد از pushOutbox صدا زده شود تا هیچ داده محلیِ جدید از دست نرود.
+ */
+export async function replaceAllFromServer(rows: { tbl: SyncTbl; row: BaseRow }[]) {
+  const byTbl = new Map<SyncTbl, BaseRow[]>()
+  for (const { tbl, row } of rows) {
+    if (!TABLES.includes(tbl)) continue
+    const arr = byTbl.get(tbl) || []
+    arr.push({ ...row, deleted: row.deleted ? 1 : 0 })
+    byTbl.set(tbl, arr)
+  }
+  await dexie.transaction('rw', ...TABLES.map(t => dexie.table(t)), async () => {
+    for (const tbl of TABLES) await dexie.table(tbl).clear()
+    for (const [tbl, arr] of byTbl) {
+      if (arr.length) await dexie.table(tbl).bulkPut(arr)
+    }
+  })
+}
+
 // ===== هوک‌های زنده =====
 export function useDexie<T>(fn: () => T | Promise<T>, deps: unknown[] = []): T | undefined {
   const [state, setState] = useState<T | undefined>(undefined)

@@ -120,7 +120,7 @@ export function SettingsView() {
   return (
     <div className="space-y-5">
       {/* APP_VERSION — با هر آپدیت APK/وب به‌روز شود */}
-      <PageHeader title="تنظیمات" subtitle="دوره حسابداری، هشدارها، سینک، پشتیبان‌گیری و نصب اپ — نسخه ۲.۲" icon={<SettingsIcon className="h-5 w-5" />} />
+      <PageHeader title="تنظیمات" subtitle="دوره حسابداری، هشدارها، سینک، پشتیبان‌گیری و نصب اپ — نسخه ۲.۳" icon={<SettingsIcon className="h-5 w-5" />} />
 
       <div className="grid lg:grid-cols-2 gap-4 items-start">
         <Card className="waffly-card">
@@ -230,6 +230,8 @@ export function SettingsView() {
               <p className="text-[11px] text-muted-foreground leading-5">
                 حالت آفلاین‌محور: همه داده‌ها اول روی همین دستگاه ذخیره می‌شوند. با برقراری اینترنت، تغییرات خودکار
                 به سرور رفته و روی دستگاه ۳ کاربر دیگر هم اعمال می‌شود (حل تعارض بر اساس آخرین ویرایش — LWW).
+                «دریافت کامل از سرور» برای رفع اختلاف شدید است: اول همه تغییرات محلی بالا می‌رود، بعد نسخه سرور
+                دقیقاً جایگزین داده‌های همین دستگاه می‌شود (اقلام محلیِ اضافه/تکراری که روی سرور نیستند حذف می‌شوند).
               </p>
             </CardContent>
           </Card>

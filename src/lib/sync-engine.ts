@@ -5,7 +5,8 @@ import { useSyncExternalStore } from 'react'
 import { io, type Socket } from 'socket.io-client'
 import {
   dexie, getOutboxBatch, clearOutboxUpTo, getCursor, setCursor,
-  isBootstrapped, markBootstrapped, putRemoteRows, outboxCount, TABLES, type SyncTbl,
+  isBootstrapped, markBootstrapped, putRemoteRows, replaceAllFromServer,
+  outboxCount, TABLES, type SyncTbl,
 } from './localdb'
 
 interface SyncState {
@@ -70,40 +71,60 @@ async function pushOutbox(): Promise<void> {
   }
 }
 
+/**
+ * درخواست POST با فالبک GET — سازگاری با سرورهای قدیمی که فقط GET دارند:
+ * اگر POST ‏404/405 داد (مسیر POST هنوز دیپلوی نشده)، همان درخواست با پارامترهای query تکرار می‌شود.
+ * این تابع گذار است؛ بعد از دیپلوی سرور جدید همیشه POST موفق می‌شود.
+ */
+async function postOrGetJson<T>(path: string, body: Record<string, unknown>): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (res.ok) return await res.json() as T
+  if (res.status !== 404 && res.status !== 405) throw new Error(`${path} ${res.status}`)
+  // سرور قدیمی — فالبک به GET
+  const qs = new URLSearchParams()
+  for (const [k, v] of Object.entries(body)) {
+    if (v !== undefined && v !== null && typeof v !== 'object') qs.set(k, String(v))
+  }
+  const res2 = await fetch(`${API_BASE}${path}?${qs.toString()}`)
+  if (!res2.ok) throw new Error(`${path} ${res2.status}`)
+  return await res2.json() as T
+}
+
 async function pullIncremental(): Promise<void> {
   let guard = 0
   for (;;) {
     if (guard++ > 200) break
     const since = getCursor()
-    // POST — در APK از مسیر نیتیو CapacitorHttp می‌رود (بدون CORS/پروکسی WebView)
-    const res = await fetch(`${API_BASE}/api/sync/pull`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ since, limit: 300 }),
-    })
-    if (!res.ok) throw new Error(`pull ${res.status}`)
-    const data = await res.json() as { rows: { tbl: SyncTbl; row: Record<string, unknown> }[]; cursor: number; hasMore: boolean }
+    // POST (مسیر نیتیو CapacitorHttp در APK) با فالبک GET برای سرور قدیمی
+    const data = await postOrGetJson<{ rows: { tbl: SyncTbl; row: Record<string, unknown> }[]; cursor: number; hasMore: boolean }>(
+      '/api/sync/pull', { since, limit: 300 },
+    )
     if (data.rows?.length) await putRemoteRows(data.rows as never)
     setCursor(data.cursor ?? since)
     if (!data.hasMore) break
   }
 }
 
-async function bootstrap(force = false): Promise<void> {
+async function bootstrap(force = false, replace = false): Promise<void> {
   if (!force && isBootstrapped()) return
   if (!force) {
     // اگر دستگاه از قبل داده محلی دارد، bootstrap نکن (داده کاربر از بین نرود)
     const anyData = await dexie.sales.count() + await dexie.productions.count() + await dexie.customers.count()
     if (anyData > 0) { markBootstrapped(); return }
   }
-  const res = await fetch(`${API_BASE}/api/sync/full`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: '{}',
-  })
-  if (!res.ok) throw new Error(`full ${res.status}`)
-  const data = await res.json() as { rows: { tbl: SyncTbl; row: Record<string, unknown> }[]; cursor: number }
-  await putRemoteRows(data.rows as never)
+  const data = await postOrGetJson<{ rows: { tbl: SyncTbl; row: Record<string, unknown> }[]; cursor: number }>(
+    '/api/sync/full', {},
+  )
+  if (replace) {
+    // حالت «سرور مرجع»: ردیف‌های محلیِ خارج از سرور (seed قدیمی گوشی و…) حذف می‌شوند
+    await replaceAllFromServer(data.rows as never)
+  } else {
+    await putRemoteRows(data.rows as never)
+  }
   setCursor(data.cursor ?? 0)
   markBootstrapped()
 }
@@ -145,11 +166,11 @@ export async function repairSync() {
 }
 
 /**
- * دریافت کامل از سرور (تعمیر قطعی همگرایی):
+ * دریافت کامل از سرور (تعمیر قطعی همگرایی — سرور مرجع):
  * ۱) همه تغییرات محلی push می‌شوند (هیچ چیز از دست نمی‌رود)
- * ۲) اسنپ‌شات کامل سرور با LWW روی داده‌های محلی می‌نشیند
- * ۳) کِرسر به انتهای سرور ست می‌شود
- * رکوردهای محلیِ جدیدتر از سرور حفظ می‌شوند (LWW) — بقیه با سرور هم‌سطح می‌شوند.
+ * ۲) اسنپ‌شات کامل سرور «جایگزین» داده محلی می‌شود — ردیف‌های موازی/تکراری محلی
+ *    (مثل seed قدیمی گوشی با id متفاوت) حذف می‌شوند → گوشی دقیقاً = سرور
+ * ۳) یک push دیگر برای تغییرات ثانویه حین جایگزینی + کِرسر به انتهای سرور
  */
 export async function forceFullResync(): Promise<void> {
   if (typeof window === 'undefined') return
@@ -159,7 +180,8 @@ export async function forceFullResync(): Promise<void> {
   setState({ syncing: true, error: null })
   try {
     await pushOutbox()
-    await bootstrap(true)
+    await bootstrap(true, true)
+    await pushOutbox()
     await pullIncremental()
     setState({ lastSyncAt: Date.now(), pendingCount: await outboxCount() })
   } finally {
