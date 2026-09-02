@@ -2,8 +2,13 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { MODELS, ensureSeed } from '@/lib/server/sync-tables'
 import { TABLES, type SyncTbl } from '@/lib/types'
+import { jsonWithCors, optionsWithCors } from '@/lib/server/cors'
 
 export const dynamic = 'force-dynamic'
+
+export async function OPTIONS() {
+  return optionsWithCors()
+}
 
 type Delegate = { findMany: () => Promise<Record<string, unknown>[]> }
 const delegate = (tbl: SyncTbl): Delegate =>
@@ -19,13 +24,13 @@ export async function GET() {
       for (const row of all) rows.push({ tbl, row })
     }
     const last = await db.syncLog.findFirst({ orderBy: { seq: 'desc' } })
-    return NextResponse.json({
+    return jsonWithCors({
       rows,
       cursor: last?.seq ?? 0,
       serverTime: Date.now(),
     })
   } catch (e) {
     console.error('sync/full error', e)
-    return NextResponse.json({ error: 'full sync failed' }, { status: 500 })
+    return jsonWithCors({ error: 'full sync failed' }, { status: 500 })
   }
 }

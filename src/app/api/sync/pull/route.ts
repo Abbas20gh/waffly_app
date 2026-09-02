@@ -1,9 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { MODELS } from '@/lib/server/sync-tables'
 import type { SyncTbl } from '@/lib/types'
+import { jsonWithCors, optionsWithCors } from '@/lib/server/cors'
 
 export const dynamic = 'force-dynamic'
+
+export async function OPTIONS() {
+  return optionsWithCors()
+}
 
 type Delegate = { findUnique: (args: { where: { id: string } }) => Promise<Record<string, unknown> | null> }
 const delegate = (tbl: SyncTbl): Delegate =>
@@ -33,7 +38,7 @@ export async function GET(req: NextRequest) {
     }
 
     const cursor = logs.length ? logs[logs.length - 1].seq : since
-    return NextResponse.json({
+    return jsonWithCors({
       rows,
       cursor,
       hasMore: logs.length === limit,
@@ -41,6 +46,6 @@ export async function GET(req: NextRequest) {
     })
   } catch (e) {
     console.error('sync/pull error', e)
-    return NextResponse.json({ error: 'pull failed' }, { status: 500 })
+    return jsonWithCors({ error: 'pull failed' }, { status: 500 })
   }
 }

@@ -3,6 +3,18 @@
 import { createClient, type Client } from '@libsql/client'
 import { pushOps, pullRows, fullSnapshot } from './_sync'
 
+// ⚠️ CORS — حیاتی برای اپ اندروید (Capacitor WebView با origin https://localhost)
+// بدون این هدرها، fetch های سمت APK توسط مرورگر بلاک می‌شوند:
+//  - POST push (Content-Type: application/json) → preflight OPTIONS → شکست → هیچ داده‌ای از گوشی به سرور نمی‌رسد
+//  - GET pull → پاسخ قابل خواندن نیست → هیچ داده‌ای از سرور به گوشی نمی‌رسد
+// اپ بدون احراز هویت است، پس "*" کاملاً امن است.
+const CORS: Record<string, string> = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Max-Age': '86400',
+}
+
 interface Env {
   TURSO_URL: string
   TURSO_TOKEN?: string
@@ -28,7 +40,11 @@ function getClient(env: Env): Client {
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+      ...CORS,
+    },
   })
 }
 
@@ -36,6 +52,11 @@ export async function onRequest(ctx: Ctx): Promise<Response> {
   const url = new URL(ctx.request.url)
   const parts = ctx.params.route
   const path = (Array.isArray(parts) ? parts.join('/') : parts || '').replace(/\/+$/, '')
+
+  // preflight — باید قبل از هر چیز و بدون دست به دیتابیس پاسخ شود
+  if (ctx.request.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: CORS })
+  }
 
   try {
     const db = getClient(ctx.env)

@@ -1,9 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { MODELS, sanitizeRow } from '@/lib/server/sync-tables'
 import { TABLES, type SyncTbl } from '@/lib/types'
+import { jsonWithCors, optionsWithCors } from '@/lib/server/cors'
 
 export const dynamic = 'force-dynamic'
+
+export async function OPTIONS() {
+  return optionsWithCors()
+}
 
 type Delegate = {
   findUnique: (args: { where: { id: string } }) => Promise<{ updatedAt?: number } | null>
@@ -17,7 +22,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => null)
     const ops = Array.isArray(body?.ops) ? body.ops : []
-    if (ops.length === 0) return NextResponse.json({ accepted: 0, skipped: 0, serverTime: Date.now() })
+    if (ops.length === 0) return jsonWithCors({ accepted: 0, skipped: 0, serverTime: Date.now() })
 
     let accepted = 0
     let skipped = 0
@@ -48,9 +53,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ accepted, skipped, serverTime: Date.now() })
+    return jsonWithCors({ accepted, skipped, serverTime: Date.now() })
   } catch (e) {
     console.error('sync/push error', e)
-    return NextResponse.json({ error: 'push failed' }, { status: 500 })
+    return jsonWithCors({ error: 'push failed' }, { status: 500 })
   }
 }
