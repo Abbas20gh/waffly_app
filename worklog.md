@@ -266,3 +266,29 @@ Stage Summary:
 - زنجیره سینک دوطرفه حالا در هر ۴ جهت کامل است: اپ v2.3 ↔ سرور جدید (POST)، اپ v2.3 ↔ سرور قدیمی (فالبک GET)، وب جدید ↔ سرور جدید
 - مانده برای کاربر: نصب Waffly-v2.3.apk + یک‌بار «دریافت کامل از سرور» در تنظیمات → اقلام گوشی = ۸ ماده فعال مثل وب
 - سکرت‌ها: TURSO_URL/TURSO_TOKEN دست‌نخورده از قبل مانده بودند و همان استفاده شدند
+
+---
+Task ID: 15
+Agent: Main Agent (Super Z)
+Task: فیچر «کالاهای بازرگانی» (نان مشعلی) — v2.4
+
+Work Log:
+- تصمیم‌های کاربر (پرسش‌نامه): جدول جدا «کالاها» + تعداد ثابت در جعبه + فروش تکی/جعبه + میانگین موزون + انبار فعال
+- مدل داده در ۶ نقطه: types.ts (Good + SaleItem.kind + Purchase.itemKind/boxesCount — TABLES=۱۶)، localdb Dexie version(3) استور goods، src/lib/server/sync-tables.ts (MODELS/FIELDS + seed)، functions/api/_sync.ts (PHYS.Good + FIELDS + seed)، prisma/schema.prisma (مدل Good + ستون‌های Purchase)
+- قاعده ذخیره: مقادیر کالا در SaleItem و Purchase همیشه به «عدد» (جعبه فقط راحتی UI و قبل از ذخیره تبدیل می‌شود) → کوچک‌ترین تغییر اسکیما و سازگاری کامل با رکوردهای قدیمی (kind undefined = BREAD، itemKind نامشخص = MATERIAL)
+- **مهاجرت خودکار اسکیما داخل Functions (ensureSchema)**: چون توکن Turso در سندباکس نبود، CREATE TABLE IF NOT EXISTS "Good" + ALTER Purchase (itemKind/boxesCount) + درج seed مشعلی + SyncLog در اولین درخواست بعد از دیپلوی اجرا می‌شود (isolate-memoized، idempotent) → دیپلوی = مهاجرت، بدون دستور جدا
+- محاسبات calc.ts: goodsStocks (خرید − فروش خالص + میانگین موزون + low) و periodGoodsCost (تعداد فروش‌رفته × میانگین) + periodReport (goodsQty/goodsSalesAmount/goodsCost؛ profitGross = فروش − مواد − بهای کالا؛ salesQty/buyerStats فقط نان) + hooks.ts goods
+- UI خرید: تب «کالاها» (افزودن/ویرایش تعداد در جعبه و حد بحرانی/فعال/حذف)، فرم خرید با «نوع قلم» (ماده/کالا) + سوییچ واحد جعبه/عدد با محاسبه خودکار جمع و معادل عدد، کارت «موجودی کالاها» در انبار (معادل جعبه + میانگین بها + حد بحرانی inline)
+- UI فروش: انتخاب‌گر ترکیبی نان‌ها + کالاها (برچسب «کالا»)، سوییچ ورود عدد/جعبه کنار قلم کالا با نمایش بهای هر عدد، هشدار اگر تعداد در جعبه تنظیم نشده
+- UI حسابداری: KPI «بهای کالای فروش‌رفته» + فروش کل با «X نان + Y عدد کالا» + به‌روزرسانی اکسل/توضیحات مبنا؛ داشبورد: هشدار «کالاها رو به اتمام»
+- تست‌ها: محاسبات ۱۵/۱۵ (scripts/test-calc-v24.ts)، مهاجرت روی دیتابیس قدیمی شبیه‌سازی‌شده ۶/۶ (scripts/test-schema-v24.ts)، سینک E2E محلی ۹/۹ (scripts/e2e-v24-test.mjs) + رگرسیون v2.3 سینک ۱۳/۱۳، CF API logic (test-cf-api.mjs — توقع stale seed count از Task 10 اصلاح شد 16→20)، تست مرورگری کامل با agent-browser (افزودن مشعلی ۴۰ عددی → خرید ۲ جعبه ۴۵۰هزار = ۸۰ عدد میانگین ۱۱۲۵۰ → فاکتور ترکیبی نان ۵۰هزار + مشعلی جعبه ۶۰۰هزار = ۶۵۰هزار → موجودی ۸۰−۴۰=۴۰ → گزارش سود ۲۰۰هزار با بهای کالا ۴۵۰هزار)
+- فیکس جانبی: effectiveSettled/saleDue به Settleable ساختاری تغییر کرد (خطای قدیمی Purchase→Sale رفع)
+- دیپلوی: build-pages (بدون API_BASE) → wrangler deploy (deployment c783ccef) → پروداکشن: OPTIONS 204+ACAO، full با جدول goods و seed مشعلی، چرخه push/pull خرید GOOD سالم، تومب‌استون پاک‌سازی، داده واقعی کاربر دست‌نخورده
+- APK v2.4 (versionCode 7): build-pages با API_BASE → cap sync → gradle assembleRelease → SHA-256 گواهی یکسان a31b9080…cda (آپدیت بدون حذف) + CapacitorHttp + API_BASE در باندل = download/Waffly-v2.4.apk
+- گیت: commit f4b771d push شد
+
+Stage Summary:
+- نان مشعلی به‌عنوان اولین «کالای بازرگانی» روی همه سطوح فعال است: خرید (جعبه/عدد)، انبار با هشدار، فاکتور ترکیبی با نان‌ها، سود با میانگین موزون
+- وب https://waffly.pages.dev دیپلوی و تست شد؛ سرور خودش را مهاجرت داد (بدون نیاز به توکن Turso)
+- برای کاربر: نصب APK v2.4 (بدون حذف) → مشعلی از سرور pull می‌شود → «تعداد در جعبه» را در تب کالاها تنظیم کند
+- الگوی آینده: کالاهای بعدی (پرک، چوب‌کباب و…) فقط از تب «کالاها» اضافه می‌شوند — بدون تغییر کد
