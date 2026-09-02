@@ -8,13 +8,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
-import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { PageHeader, FormRow, TabsBar, EmptyState, SettleBadge, Money, Num } from './bits'
 import { JalaliDateInput } from './jalali-date'
+import { InlinePicker } from './inline-picker'
 import { useTable, useSetting, putRecord, removeRecord, uid, getActiveUser } from '@/lib/localdb'
 import type { Purchase, Supplier, Material, Consumption } from '@/lib/types'
 import { todayJalali, faDigits, faMoney, prettyJalali } from '@/lib/jalali'
@@ -132,12 +130,12 @@ function PurchasesTab() {
           </DialogHeader>
           <div className="space-y-4">
             <FormRow label="ماده اولیه">
-              <Select value={form.materialId} onValueChange={v => setForm(f => ({ ...f, materialId: v }))}>
-                <SelectTrigger className="h-11"><SelectValue placeholder="انتخاب کنید" /></SelectTrigger>
-                <SelectContent>
-                  {active(materials).map(m => <SelectItem key={m.id} value={m.id}>{m.name} ({m.unit})</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <InlinePicker
+                value={form.materialId}
+                options={active(materials).filter(m => m.active !== 0).map(m => ({ value: m.id, label: m.name, hint: m.unit }))}
+                onChange={v => setForm(f => ({ ...f, materialId: v }))}
+                placeholder="انتخاب کنید"
+              />
             </FormRow>
             <div className="grid grid-cols-2 gap-3">
               <FormRow label="مقدار" hint={mat ? `واحد: ${mat.unit}` : undefined}>
@@ -148,26 +146,26 @@ function PurchasesTab() {
               </FormRow>
             </div>
             <FormRow label="تامین‌کننده">
-              <Select value={form.supplierId || 'none'} onValueChange={v => setForm(f => ({ ...f, supplierId: v === 'none' ? '' : v }))}>
-                <SelectTrigger className="h-11"><SelectValue placeholder="انتخاب کنید (اختیاری)" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">بدون تامین‌کننده</SelectItem>
-                  {active(suppliers).map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <InlinePicker
+                value={form.supplierId || 'none'}
+                options={[{ value: 'none', label: 'بدون تامین‌کننده' }, ...active(suppliers).map(s => ({ value: s.id, label: s.name }))]}
+                onChange={v => setForm(f => ({ ...f, supplierId: v === 'none' ? '' : v }))}
+                placeholder="انتخاب کنید (اختیاری)"
+              />
             </FormRow>
             <FormRow label="تاریخ خرید">
               <JalaliDateInput value={form.date} onChange={v => setForm(f => ({ ...f, date: v }))} />
             </FormRow>
             <FormRow label="وضعیت تسویه">
-              <Select value={form.settledStatus} onValueChange={v => setForm(f => ({ ...f, settledStatus: v as Purchase['settledStatus'] }))}>
-                <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PAID">پرداخت‌شده</SelectItem>
-                  <SelectItem value="PARTIAL">پرداخت جزئی</SelectItem>
-                  <SelectItem value="UNPAID">پرداخت‌نشده</SelectItem>
-                </SelectContent>
-              </Select>
+              <InlinePicker
+                value={form.settledStatus}
+                options={[
+                  { value: 'PAID', label: 'پرداخت‌شده' },
+                  { value: 'PARTIAL', label: 'پرداخت جزئی' },
+                  { value: 'UNPAID', label: 'پرداخت‌نشده' },
+                ]}
+                onChange={v => setForm(f => ({ ...f, settledStatus: v as Purchase['settledStatus'] }))}
+              />
             </FormRow>
             {form.settledStatus === 'PARTIAL' && (
               <FormRow label="مبلغ پرداخت‌شده">
@@ -195,7 +193,7 @@ function StockTab() {
   const stocks = useMemo(() => materialStocks({
     materials, purchases, consumptions,
     breadTypes: [], productions: [], customers: [], sales: [], suppliers: [], machines: [],
-    machineCosts: [], expenseCategories: [], expenses: [],
+    machineCosts: [], expenseCategories: [], expenses: [], otherFunds: [],
     setting: { id: 'main', businessName: '', monthStartDay: 1, badDebtDays: 30, checkAlertDays: 7, updatedAt: 0, deleted: 0 },
   }), [materials, purchases, consumptions])
 
@@ -341,7 +339,7 @@ function ItemsTab() {
     if (!form.name.trim()) { toast({ title: 'نام قلم لازم است', variant: 'destructive' }); return }
     await putRecord<Material>('materials', {
       id: uid(), name: form.name.trim(), unit: form.unit, minStock: parseFloat(form.minStock || '0') || 0,
-      updatedAt: 0, deleted: 0,
+      active: 1, updatedAt: 0, deleted: 0,
     })
     setForm({ name: '', unit: UNITS[0], minStock: '' })
     toast({ title: 'قلم اضافه شد' })
@@ -354,10 +352,11 @@ function ItemsTab() {
         <CardContent className="space-y-3">
           <FormRow label="نام قلم"><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="h-11" /></FormRow>
           <FormRow label="واحد اندازه‌گیری" hint="هر قلم واحد مخصوص خودش را دارد">
-            <Select value={form.unit} onValueChange={v => setForm(f => ({ ...f, unit: v }))}>
-              <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
-              <SelectContent>{UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
-            </Select>
+            <InlinePicker
+              value={form.unit}
+              options={UNITS.map(u => ({ value: u, label: u }))}
+              onChange={v => setForm(f => ({ ...f, unit: v }))}
+            />
           </FormRow>
           <FormRow label="حد بحرانی هشدار" hint="وقتی موجودی به این مقدار برسد هشدار می‌دهد">
             <Input inputMode="decimal" className="waffly-num-input h-11" value={form.minStock} onChange={e => setForm(f => ({ ...f, minStock: e.target.value }))} />
@@ -366,15 +365,22 @@ function ItemsTab() {
         </CardContent>
       </Card>
       <Card className="waffly-card lg:col-span-3">
-        <CardHeader className="pb-2"><CardTitle className="text-sm">اقلام ({faDigits(active(materials).length)})</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">اقلام ({faDigits(active(materials).filter(m => m.active !== 0).length)} فعال)</CardTitle></CardHeader>
         <CardContent>
           <div className="space-y-1.5">
-            {active(materials).map(m => (
-              <div key={m.id} className="flex items-center gap-3 rounded-lg border px-3 py-2.5">
+            {[...materials].filter(m => !m.deleted).sort((a, b) => (b.active || 0) - (a.active || 0) || a.name.localeCompare(b.name, 'fa')).map(m => (
+              <div key={m.id} className={cn('flex items-center gap-3 rounded-lg border px-3 py-2.5', m.active === 0 && 'opacity-60')}>
                 <span className="text-sm font-medium flex-1">{m.name}</span>
+                {m.active === 0 && <span className="rounded-full bg-muted text-muted-foreground text-[10px] px-2 py-0.5">غیرفعال</span>}
                 <span className="text-[11px] text-muted-foreground">واحد: {m.unit}</span>
                 <span className="text-[11px] text-muted-foreground waffly-num">حد: {faDigits(m.minStock)}</span>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" aria-label="حذف"
+                <Button
+                  variant="ghost" size="sm" className="h-8 shrink-0 text-[11px]"
+                  onClick={() => void putRecord<Material>('materials', { ...m, active: m.active === 0 ? 1 : 0 })}
+                >
+                  {m.active === 0 ? 'فعال‌سازی' : 'غیرفعال'}
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-red-600" aria-label="حذف"
                   onClick={() => void removeRecord('materials', m.id)}>
                   <Trash2 className="h-4 w-4" />
                 </Button>

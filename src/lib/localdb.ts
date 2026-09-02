@@ -35,6 +35,7 @@ class WafflyDB extends Dexie {
   machineCosts!: Table<BaseRow, string>
   expenseCategories!: Table<BaseRow, string>
   expenses!: Table<BaseRow, string>
+  otherFunds!: Table<BaseRow, string>
   settings!: Table<BaseRow, string>
   outbox!: Table<OutboxItem, number>
   meta!: Table<{ key: string; value: unknown }, string>
@@ -58,6 +59,10 @@ class WafflyDB extends Dexie {
       settings: 'id',
       outbox: '++seq, ts',
       meta: 'key',
+    })
+    // v2: جدول سایر وجوه (خارج از حساب سود) + اسانس/یادداشت جعبه‌ها (فیلدهای غیرایندکسی — بدون ایندکس جدید)
+    this.version(2).stores({
+      otherFunds: 'id, updatedAt, date',
     })
   }
 }

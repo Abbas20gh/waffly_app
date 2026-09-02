@@ -5,14 +5,22 @@ import { useMemo, useRef, useState } from 'react'
 import { toast } from '@/hooks/use-toast'
 import {
   Calculator, ChevronRight, ChevronLeft, FileSpreadsheet, FileText, Printer,
-  TrendingUp, TrendingDown, Wallet, Scale,
+  TrendingUp, TrendingDown, Wallet, Scale, Plus, Trash2, PiggyBank,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { PageHeader, StatCard, EmptyState, Money, Num } from './bits'
+import { Input } from '@/components/ui/input'
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
+import { PageHeader, StatCard, EmptyState, Money, Num, FormRow } from './bits'
+import { JalaliDateInput } from './jalali-date'
+import { InlinePicker } from './inline-picker'
 import { useDataBundle } from '@/lib/hooks'
 import { periodOf, shiftPeriod, faDigits, faMoney, prettyJalali, todayJalali } from '@/lib/jalali'
-import { periodReport, type ProfitMode } from '@/lib/calc'
+import { periodReport, otherFundsTotals, type ProfitMode } from '@/lib/calc'
+import { putRecord, removeRecord, uid, getActiveUser } from '@/lib/localdb'
+import type { OtherFund } from '@/lib/types'
 import { exportRowsToExcel, exportElementToPdf } from '@/lib/export'
 import { cn } from '@/lib/utils'
 
@@ -21,10 +29,32 @@ export function AccountingView() {
   const [offset, setOffset] = useState(0)
   const reportRef = useRef<HTMLDivElement>(null)
   const [mode, setMode] = useState<ProfitMode>('net')
+  const [fundOpen, setFundOpen] = useState(false)
+  const [fundForm, setFundForm] = useState({ date: todayJalali(), type: 'IN' as OtherFund['type'], amount: '', description: '' })
 
   const basePeriod = periodOf(todayJalali(), d.setting.monthStartDay)
   const period = useMemo(() => shiftPeriod(basePeriod, offset, d.setting.monthStartDay), [basePeriod, offset, d.setting.monthStartDay])
   const rep = useMemo(() => periodReport(d, period), [d, period])
+  const funds = useMemo(() => otherFundsTotals(d, period), [d, period])
+  const fundsList = useMemo(() => d.otherFunds.filter(f => !f.deleted && f.date >= period.start && f.date <= period.end).sort((a, b) => (b.date + b.updatedAt).localeCompare(a.date + a.updatedAt)), [d.otherFunds, period])
+
+  const saveFund = async () => {
+    const amount = parseFloat(fundForm.amount || '0')
+    if (amount <= 0) { toast({ title: 'مبلغ را وارد کنید', variant: 'destructive' }); return }
+    if (!fundForm.description.trim()) { toast({ title: 'توضیح منشأ پول الزامی است', variant: 'destructive' }); return }
+    await putRecord<OtherFund>('otherFunds', {
+      id: uid(),
+      date: fundForm.date,
+      type: fundForm.type,
+      amount,
+      description: fundForm.description.trim(),
+      updatedAt: 0,
+      deleted: 0,
+    })
+    setFundForm(f => ({ ...f, amount: '', description: '' }))
+    setFundOpen(false)
+    toast({ title: 'سایر وجه ثبت شد', description: 'خارج از حساب سود ثبت شد و در سودآوری محاسبه نمی‌شود.' })
+  }
 
   const modeInfo = {
     gross: { label: 'ناخالص', desc: 'فروش − هزینه مواد', value: rep.profitGross },
@@ -45,6 +75,9 @@ export function AccountingView() {
           ['سود ناخالص', rep.profitGross, 'فروش − مواد'],
           ['هزینه‌های مشمول سود', rep.expensesTotalIncluded, rep.expensesIncluded.map(e => `${e.name}: ${e.amount}`).join('، ') || '—'],
           ['سود خالص نهایی', rep.profitNet, 'فروش − مواد − هزینه‌های مشمول'],
+          ['سایر وجوه ورودی دوره (خارج از سود)', funds.incoming, ''],
+          ['سایر وجوه خروجی دوره (خارج از سود)', funds.outgoing, ''],
+          ['سایر وجوه (خالص)', funds.net, 'خارج از محاسبه سود'],
           ['خرید مواد دوره', rep.purchasesTotal, `پرداخت‌نشده: ${rep.purchasesDue}`],
           [],
           ['— جزئیات خریداران —', '', ''],
@@ -136,6 +169,60 @@ export function AccountingView() {
               </button>
             ))}
             <span className="text-[11px] text-muted-foreground mr-auto">{modeInfo[mode].desc}</span>
+          </CardContent>
+        </Card>
+
+        {/* سایر وجوه — خارج از حساب سود */}
+        <Card className="waffly-card">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex flex-wrap items-center justify-between gap-2">
+              <span className="flex items-center gap-2"><PiggyBank className="h-4 w-4" /> سایر وجوه (خارج از حساب سود)</span>
+              <Button size="sm" variant="outline" className="h-8 text-[11px] no-print" onClick={() => setFundOpen(true)}>
+                <Plus className="ml-1 h-3.5 w-3.5" /> ثبت سایر وجه
+              </Button>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <p className="text-[11px] text-muted-foreground leading-5">
+              مثل فروش جنس قدیم یا موجودی اولیه — فقط ثبت و نمایش داده می‌شود و در هیچ‌کدام از فرمول‌های سود دیده نمی‌شود.
+            </p>
+            {fundsList.length === 0 ? (
+              <p className="text-xs text-muted-foreground rounded-lg border border-dashed px-3 py-3 text-center">در این دوره موردی ثبت نشده است.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {fundsList.map(f => (
+                  <div key={f.id} className="flex items-center gap-2.5 rounded-lg border px-3 py-2">
+                    <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-bold shrink-0',
+                      f.type === 'IN' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700')}>
+                      {f.type === 'IN' ? 'ورود' : 'خروج'}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium truncate">{f.description}</p>
+                      <p className="text-[10px] text-muted-foreground waffly-num">{prettyJalali(f.date)}</p>
+                    </div>
+                    <Money value={f.amount} className={cn('text-sm font-bold', f.type === 'IN' ? 'text-green-700' : 'text-red-700')} />
+                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-muted-foreground hover:text-red-600 no-print" aria-label="حذف"
+                      onClick={() => void removeRecord('otherFunds', f.id)}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2 pt-1">
+              <div className="flex-1 min-w-28 rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-center">
+                <p className="text-[10px] text-muted-foreground">جمع ورود</p>
+                <p className="text-sm font-bold text-green-700 waffly-num">{faMoney(funds.incoming)}</p>
+              </div>
+              <div className="flex-1 min-w-28 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-center">
+                <p className="text-[10px] text-muted-foreground">جمع خروج</p>
+                <p className="text-sm font-bold text-red-700 waffly-num">{faMoney(funds.outgoing)}</p>
+              </div>
+              <div className="flex-1 min-w-28 rounded-lg bg-muted/60 border px-3 py-2 text-center">
+                <p className="text-[10px] text-muted-foreground">خالص (خارج از سود)</p>
+                <p className="text-sm font-bold waffly-num">{faMoney(funds.net)}</p>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -271,6 +358,43 @@ export function AccountingView() {
           </Card>
         </div>
       </div>
+
+      {/* دیالوگ ثبت سایر وجه */}
+      <Dialog open={fundOpen} onOpenChange={setFundOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>ثبت سایر وجه (خارج از حساب سود)</DialogTitle>
+            <DialogDescription>این مبلغ فقط ثبت و نمایش داده می‌شود؛ در سود و زیان تولید محاسبه نمی‌شود.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <FormRow label="نوع">
+                <InlinePicker
+                  value={fundForm.type}
+                  options={[
+                    { value: 'IN', label: 'ورود پول' },
+                    { value: 'OUT', label: 'خروج پول' },
+                  ]}
+                  onChange={v => setFundForm(f => ({ ...f, type: v as OtherFund['type'] }))}
+                />
+              </FormRow>
+              <FormRow label="مبلغ (تومان)">
+                <Input inputMode="decimal" className="waffly-num-input h-11" value={fundForm.amount} onChange={e => setFundForm(f => ({ ...f, amount: e.target.value }))} />
+              </FormRow>
+            </div>
+            <FormRow label="تاریخ">
+              <JalaliDateInput value={fundForm.date} onChange={v => setFundForm(f => ({ ...f, date: v }))} />
+            </FormRow>
+            <FormRow label="توضیح منشأ/مقصد (الزامی)" hint="مثلاً: فروش جنس قدیم انبار، موجودی اولیه صندوق">
+              <Input value={fundForm.description} onChange={e => setFundForm(f => ({ ...f, description: e.target.value }))} className="h-11" />
+            </FormRow>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFundOpen(false)}>انصراف</Button>
+            <Button onClick={saveFund}>ثبت</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

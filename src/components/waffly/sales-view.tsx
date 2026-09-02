@@ -12,11 +12,9 @@ import { Input } from '@/components/ui/input'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
 import { PageHeader, FormRow, TabsBar, EmptyState, SettleBadge, Money, Num } from './bits'
 import { JalaliDateInput } from './jalali-date'
+import { InlinePicker } from './inline-picker'
 import { useTable, useSetting, putRecord, removeRecord, uid, getActiveUser } from '@/lib/localdb'
 import type { Sale, Customer, BreadType, SaleItem } from '@/lib/types'
 import { todayJalali, faDigits, faMoney, prettyJalali } from '@/lib/jalali'
@@ -271,12 +269,12 @@ function SaleFormDialog({ open, onOpenChange, form, setForm, customers, breadTyp
               <JalaliDateInput value={form.date} onChange={v => setForm(f => ({ ...f, date: v }))} />
             </FormRow>
             <FormRow label="مشتری">
-              <Select value={form.customerId} onValueChange={v => setForm(f => ({ ...f, customerId: v }))}>
-                <SelectTrigger className="h-11"><SelectValue placeholder="انتخاب مشتری" /></SelectTrigger>
-                <SelectContent>
-                  {customers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <InlinePicker
+                value={form.customerId}
+                options={customers.map(c => ({ value: c.id, label: c.name }))}
+                onChange={v => setForm(f => ({ ...f, customerId: v }))}
+                placeholder="انتخاب مشتری"
+              />
             </FormRow>
           </div>
           <div className="flex gap-2">
@@ -301,12 +299,13 @@ function SaleFormDialog({ open, onOpenChange, form, setForm, customers, breadTyp
             {form.items.map((it, idx) => (
               <div key={idx} className="rounded-xl border p-3 space-y-2">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  <Select value={it.breadTypeId} onValueChange={v => updateItem(idx, { breadTypeId: v })}>
-                    <SelectTrigger className="h-10 text-xs"><SelectValue placeholder="کالا" /></SelectTrigger>
-                    <SelectContent>
-                      {breadTypes.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <InlinePicker
+                    value={it.breadTypeId}
+                    options={active(breadTypes).map(b => ({ value: b.id, label: b.name }))}
+                    onChange={v => updateItem(idx, { breadTypeId: v })}
+                    placeholder="کالا"
+                    buttonClassName="h-10 text-xs"
+                  />
                   <Input inputMode="decimal" className="waffly-num-input h-10 text-xs" placeholder="تعداد" value={it.qty || ''} onChange={e => updateItem(idx, { qty: parseFloat(e.target.value) || 0, delivered: parseFloat(e.target.value) || 0 })} />
                   <Input inputMode="decimal" className="waffly-num-input h-10 text-xs" placeholder="قیمت هر نان" value={it.unitPrice || ''} onChange={e => updateItem(idx, { unitPrice: parseFloat(e.target.value) || 0 })} />
                   <Button variant="ghost" size="icon" className="h-10 w-10 text-muted-foreground hover:text-red-600" aria-label="حذف قلم"
@@ -345,14 +344,15 @@ function SaleFormDialog({ open, onOpenChange, form, setForm, customers, breadTyp
           {/* تسویه */}
           <div className="grid sm:grid-cols-2 gap-3">
             <FormRow label="وضعیت تسویه">
-              <Select value={form.settledStatus} onValueChange={v => setForm(f => ({ ...f, settledStatus: v as Sale['settledStatus'] }))}>
-                <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PAID">تسویه‌شده کامل</SelectItem>
-                  <SelectItem value="PARTIAL">پرداخت جزئی</SelectItem>
-                  <SelectItem value="UNPAID">پرداخت‌نشده</SelectItem>
-                </SelectContent>
-              </Select>
+              <InlinePicker
+                value={form.settledStatus}
+                options={[
+                  { value: 'PAID', label: 'تسویه‌شده کامل' },
+                  { value: 'PARTIAL', label: 'پرداخت جزئی' },
+                  { value: 'UNPAID', label: 'پرداخت‌نشده' },
+                ]}
+                onChange={v => setForm(f => ({ ...f, settledStatus: v as Sale['settledStatus'] }))}
+              />
             </FormRow>
             {form.settledStatus === 'PARTIAL' && (
               <FormRow label="مبلغ پرداخت‌شده (تومان)">
@@ -362,12 +362,11 @@ function SaleFormDialog({ open, onOpenChange, form, setForm, customers, breadTyp
           </div>
           <div className="grid sm:grid-cols-2 gap-3">
             <FormRow label="روش پرداخت">
-              <Select value={form.paymentMethod} onValueChange={v => setForm(f => ({ ...f, paymentMethod: v as Sale['paymentMethod'] }))}>
-                <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {PAY_METHODS.map(p => <SelectItem key={p.key} value={p.key}>{p.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <InlinePicker
+                value={form.paymentMethod}
+                options={PAY_METHODS.map(p => ({ value: p.key, label: p.label }))}
+                onChange={v => setForm(f => ({ ...f, paymentMethod: v as Sale['paymentMethod'] }))}
+              />
             </FormRow>
             <FormRow label="تاریخ وصول واقعی" hint="اگر با تاریخ فروش متفاوت است">
               <JalaliDateInput value={form.paymentDate} onChange={v => setForm(f => ({ ...f, paymentDate: v }))} />

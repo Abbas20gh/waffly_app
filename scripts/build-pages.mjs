@@ -41,4 +41,12 @@ if (missing.length > 0) {
   console.error('✗ فایل‌های جاافتاده در خروجی:', missing.join(', '))
   process.exit(1)
 }
+
+// تزریق نسخه build به Service Worker (cache-busting) — هر دیپلوی کش جدید می‌سازد
+const swPath = path.join(outDir, 'sw.js')
+const buildId = `${process.env.NEXT_PUBLIC_API_BASE ? 'apk-' : ''}${Date.now().toString(36)}`
+const swCode = fs.readFileSync(swPath, 'utf8').replace(/__WAFFLY_BUILD__/g, buildId)
+fs.writeFileSync(swPath, swCode)
+console.log(`✓ Service Worker با نسخه کش «${buildId}» نسخه‌دار شد`)
+
 console.log('🎉 out/ کامل و سالم است — آماده دیپلوی Pages')

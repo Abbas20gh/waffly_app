@@ -1,5 +1,5 @@
-// محاسبات کسب‌وکار — موجودی، بدحسابی، سود دوره، خریداران
-import type { Consumption, Customer, Expense, ExpenseCategory, Material, Production, Purchase, Sale, Setting, BreadType, MachineCost, Machine } from './types'
+// محاسبات کسب‌وکار — موجودی، بدحسابی، سود دوره، خریداران، سایر وجوه
+import type { Consumption, Customer, Expense, ExpenseCategory, Material, Production, Purchase, Sale, Setting, BreadType, MachineCost, Machine, OtherFund } from './types'
 import { inRange, jalaliAbsDays, todayJalali, type Period } from './jalali'
 
 export interface DataBundle {
@@ -15,6 +15,7 @@ export interface DataBundle {
   machineCosts: MachineCost[]
   expenseCategories: ExpenseCategory[]
   expenses: Expense[]
+  otherFunds: OtherFund[]
   setting: Setting
 }
 
@@ -64,7 +65,9 @@ export interface MaterialStock {
 
 export function materialStocks(d: DataBundle): MaterialStock[] {
   const today2 = today()
-  return active(d.materials).map(m => {
+  return active(d.materials)
+    .filter(m => m.active !== 0) // مواد غیرفعال از انبار و هشدارها خارج می‌شوند
+    .map(m => {
     const purchases = active(d.purchases).filter(p => p.materialId === m.id)
     const consumptions = active(d.consumptions).filter(c => c.materialId === m.id)
     const purchased = purchases.reduce((a, p) => a + (p.quantity || 0), 0)
@@ -216,6 +219,17 @@ export function periodReport(d: DataBundle, period: Period): PeriodReport {
     buyers, badDebts, checks,
     purchasesTotal, purchasesDue, productionTotals,
   }
+}
+
+// ===== سایر وجوه (خارج از حساب سود) =====
+// ⚠️ طبق تصمیم محصول: این مقادیر هرگز در فرمول‌های سود periodReport استفاده نمی‌شوند
+export interface OtherFundsTotals { incoming: number; outgoing: number; net: number }
+
+export function otherFundsTotals(d: DataBundle, period?: Period): OtherFundsTotals {
+  const rows = active(d.otherFunds).filter(f => !period || inRange(f.date, period.start, period.end))
+  const incoming = rows.filter(f => f.type === 'IN').reduce((a, f) => a + (f.amount || 0), 0)
+  const outgoing = rows.filter(f => f.type === 'OUT').reduce((a, f) => a + (f.amount || 0), 0)
+  return { incoming, outgoing, net: incoming - outgoing }
 }
 
 // ===== دستگاه‌سازی =====

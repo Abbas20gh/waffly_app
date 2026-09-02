@@ -2,7 +2,7 @@
 export const TABLES = [
   'breadTypes', 'productions', 'boxes', 'materials', 'consumptions',
   'customers', 'sales', 'suppliers', 'purchases',
-  'machines', 'machineCosts', 'expenseCategories', 'expenses', 'settings',
+  'machines', 'machineCosts', 'expenseCategories', 'expenses', 'otherFunds', 'settings',
 ] as const
 
 export type SyncTbl = (typeof TABLES)[number]
@@ -21,8 +21,9 @@ export interface Production extends BaseRow {
 }
 export interface Box extends BaseRow {
   code: string; productionId: string; breadTypeId: string; count: number; date: string
+  hasEssence?: number; essenceType?: string | null; note?: string | null
 }
-export interface Material extends BaseRow { name: string; unit: string; minStock: number }
+export interface Material extends BaseRow { name: string; unit: string; minStock: number; active?: number }
 export interface Consumption extends BaseRow {
   date: string; materialId: string; quantity: number; note?: string | null; createdBy?: string | null
 }
@@ -53,13 +54,24 @@ export interface Machine extends BaseRow {
 export interface MachineCost extends BaseRow {
   machineId: string; kind: 'CONSUMABLE' | 'CAPITAL'
   name: string; quantity: number; date: string; cost: number
+  note?: string | null
 }
 export interface ExpenseCategory extends BaseRow { name: string; includeInProfit?: number }
 export interface Expense extends BaseRow {
   date: string; categoryId: string; amount: number; description?: string | null; createdBy?: string | null
 }
+export interface OtherFund extends BaseRow {
+  date: string
+  type: 'IN' | 'OUT' // ورود/خروج — خارج از حساب سود
+  amount: number
+  description: string // اجباری — منشأ/مقصد پول
+}
+
 export interface Setting extends BaseRow {
   businessName: string; monthStartDay: number; badDebtDays: number; checkAlertDays: number
 }
+
+// طعم‌های اسانس — لیست قابل‌گسترش (فعلاً پرتقالی؛ بعداً اضافه می‌شود)
+export const ESSENCE_TYPES: string[] = ['پرتقالی']
 
 export type SyncOp = { tbl: SyncTbl; row: Record<string, unknown> }

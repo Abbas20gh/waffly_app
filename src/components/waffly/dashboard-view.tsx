@@ -4,7 +4,7 @@
 import { useMemo, useSyncExternalStore } from 'react'
 import {
   Wheat, ShoppingCart, ShoppingBasket, Wrench, Calculator,
-  AlertTriangle, CheckCircle2, TrendingUp, Users, ReceiptText,
+  AlertTriangle, CheckCircle2, TrendingUp, Users, ReceiptText, PiggyBank,
 } from 'lucide-react'
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip,
@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatCard, EmptyState } from './bits'
 import { useDataBundle } from '@/lib/hooks'
 import { todayJalali, faDigits, faMoney, faMoneyShort, J_MONTHS, lastPeriods, periodOf } from '@/lib/jalali'
-import { materialStocks, periodReport, buyerStats, isBadDebt, saleDue, active, daysSince, type DataBundle } from '@/lib/calc'
+import { materialStocks, periodReport, buyerStats, isBadDebt, saleDue, active, daysSince, otherFundsTotals, type DataBundle } from '@/lib/calc'
 import type { ViewKey } from './app-shell'
 import { useSetting } from '@/lib/localdb'
 import { cn } from '@/lib/utils'
@@ -39,6 +39,7 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: ViewKey) => void
   const curPeriod = useMemo(() => periodOf(todayStr, setting.monthStartDay), [todayStr, setting.monthStartDay])
   const periods = useMemo(() => lastPeriods(todayStr, 6, setting.monthStartDay), [todayStr, setting.monthStartDay])
   const report = useMemo(() => periodReport(d, curPeriod), [d, curPeriod])
+  const funds = useMemo(() => otherFundsTotals(d), [d])
 
   // نمودارها
   const salesChart = periods.map(p => {
@@ -115,6 +116,21 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: ViewKey) => void
           icon={<TrendingUp className="h-4 w-4" />}
         />
       </div>
+
+      {/* سایر وجوه — خارج از حساب سود */}
+      <button type="button" onClick={() => onNavigate('accounting')} className="block w-full text-right">
+        <div className={cn('rounded-2xl border p-3.5 flex flex-wrap items-center gap-3',
+          funds.net >= 0 ? 'bg-emerald-50/60 border-emerald-200' : 'bg-rose-50/60 border-rose-200')}>
+          <div className="h-9 w-9 rounded-xl bg-white border shadow-sm flex items-center justify-center shrink-0">
+            <PiggyBank className="h-4 w-4 text-emerald-700" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold">سایر وجوه (خارج از حساب سود)</p>
+            <p className="text-[10px] text-muted-foreground waffly-num">ورود {faMoneyShort(funds.incoming)} • خروج {faMoneyShort(funds.outgoing)} — در سود محاسبه نمی‌شود</p>
+          </div>
+          <p className={cn('text-base font-black waffly-num', funds.net >= 0 ? 'text-emerald-700' : 'text-rose-700')}>{faMoney(funds.net)} <span className="text-[10px] font-normal">تومان</span></p>
+        </div>
+      </button>
 
       {/* نمودارها */}
       <div className="grid lg:grid-cols-2 gap-4">

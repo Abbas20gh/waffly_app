@@ -20,3 +20,13 @@ wrangler-dev.log
 
 # تا وقتی توکن scope وردفلو دارد (فعلاً از push خارج است)
 .github/workflows
+
+# بکاپ‌های Turso و فایل‌های آپلودی کاربر — هرگز در ریپو
+db/turso-backup-*.json
+db/*.json
+upload/
+.download-tmp/
+
+# build artifacts
+tsconfig.tsbuildinfo
+*.tsbuildinfo

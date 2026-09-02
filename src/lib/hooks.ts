@@ -3,7 +3,7 @@
 import { useTable, useSetting } from './localdb'
 import type {
   BreadType, Production, Material, Consumption, Customer, Sale,
-  Supplier, Purchase, Machine, MachineCost, ExpenseCategory, Expense,
+  Supplier, Purchase, Machine, MachineCost, ExpenseCategory, Expense, OtherFund,
 } from './types'
 import type { DataBundle } from './calc'
 
@@ -21,11 +21,12 @@ export function useDataBundle(): DataBundle {
   const machineCosts = useTable<MachineCost>('machineCosts')
   const expenseCategories = useTable<ExpenseCategory>('expenseCategories')
   const expenses = useTable<Expense>('expenses')
+  const otherFunds = useTable<OtherFund>('otherFunds')
   const setting = useSetting()
 
   return {
     breadTypes, productions, materials, consumptions, customers, sales,
     suppliers: suppliers.map(s => ({ id: s.id, name: s.name })),
-    purchases, machines, machineCosts, expenseCategories, expenses, setting,
+    purchases, machines, machineCosts, expenseCategories, expenses, otherFunds, setting,
   }
 }

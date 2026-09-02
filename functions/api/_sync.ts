@@ -5,7 +5,7 @@ import type { Client } from '@libsql/client'
 export const TABLES = [
   'breadTypes', 'productions', 'boxes', 'materials', 'consumptions',
   'customers', 'sales', 'suppliers', 'purchases',
-  'machines', 'machineCosts', 'expenseCategories', 'expenses', 'settings',
+  'machines', 'machineCosts', 'expenseCategories', 'expenses', 'otherFunds', 'settings',
 ] as const
 export type SyncTbl = (typeof TABLES)[number]
 
@@ -15,7 +15,7 @@ export const PHYS: Record<SyncTbl, string> = {
   materials: 'Material', consumptions: 'Consumption', customers: 'Customer',
   sales: 'Sale', suppliers: 'Supplier', purchases: 'Purchase',
   machines: 'Machine', machineCosts: 'MachineCost',
-  expenseCategories: 'ExpenseCategory', expenses: 'Expense', settings: 'Setting',
+  expenseCategories: 'ExpenseCategory', expenses: 'Expense', otherFunds: 'OtherFund', settings: 'Setting',
 }
 
 type FieldType = 'str' | 'num' | 'int' | 'strNull'
@@ -23,17 +23,18 @@ type FieldType = 'str' | 'num' | 'int' | 'strNull'
 export const FIELDS: Record<SyncTbl, Record<string, FieldType>> = {
   breadTypes: { name: 'str', code: 'str', active: 'int' },
   productions: { date: 'str', breadTypeId: 'str', totalProduced: 'num', boxesCount: 'num', perBoxCount: 'num', waste: 'num', carriedFrom: 'strNull', note: 'strNull', createdBy: 'strNull' },
-  boxes: { code: 'str', productionId: 'str', breadTypeId: 'str', count: 'num', date: 'str' },
-  materials: { name: 'str', unit: 'str', minStock: 'num' },
+  boxes: { code: 'str', productionId: 'str', breadTypeId: 'str', count: 'num', date: 'str', hasEssence: 'int', essenceType: 'strNull', note: 'strNull' },
+  materials: { name: 'str', unit: 'str', minStock: 'num', active: 'int' },
   consumptions: { date: 'str', materialId: 'str', quantity: 'num', note: 'strNull', createdBy: 'strNull' },
   customers: { name: 'str', phone: 'strNull', address: 'strNull', cooperationType: 'strNull' },
   sales: { date: 'str', customerId: 'str', items: 'str', totalAmount: 'num', settledStatus: 'str', paidAmount: 'num', paymentMethod: 'str', checkDueDate: 'strNull', checkNumber: 'strNull', checkBank: 'strNull', paymentDate: 'strNull', note: 'strNull', createdBy: 'strNull' },
   suppliers: { name: 'str', phone: 'strNull', address: 'strNull' },
   purchases: { date: 'str', materialId: 'str', quantity: 'num', cost: 'num', supplierId: 'strNull', settledStatus: 'str', paidAmount: 'num', note: 'strNull', createdBy: 'strNull' },
   machines: { name: 'str', kind: 'str', startDate: 'str', status: 'str', note: 'strNull' },
-  machineCosts: { machineId: 'str', kind: 'str', name: 'str', quantity: 'num', date: 'str', cost: 'num' },
+  machineCosts: { machineId: 'str', kind: 'str', name: 'str', quantity: 'num', date: 'str', cost: 'num', note: 'strNull' },
   expenseCategories: { name: 'str', includeInProfit: 'int' },
   expenses: { date: 'str', categoryId: 'str', amount: 'num', description: 'strNull', createdBy: 'strNull' },
+  otherFunds: { date: 'str', type: 'str', amount: 'num', description: 'str' },
   settings: { businessName: 'str', monthStartDay: 'int', badDebtDays: 'int', checkAlertDays: 'int' },
 }
 
@@ -96,12 +97,15 @@ export async function ensureSeed(db: Client): Promise<boolean> {
     { tbl: 'breadTypes', id: 'seed-bt-03', data: { name: 'نان بینابینی', code: '03', active: 1, updatedAt: now, deleted: 0 } },
     { tbl: 'breadTypes', id: 'seed-bt-04', data: { name: 'نان خرد (ریزه)', code: '04', active: 1, updatedAt: now, deleted: 0 } },
     { tbl: 'breadTypes', id: 'seed-bt-05', data: { name: 'نان کاسه‌ای', code: '05', active: 1, updatedAt: now, deleted: 0 } },
-    { tbl: 'materials', id: 'seed-mt-01', data: { name: 'آرد', unit: 'کیلوگرم', minStock: 25, updatedAt: now, deleted: 0 } },
-    { tbl: 'materials', id: 'seed-mt-02', data: { name: 'شکر', unit: 'کیلوگرم', minStock: 10, updatedAt: now, deleted: 0 } },
-    { tbl: 'materials', id: 'seed-mt-03', data: { name: 'مایه خمیر', unit: 'کیلوگرم', minStock: 3, updatedAt: now, deleted: 0 } },
-    { tbl: 'materials', id: 'seed-mt-04', data: { name: 'نمک', unit: 'کیلوگرم', minStock: 2, updatedAt: now, deleted: 0 } },
-    { tbl: 'materials', id: 'seed-mt-05', data: { name: 'روغن مایع', unit: 'لیتر', minStock: 8, updatedAt: now, deleted: 0 } },
-    { tbl: 'materials', id: 'seed-mt-06', data: { name: 'کارتن بسته‌بندی', unit: 'عدد', minStock: 100, updatedAt: now, deleted: 0 } },
+    { tbl: 'materials', id: 'seed-mt-01', data: { name: 'آرد', unit: 'کیلوگرم', minStock: 25, active: 1, updatedAt: now, deleted: 0 } },
+    { tbl: 'materials', id: 'seed-mt-02', data: { name: 'شکر', unit: 'کیلوگرم', minStock: 10, active: 1, updatedAt: now, deleted: 0 } },
+    { tbl: 'materials', id: 'seed-mt-03', data: { name: 'مایه خمیر', unit: 'کیلوگرم', minStock: 3, active: 0, updatedAt: now, deleted: 0 } },
+    { tbl: 'materials', id: 'seed-mt-04', data: { name: 'نمک', unit: 'کیلوگرم', minStock: 2, active: 1, updatedAt: now, deleted: 0 } },
+    { tbl: 'materials', id: 'seed-mt-05', data: { name: 'روغن مایع', unit: 'لیتر', minStock: 8, active: 1, updatedAt: now, deleted: 0 } },
+    { tbl: 'materials', id: 'seed-mt-06', data: { name: 'کارتن بسته‌بندی', unit: 'عدد', minStock: 100, active: 1, updatedAt: now, deleted: 0 } },
+    { tbl: 'materials', id: 'seed-mt-07', data: { name: 'لسیتین', unit: 'گرم', minStock: 500, active: 1, updatedAt: now, deleted: 0 } },
+    { tbl: 'materials', id: 'seed-mt-08', data: { name: 'وانیل', unit: 'گرم', minStock: 200, active: 1, updatedAt: now, deleted: 0 } },
+    { tbl: 'materials', id: 'seed-mt-09', data: { name: 'آرد سبوس‌دار', unit: 'کیلوگرم', minStock: 25, active: 1, updatedAt: now, deleted: 0 } },
     { tbl: 'expenseCategories', id: 'seed-ec-01', data: { name: 'دستمزد کارگران', includeInProfit: 1, updatedAt: now, deleted: 0 } },
     { tbl: 'expenseCategories', id: 'seed-ec-02', data: { name: 'برداشت صاحب کار', includeInProfit: 0, updatedAt: now, deleted: 0 } },
     { tbl: 'expenseCategories', id: 'seed-ec-03', data: { name: 'حمل‌ونقل', includeInProfit: 1, updatedAt: now, deleted: 0 } },

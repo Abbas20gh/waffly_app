@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select'
 import { PageHeader, FormRow, EmptyState, Money, Num } from './bits'
 import { JalaliDateInput } from './jalali-date'
+import { InlinePicker } from './inline-picker'
 import { useTable, putRecord, removeRecord, uid, getActiveUser } from '@/lib/localdb'
 import type { Machine, MachineCost } from '@/lib/types'
 import { todayJalali, faDigits, faMoney, prettyJalali } from '@/lib/jalali'
@@ -32,7 +33,7 @@ function MachinesBody({ machines, machineCosts }: { machines: Machine[]; machine
   const [machineDlg, setMachineDlg] = useState(false)
   const [costDlgFor, setCostDlgFor] = useState<Machine | null>(null)
   const [mForm, setMForm] = useState({ name: '', startDate: todayJalali(), status: 'IN_PROGRESS' as Machine['status'], note: '' })
-  const [cForm, setCForm] = useState({ kind: 'CONSUMABLE' as MachineCost['kind'], name: '', quantity: '1', date: todayJalali(), cost: '' })
+  const [cForm, setCForm] = useState({ kind: 'CONSUMABLE' as MachineCost['kind'], name: '', quantity: '1', date: todayJalali(), cost: '', note: '' })
 
   const list = active(machines).filter(m => m.kind === section)
   const totals = (m: Machine) => machineTotals({ machines: [], machineCosts } as never, m.id)
@@ -59,9 +60,10 @@ function MachinesBody({ machines, machineCosts }: { machines: Machine[]; machine
     await putRecord<MachineCost>('machineCosts', {
       id: uid(), machineId: costDlgFor.id, kind: cForm.kind, name: cForm.name.trim(),
       quantity: parseFloat(cForm.quantity || '1') || 1, date: cForm.date, cost,
+      note: cForm.note.trim() ? cForm.note.trim() : null,
       updatedAt: 0, deleted: 0,
     })
-    setCForm({ kind: 'CONSUMABLE', name: '', quantity: '1', date: todayJalali(), cost: '' })
+    setCForm({ kind: 'CONSUMABLE', name: '', quantity: '1', date: todayJalali(), cost: '', note: '' })
     setCostDlgFor(null)
     toast({ title: 'هزینه ثبت شد' })
   }
@@ -147,7 +149,7 @@ function MachinesBody({ machines, machineCosts }: { machines: Machine[]; machine
                             c.kind === 'CAPITAL' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700')}>
                             {c.kind === 'CAPITAL' ? 'سرمایه‌ای' : 'مصرفی'}
                           </span>
-                          <span className="font-medium">{c.name}{c.quantity > 1 ? ` × ${faDigits(c.quantity)}` : ''}</span>
+                          <span className="font-medium">{c.name}{c.quantity > 1 ? ` × ${faDigits(c.quantity)}` : ''}{c.note ? ` — ${c.note}` : ''}</span>
                           <span className="text-muted-foreground waffly-num">{prettyJalali(c.date)}</span>
                           <div className="flex-1" />
                           <Money value={c.cost} className="font-bold" />
@@ -217,13 +219,14 @@ function MachinesBody({ machines, machineCosts }: { machines: Machine[]; machine
           </DialogHeader>
           <div className="space-y-4">
             <FormRow label="نوع هزینه" hint="قطعات سرمایه‌ای فقط ثبت می‌شوند و در سود محاسبه نمی‌شوند">
-              <Select value={cForm.kind} onValueChange={v => setCForm(f => ({ ...f, kind: v as MachineCost['kind'] }))}>
-                <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="CONSUMABLE">مصرفی (مواد و لوازم)</SelectItem>
-                  <SelectItem value="CAPITAL">سرمایه‌ای (قطعات اصلی)</SelectItem>
-                </SelectContent>
-              </Select>
+              <InlinePicker
+                value={cForm.kind}
+                options={[
+                  { value: 'CONSUMABLE', label: 'مصرفی (مواد و لوازم)' },
+                  { value: 'CAPITAL', label: 'سرمایه‌ای (قطعات اصلی)' },
+                ]}
+                onChange={v => setCForm(f => ({ ...f, kind: v as MachineCost['kind'] }))}
+              />
             </FormRow>
             <FormRow label="شرح">
               <Input value={cForm.name} onChange={e => setCForm(f => ({ ...f, name: e.target.value }))} className="h-11" placeholder="مثلاً المنت حرارتی" />
@@ -238,6 +241,9 @@ function MachinesBody({ machines, machineCosts }: { machines: Machine[]; machine
             </div>
             <FormRow label="تاریخ">
               <JalaliDateInput value={cForm.date} onChange={v => setCForm(f => ({ ...f, date: v }))} />
+            </FormRow>
+            <FormRow label="یادداشت (اختیاری)">
+              <Input value={cForm.note} onChange={e => setCForm(f => ({ ...f, note: e.target.value }))} className="h-11" />
             </FormRow>
           </div>
           <DialogFooter>

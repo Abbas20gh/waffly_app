@@ -148,15 +148,39 @@ export function startSyncEngine(): () => void {
 
   cycleTimer = setInterval(() => void syncNow(), 20000)
 
-  // اتصال real-time از طریق گیت‌وی (پورت 3003)
-  try {
-    socket = io('/?XTransformPort=3003', {
-      reconnectionDelayMax: 10000,
-      transports: ['websocket', 'polling'],
-    })
-    socket.on('connect', () => { void syncNow() })
-    socket.on('data-changed', () => { void syncNow() })
-  } catch { /* socket اختیاری است */ }
+  // فوکوس پنجره (PWA دسکتاپ) — برگشت به تب اپ سینک بگیرد
+  const onFocus = () => { void syncNow() }
+  window.addEventListener('focus', onFocus)
+
+  // اتصال real-time فقط با env صریح (سندباکس) — روی production/APK فقط polling
+  const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL
+  if (socketUrl) {
+    try {
+      socket = io(socketUrl, {
+        reconnectionDelayMax: 10000,
+        transports: ['websocket', 'polling'],
+      })
+      socket.on('connect', () => { void syncNow() })
+      socket.on('data-changed', () => { void syncNow() })
+    } catch { /* socket اختیاری است */ }
+  }
+
+  // اپ اندروید (Capacitor): هر برگشت از پس‌زمینه فوراً سینک بگیر.
+  // WebView اندروید JS پس‌زمینه را throttle/pause می‌کند و visibilitychange همیشه fire نمی‌شود.
+  void (async () => {
+    try {
+      const isNative = typeof (window as unknown as { Capacitor?: unknown }).Capacitor !== 'undefined'
+      if (!isNative) return
+      const { App } = await import('@capacitor/app')
+      await App.addListener('appStateChange', (s: { isActive: boolean }) => {
+        if (s.isActive) {
+          setState({ online: navigator.onLine })
+          void syncNow()
+        }
+      })
+      await App.addListener('resume', () => { void syncNow() })
+    } catch { /* پلاگین در وب نصب‌مانده نیست — بی‌اثر */ }
+  })()
 
   // شمارش صف اولیه + سینک اول
   void outboxCount().then(n => setState({ pendingCount: n }))
@@ -167,6 +191,7 @@ export function startSyncEngine(): () => void {
     window.removeEventListener('offline', onOffline)
     window.removeEventListener('waffly-data-changed', onDataChanged)
     document.removeEventListener('visibilitychange', onVisible)
+    window.removeEventListener('focus', onFocus)
     if (cycleTimer) clearInterval(cycleTimer)
     if (debounceTimer) clearTimeout(debounceTimer)
     socket?.disconnect()

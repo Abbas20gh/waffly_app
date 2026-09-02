@@ -1,24 +1,24 @@
 'use client'
 
 // تولید — ثبت روزانه، جعبه‌ها و کدها، مصرف مواد، انواع نان
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { toast } from '@/hooks/use-toast'
-import { Wheat, Package, Trash2, Boxes, Plus, Cookie } from 'lucide-react'
+import { Wheat, Package, Trash2, Boxes, Plus, Cookie, Pencil, Sparkles, ChevronDown } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
 import { PageHeader, FormRow, TabsBar, EmptyState, Num } from './bits'
 import { JalaliDateInput } from './jalali-date'
+import { InlinePicker } from './inline-picker'
 import { useTable, useDexie, dexie, putRecord, putMany, removeRecord, uid, getActiveUser } from '@/lib/localdb'
 import type { BreadType, Box, Production, Material, Consumption } from '@/lib/types'
+import { ESSENCE_TYPES } from '@/lib/types'
 import { todayJalali, faDigits, parseJalali, prettyJalali, addJalaliDays } from '@/lib/jalali'
-import { boxCode } from '@/lib/boxcode'
+import { boxCode, parseBoxCode } from '@/lib/boxcode'
 import { active } from '@/lib/calc'
 
 type Tab = 'daily' | 'boxes' | 'consumption' | 'types'
@@ -50,7 +50,10 @@ export function ProductionView() {
 function DailyTab() {
   const breadTypes = useTable<BreadType>('breadTypes')
   const productions = useTable<Production>('productions')
+  const boxes = useTable<Box>('boxes')
   const [open, setOpen] = useState(false)
+  const [expandedProd, setExpandedProd] = useState<string | null>(null)
+  const [editBox, setEditBox] = useState<Box | null>(null)
 
   const editing = null // ثبت جدید
   const [form, setForm] = useState({
@@ -62,11 +65,14 @@ function DailyTab() {
     waste: '',
     carriedFrom: '',
     note: '',
+    essenceOn: false,
+    essenceType: ESSENCE_TYPES[0] || '',
+    essenceCount: '',
   })
   const bt = breadTypes.find(b => b.id === form.breadTypeId)
 
   const openNew = () => {
-    setForm({ date: todayJalali(), breadTypeId: active(breadTypes)[0]?.id || '', totalProduced: '', boxesCount: '', perBoxCount: '', waste: '', carriedFrom: '', note: '' })
+    setForm({ date: todayJalali(), breadTypeId: active(breadTypes)[0]?.id || '', totalProduced: '', boxesCount: '', perBoxCount: '', waste: '', carriedFrom: '', note: '', essenceOn: false, essenceType: ESSENCE_TYPES[0] || '', essenceCount: '' })
     setOpen(true)
   }
 
@@ -90,6 +96,9 @@ function DailyTab() {
     if (total <= 0 && boxes <= 0) { toast({ title: 'تعداد تولید یا جعبه را وارد کنید', variant: 'destructive' }); return }
 
     const prodId = uid()
+    const essenceCount = form.essenceOn
+      ? Math.max(0, Math.min(boxes, parseInt(form.essenceCount || '0', 10) || 0))
+      : 0
     await putRecord<Production>('productions', {
       id: prodId,
       date: form.date,
@@ -104,10 +113,11 @@ function DailyTab() {
       updatedAt: 0,
       deleted: 0,
     })
-    // ساخت کدهای یکتای جعبه‌ها
+    // ساخت کدهای یکتای جعبه‌ها (اولین جعبه‌ها اسانس‌دار بر اساس ورودی فرم)
     if (boxes > 0 && per > 0) {
       const boxRows: Box[] = []
       for (let i = 0; i < boxes; i++) {
+        const withEssence = i < essenceCount
         boxRows.push({
           id: uid(),
           code: boxCode(bt.code, form.date, per, i + 1),
@@ -115,19 +125,23 @@ function DailyTab() {
           breadTypeId: bt.id,
           count: per,
           date: form.date,
+          hasEssence: withEssence ? 1 : 0,
+          essenceType: withEssence ? (form.essenceType || ESSENCE_TYPES[0] || null) : null,
+          note: null,
           updatedAt: 0,
           deleted: 0,
         })
       }
       await putMany('boxes', boxRows)
     }
-    toast({ title: 'تولید ثبت شد', description: boxes > 0 ? `${faDigits(boxes)} جعبه با کد یکتا ساخته شد.` : undefined })
+    toast({ title: 'تولید ثبت شد', description: boxes > 0 ? `${faDigits(boxes)} جعبه با کد یکتا ساخته شد${essenceCount > 0 ? ` (${faDigits(essenceCount)} جعبه اسانس‌دار)` : ''}.` : undefined })
     setOpen(false)
   }
 
   // لیست تولیدهای اخیر
   const recent = [...productions].filter(p => !p.deleted).sort((a, b) => (b.date + b.updatedAt).localeCompare(a.date + a.updatedAt)).slice(0, 40)
   const btName = (id: string) => breadTypes.find(b => b.id === id)?.name || 'نامشخص'
+  const boxesOf = (prodId: string) => boxes.filter(b => !b.deleted && b.productionId === prodId).sort((a, b) => a.code.localeCompare(b.code))
 
   return (
     <div className="space-y-4">
@@ -144,32 +158,79 @@ function DailyTab() {
             <EmptyState title="هنوز تولیدی ثبت نشده" desc="اولین تولید امروز را با دکمه بالا ثبت کنید." icon={<Wheat className="h-5 w-5" />} />
           ) : (
             <div className="space-y-2">
-              {recent.map(p => (
-                <div key={p.id} className="flex items-center gap-3 rounded-xl border p-3">
-                  <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                    <Package className="h-4 w-4" />
+              {recent.map(p => {
+                const pBoxes = boxesOf(p.id)
+                const essenceBoxes = pBoxes.filter(b => b.hasEssence)
+                return (
+                <div key={p.id} className="rounded-xl border p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                      <Package className="h-4 w-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold">
+                        {btName(p.breadTypeId)}
+                        {p.carriedFrom && <span className="text-[10px] text-amber-600 mr-2">(انتقال از {prettyJalali(p.carriedFrom)})</span>}
+                        {essenceBoxes.length > 0 && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 text-violet-700 text-[10px] px-2 py-0.5 mr-2">
+                            <Sparkles className="h-3 w-3" /> {faDigits(essenceBoxes.length)} جعبه اسانس‌دار{essenceBoxes[0]?.essenceType ? ` (${essenceBoxes[0].essenceType})` : ''}
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground waffly-num">
+                        {prettyJalali(p.date)} • {faDigits(p.totalProduced)} نان
+                        {p.boxesCount > 0 && ` • ${faDigits(p.boxesCount)} جعبه × ${faDigits(p.perBoxCount)}`}
+                        {p.waste > 0 && <span className="text-red-600"> • ضایعات: {faDigits(p.waste)}</span>}
+                        {p.createdBy && ` • ${p.createdBy}`}
+                      </p>
+                    </div>
+                    {pBoxes.length > 0 && (
+                      <Button
+                        variant="outline" size="sm" className="h-8 shrink-0 text-[11px]"
+                        onClick={() => setExpandedProd(expandedProd === p.id ? null : p.id)}
+                      >
+                        <Boxes className="ml-1 h-3.5 w-3.5" /> جعبه‌ها ({faDigits(pBoxes.length)})
+                        <ChevronDown className={`mr-1 h-3.5 w-3.5 transition-transform ${expandedProd === p.id ? 'rotate-180' : ''}`} />
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600 shrink-0"
+                      aria-label="حذف"
+                      onClick={() => { void removeRecord('productions', p.id); toast({ title: 'حذف شد' }) }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold">
-                      {btName(p.breadTypeId)}
-                      {p.carriedFrom && <span className="text-[10px] text-amber-600 mr-2">(انتقال از {prettyJalali(p.carriedFrom)})</span>}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground waffly-num">
-                      {prettyJalali(p.date)} • {faDigits(p.totalProduced)} نان
-                      {p.boxesCount > 0 && ` • ${faDigits(p.boxesCount)} جعبه × ${faDigits(p.perBoxCount)}`}
-                      {p.waste > 0 && <span className="text-red-600"> • ضایعات: {faDigits(p.waste)}</span>}
-                      {p.createdBy && ` • ${p.createdBy}`}
-                    </p>
-                  </div>
-                  <Button
-                    variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600"
-                    aria-label="حذف"
-                    onClick={() => { void removeRecord('productions', p.id); toast({ title: 'حذف شد' }) }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  {expandedProd === p.id && pBoxes.length > 0 && (
+                    <div className="mt-3 space-y-1.5 border-t pt-3">
+                      {pBoxes.map(b => (
+                        <div key={b.id} className="flex items-center gap-2 rounded-lg bg-muted/40 px-2.5 py-1.5">
+                          <code className="rounded bg-primary/5 border border-primary/20 px-2 py-0.5 text-[11px] font-bold waffly-num" dir="ltr">{b.code}</code>
+                          <span className="text-[11px] text-muted-foreground flex-1 min-w-0 truncate">
+                            {btName(b.breadTypeId)} • <Num value={b.count} /> عدد
+                            {b.note ? ` • ${b.note}` : ''}
+                          </span>
+                          {!!b.hasEssence && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 text-violet-700 text-[10px] px-2 py-0.5 shrink-0">
+                              <Sparkles className="h-3 w-3" /> {b.essenceType || 'اسانس'}
+                            </span>
+                          )}
+                          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground" aria-label="ویرایش جعبه"
+                            onClick={() => setEditBox(b)}>
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-muted-foreground hover:text-red-600" aria-label="حذف جعبه"
+                            onClick={() => { void removeRecord('boxes', b.id); toast({ title: 'جعبه حذف شد', description: 'حذف به‌صورت منطقی ثبت و سینک می‌شود.' }) }}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      ))}
+                      <p className="text-[10px] text-muted-foreground">با دکمه ویرایش، نوع نان، اسانس و یادداشت هر جعبه را جداگانه تنظیم کنید.</p>
+                    </div>
+                  )}
                 </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </CardContent>
@@ -184,14 +245,12 @@ function DailyTab() {
           </DialogHeader>
           <div className="space-y-4">
             <FormRow label="نوع نان">
-              <Select value={form.breadTypeId} onValueChange={v => setForm(f => ({ ...f, breadTypeId: v }))}>
-                <SelectTrigger className="h-11"><SelectValue placeholder="انتخاب کنید" /></SelectTrigger>
-                <SelectContent>
-                  {active(breadTypes).map(b => (
-                    <SelectItem key={b.id} value={b.id}>{b.name} (کد {b.code})</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <InlinePicker
+                value={form.breadTypeId}
+                options={active(breadTypes).map(b => ({ value: b.id, label: b.name, hint: `کد ${b.code}` }))}
+                onChange={v => setForm(f => ({ ...f, breadTypeId: v }))}
+                placeholder="انتخاب کنید"
+              />
             </FormRow>
             <FormRow label="تاریخ تولید (شمسی)">
               <JalaliDateInput value={form.date} onChange={v => setForm(f => ({ ...f, date: v }))} />
@@ -214,6 +273,29 @@ function DailyTab() {
               <FormRow label="انتقال از تاریخ" hint="برای محاسبه باقیمانده روزهای قبل (اختیاری)">
                 <JalaliDateInput value={form.carriedFrom || ''} onChange={v => setForm(f => ({ ...f, carriedFrom: v === '' ? '' : v }))} />
               </FormRow>
+            </div>
+            <div className="rounded-xl border p-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> اسانس روی جعبه‌ها (اختیاری)</p>
+                <Switch checked={form.essenceOn} onCheckedChange={v => setForm(f => ({ ...f, essenceOn: v }))} />
+              </div>
+              {form.essenceOn && (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormRow label="طعم اسانس">
+                      <InlinePicker
+                        value={form.essenceType}
+                        options={ESSENCE_TYPES.map(t => ({ value: t, label: t }))}
+                        onChange={v => setForm(f => ({ ...f, essenceType: v }))}
+                      />
+                    </FormRow>
+                    <FormRow label="تعداد جعبه اسانس‌دار" hint="اولین جعبه‌ها (بر اساس سری) اسانس‌دار می‌شوند">
+                      <Input inputMode="numeric" className="waffly-num-input h-11" value={form.essenceCount} onChange={e => setForm(f => ({ ...f, essenceCount: e.target.value }))} placeholder="۰" />
+                    </FormRow>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground leading-5">بعداً می‌توانید از دکمه «جعبه‌ها» در کارت هر تولید، اسانس هر جعبه را جداگانه ویرایش یا حذف کنید.</p>
+                </>
+              )}
             </div>
             <FormRow label="یادداشت">
               <Input value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} className="h-11" />
@@ -238,6 +320,7 @@ function DailyTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <BoxEditDialog box={editBox} breadTypes={breadTypes} onClose={() => setEditBox(null)} />
       {editing === null && null}
     </div>
   )
@@ -248,6 +331,7 @@ function BoxesTab() {
   const boxes = useTable<Box>('boxes')
   const breadTypes = useTable<BreadType>('breadTypes')
   const [filterDate, setFilterDate] = useState('')
+  const [editBox, setEditBox] = useState<Box | null>(null)
 
   const list = [...boxes]
     .filter(b => !b.deleted)
@@ -269,21 +353,38 @@ function BoxesTab() {
       <CardContent>
         <p className="text-[11px] text-muted-foreground mb-3 leading-5">
           فرمت کد: <code className="waffly-num" dir="ltr">TT DD MM NN SS</code> — نوع نان، روز، ماه، تعداد در جعبه، شماره سری.
-          کد را روی جعبه بنویسید یا برچسب بزنید؛ در نسخه‌های بعدی QR اضافه می‌شود.
+          با دکمه ویرایش، نوع نان/اسانس/یادداشت هر جعبه را جدا تنظیم کنید؛ کد چاپی ثابت می‌ماند.
         </p>
         {list.length === 0 ? (
           <EmptyState title="جعبه‌ای یافت نشد" desc="با ثبت تولید روزانه، کد جعبه‌ها خودکار ساخته می‌شود." icon={<Boxes className="h-5 w-5" />} />
         ) : (
           <div className="max-h-[480px] overflow-y-auto thin-scroll space-y-1.5">
             {list.map(b => (
-              <div key={b.id} className="flex items-center gap-3 rounded-lg border px-3 py-2">
+              <div key={b.id} className="flex items-center gap-2 rounded-lg border px-3 py-2">
                 <code className="rounded bg-primary/5 border border-primary/20 px-2 py-0.5 text-xs font-bold waffly-num" dir="ltr">{b.code}</code>
-                <span className="text-xs text-muted-foreground flex-1 truncate">{btName(b.breadTypeId)} • {prettyJalali(b.date)} • <Num value={b.count} /> عدد</span>
+                <span className="text-xs text-muted-foreground flex-1 min-w-0 truncate">
+                  {btName(b.breadTypeId)} • {prettyJalali(b.date)} • <Num value={b.count} /> عدد
+                  {b.note ? ` • ${b.note}` : ''}
+                </span>
+                {!!b.hasEssence && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 text-violet-700 text-[10px] px-2 py-0.5 shrink-0">
+                    <Sparkles className="h-3 w-3" /> {b.essenceType || 'اسانس'}
+                  </span>
+                )}
+                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground" aria-label="ویرایش جعبه"
+                  onClick={() => setEditBox(b)}>
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-muted-foreground hover:text-red-600" aria-label="حذف جعبه"
+                  onClick={() => { void removeRecord('boxes', b.id) }}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
               </div>
             ))}
           </div>
         )}
       </CardContent>
+      <BoxEditDialog box={editBox} breadTypes={breadTypes} onClose={() => setEditBox(null)} />
     </Card>
   )
 }
@@ -323,14 +424,12 @@ function ConsumptionTab() {
         </CardHeader>
         <CardContent className="space-y-4">
           <FormRow label="ماده اولیه">
-            <Select value={form.materialId} onValueChange={v => setForm(f => ({ ...f, materialId: v }))}>
-              <SelectTrigger className="h-11"><SelectValue placeholder="انتخاب کنید" /></SelectTrigger>
-              <SelectContent>
-                {active(materials).map(m => (
-                  <SelectItem key={m.id} value={m.id}>{m.name} ({m.unit})</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <InlinePicker
+              value={form.materialId}
+              options={active(materials).filter(m => m.active !== 0).map(m => ({ value: m.id, label: m.name, hint: m.unit }))}
+              onChange={v => setForm(f => ({ ...f, materialId: v }))}
+              placeholder="انتخاب کنید"
+            />
           </FormRow>
           <FormRow label="مقدار مصرف" hint={mat ? `واحد: ${mat.unit}` : undefined}>
             <Input inputMode="decimal" className="waffly-num-input h-11" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} placeholder="۰" />
@@ -431,5 +530,97 @@ function TypesTab() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+// ================= دیالوگ ویرایش جعبه (مشترک) =================
+function BoxEditDialog({ box, breadTypes, onClose }: {
+  box: Box | null
+  breadTypes: BreadType[]
+  onClose: () => void
+}) {
+  const [breadTypeId, setBreadTypeId] = useState('')
+  const [hasEssence, setHasEssence] = useState(false)
+  const [essenceType, setEssenceType] = useState(ESSENCE_TYPES[0] || '')
+  const [note, setNote] = useState('')
+
+  useEffect(() => {
+    if (box) {
+      setBreadTypeId(box.breadTypeId)
+      setHasEssence(!!box.hasEssence)
+      setEssenceType(box.essenceType || ESSENCE_TYPES[0] || '')
+      setNote(box.note || '')
+    }
+  }, [box])
+
+  if (!box) return null
+  const parsed = parseBoxCode(box.code)
+  const currentBt = breadTypes.find(b => b.id === breadTypeId)
+  const codeMismatch = !!(parsed && currentBt && parsed.typeCode !== currentBt.code)
+
+  const save = async () => {
+    await putRecord<Box>('boxes', {
+      ...box,
+      breadTypeId,
+      hasEssence: hasEssence ? 1 : 0,
+      essenceType: hasEssence ? (essenceType || null) : null,
+      note: note.trim() ? note.trim() : null,
+      updatedAt: 0,
+      deleted: 0,
+    })
+    toast({ title: 'جعبه ویرایش شد', description: 'کد چاپی جعبه ثابت ماند.' })
+    onClose()
+  }
+
+  return (
+    <Dialog open={!!box} onOpenChange={v => { if (!v) onClose() }}>
+      <DialogContent className="max-w-md max-h-[90dvh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex flex-wrap items-center gap-2">
+            ویرایش جعبه
+            <code className="waffly-num text-xs bg-muted px-2 py-0.5 rounded border" dir="ltr">{box.code}</code>
+          </DialogTitle>
+          <DialogDescription>کد چاپی جعبه ثابت می‌ماند (شناسه تاریخی)؛ فقط مشخصات داخلی تغییر می‌کند.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <FormRow label="نوع نان این جعبه">
+            <InlinePicker
+              value={breadTypeId}
+              options={active(breadTypes).map(b => ({ value: b.id, label: b.name, hint: `کد ${b.code}` }))}
+              onChange={setBreadTypeId}
+              placeholder="انتخاب کنید"
+            />
+          </FormRow>
+          {codeMismatch && (
+            <p className="rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-[11px] leading-5 px-3 py-2">
+              هشدار: کد چاپی این جعبه مربوط به کد نوع «{parsed?.typeCode}» است و با نوع انتخابی «{currentBt?.code}» یکی نیست؛ کد ثابت می‌ماند و فقط نوع داخلی عوض می‌شود.
+            </p>
+          )}
+          <div className="flex items-center justify-between rounded-xl border p-3">
+            <div>
+              <p className="text-xs font-bold flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> اسانس‌دار</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">این جعبه حاوی نان اسانس‌دار است</p>
+            </div>
+            <Switch checked={hasEssence} onCheckedChange={setHasEssence} />
+          </div>
+          {hasEssence && (
+            <FormRow label="طعم اسانس">
+              <InlinePicker
+                value={essenceType}
+                options={ESSENCE_TYPES.map(t => ({ value: t, label: t }))}
+                onChange={setEssenceType}
+              />
+            </FormRow>
+          )}
+          <FormRow label="یادداشت جعبه" hint="مثلاً توضیح تغییر نوع نان یا وضعیت ویژه">
+            <Input value={note} onChange={e => setNote(e.target.value)} className="h-11" />
+          </FormRow>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>انصراف</Button>
+          <Button onClick={save}>ذخیره</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

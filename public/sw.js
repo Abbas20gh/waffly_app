@@ -5,7 +5,9 @@
 //  - API سینک: هرگز کش نمی‌شود
 //  - صفحه آفلاین fallback
 
-const CACHE = 'waffly-v2'
+// نسخه کش در زمان build تزریق می‌شود (build-pages.mjs جای __WAFFLY_BUILD__ را پر می‌کند)
+// تا هر دیپلوی، کش کاربران را باطل کند و آخرین نسخه بگیرند
+const CACHE = 'waffly-v__WAFFLY_BUILD__'
 const APP_SHELL = ['/', '/manifest.webmanifest', '/favicon.png', '/icons/logo-64.png']
 
 self.addEventListener('install', (event) => {
