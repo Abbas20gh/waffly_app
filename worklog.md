@@ -360,3 +360,21 @@ Work Log:
 Stage Summary:
 - کد جعبه حالا هم کوتاه (۵ رقم) هم معنادار است: دو رقم اول ماه، دو رقم بعد روز، رقم آخر شمارهٔ جعبهٔ همان روز — برای تشخیص تازگی نان از روی کد چاپی مناسب است
 - یکتایی در سطح روز (شامل نوبت‌های صبح/عصر و همهٔ انواع) تضمین می‌شود و بازنویسی کدهای چاپی قبلی رخ نمی‌دهد
+
+---
+Task ID: 19
+Agent: Main Agent (Super Z)
+Task: انتشار وب v2.5.2 در Cloudflare Pages با توکن کاربر
+
+Work Log:
+- کاربر توکن Cloudflare (cfut_…) و سپس Account ID را ارسال کرد
+- توکن معتبر بود ولی /accounts خالی برمی‌گشت (بدون دسترسی Account Settings:Read) → Account ID از داشبورد کاربر گرفته شد
+- تأیید دسترسی: GET /accounts/{id}/pages/projects/waffly → 200 (پروداکشن: main، دامنه: waffly.pages.dev)
+- دیپلوی: npx wrangler@3.112.0 pages deploy out --project-name=waffly --branch main → 101 فایل (۲۹ جدید) + Functions bundle موفق
+- تأیید نسخهٔ زنده: چانک‌های waffly.pages.dev دقیقاً = بیلد محلی out/ (LIVE_EQUALS_LOCAL_BUILD) + مارکر فارسی «ماه + روز» در JS زنده پیدا شد
+- سلامت API: OPTIONS /api/sync/push → 204 با CORS * (حیاتی برای APK)؛ GET /api/sync/pull → دادهٔ واقعی Turso برگشت
+- توکن و Account ID در هیچ فایل/کامیتی ذخیره نشدند (فقط env لحظهٔ دیپلوی)
+
+Stage Summary:
+- waffly.pages.dev الان نسخهٔ ۲.۵.۲ است: کد جعبهٔ معنایی ۵ رقمی (ماه+روز+شمارهٔ همان روز) زنده شد
+- همگام‌سازی سرور/Turso سالم و CORS فعال — APK v2.5.2 هم بدون تغییر گواهی (a31b9080…cda) آمادهٔ نصب است
