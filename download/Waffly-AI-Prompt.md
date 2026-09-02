@@ -15,7 +15,7 @@
 | آدرس production | https://waffly.pages.dev |
 | دیتابیس مرکزی | Turso: `libsql://waffly-db-abbas20gh.aws-eu-west-1.turso.io` |
 | ریپو گیت‌هاب | https://github.com/Abbas20gh/waffly_app (برنچ `main`) |
-| نسخه فعلی | v1.0 — فایل APK امضاشده: `download/Waffly-v1.0.apk` |
+| نسخه فعلی | **v2.0** (versionCode 3) — APK امضاشده: `download/Waffly-v2.0.apk` (v1.0 هم نگه‌داری شده) |
 | وضعیت | **زنده و در حال استفاده واقعی** — داده واقعی روی Turso و گوشی کاربر است؛ از دست رفتن داده فاجعه است |
 
 ## ۲) استک فناوری (با نسخه‌های دقیق)
@@ -89,7 +89,7 @@
 └── mini-services/sync-service/     ← سرویس socket.io پورت 3003 (فقط برای real-time سندباکس — در production بی‌اثر)
 ```
 
-## ۵) دیتابیس — ۱۵ جدول
+## ۵) دیتابیس — ۱۷ جدول فیزیکی (۱۶ سینک‌پذیر + SyncLog)
 
 نام فیزیکی جدول = نام مدل Prisma (PascalCase مثل `BreadType`) — بدون `@@map`. نام منطقی (در API/کلاینت) camelCase مثل `breadTypes`. نگاشت کامل در `PHYS` داخل `functions/api/_sync.ts`.
 
@@ -99,21 +99,22 @@
 |---|---|---|
 | 1 | breadTypes | name, code (کد ۲ رقمی برای کد جعبه), active(0/1) |
 | 2 | productions | date, breadTypeId, totalProduced, boxesCount, perBoxCount, waste, carriedFrom? (تاریخ اصلی اگر از دیروز منتقل شده), note?, createdBy? — ایندکس date |
-| 3 | boxes | code (۱۰ رقمی TTDDMMNNSS), productionId, breadTypeId, count, date — ایندکس code/date |
-| 4 | materials | name, unit (کیلوگرم/کیسه/…), minStock |
+| 3 | boxes | code (۱۰ رقمی TTDDMMNNSS), productionId, breadTypeId, count, date, hasEssence (0/1 — اسانس در سطح هر جعبه), essenceType? (مثل پرتقالی — لیست ثابت ESSENCE_TYPES در types.ts، قابل‌گسترش), note? — ایندکس code/date/productionId |
+| 4 | materials | name, unit (کیلوگرم/گرم/…), minStock, active (0/1 — غیرفعال فقط از انتخاب‌گرها حذف می‌شود، رکوردهای تاریخی می‌مانند) |
 | 5 | consumptions | date, materialId, quantity, note?, createdBy? — ایندکس date |
 | 6 | customers | name, phone?, address?, cooperationType? |
 | 7 | sales | date, customerId, **items (رشته JSON آرایه SaleItem: {breadTypeId, qty, unitPrice, delivered, returned, returnCost})**, totalAmount, settledStatus (PAID/PARTIAL/UNPAID), paidAmount, paymentMethod (CASH/CARD/TRANSFER/CHECK), checkDueDate?, checkNumber?, checkBank?, paymentDate? (تاریخ وصول واقعی), note?, createdBy? — ایندکس date/customerId |
 | 8 | suppliers | name, phone?, address? |
 | 9 | purchases | date, materialId, quantity, cost, supplierId?, settledStatus, paidAmount, note?, createdBy? — ایندکس date |
 | 10 | machines | name, kind (BAKING=تجهیزات نانوایی / BUSINESS=دستگاه‌سازی تجاری), startDate, status (IN_PROGRESS/DONE/PAUSED), note? |
-| 11 | machineCosts | machineId, kind (CONSUMABLE مصرفی / CAPITAL سرمایه‌ای), name, quantity, date, cost — ایندکس machineId |
+| 11 | machineCosts | machineId, kind (CONSUMABLE مصرفی / CAPITAL سرمایه‌ای), name, quantity, date, cost, note? — ایندکس machineId |
 | 12 | expenseCategories | name, includeInProfit (0/1 — آیا در محاسبه سود دوره بیاید) |
 | 13 | expenses | date, categoryId, amount, description?, createdBy? — ایندکس date |
-| 14 | settings | businessName (پیش‌فرض Waffly), monthStartDay (روز شروع دوره حسابداری، پیش‌فرض ۱), badDebtDays (آستانه بدحسابی، پیش‌فرض ۳۰), checkAlertDays (هشدار سررسید چک، پیش‌فرض ۷) — رکورد واحد با id=`main` |
-| 15 | SyncLog | seq (autoincrement)، tbl، rid، ts — ثبت هر تغییر برای pull افزایشی؛ عمداً در production خالی شروع شد چون bootstrap از `/api/sync/full` می‌آید |
+| 14 | otherFunds | date, type (IN ورود / OUT خروج), amount, **description (الزامی — منشأ پول)** — ⚠️ **هرگز در فرمول‌های سود calc.ts استفاده نشود**؛ فقط کارت جدا «سایر وجوه» در dashboard/accounting — ایندکس date |
+| 15 | settings | businessName (پیش‌فرض Waffly), monthStartDay (روز شروع دوره حسابداری، پیش‌فرض ۱), badDebtDays (آستانه بدحسابی، پیش‌فرض ۳۰), checkAlertDays (هشدار سررسید چک، پیش‌فرض ۷) — رکورد واحد با id=`main` |
+| 16 | SyncLog | seq (autoincrement)، tbl، rid، ts — ثبت هر تغییر برای pull افزایشی؛ tbl با **نام منطقی camelCase** ذخیره می‌شود |
 
-**Seed اولیه (ensureSeed — فقط وقتی DB خالی است، گارد وجود `seed-bt-01`):** Setting `main` + ۵ نوع نان (نان بزرگ/متوسط/بینابینی/خرد ریزه/کاسه‌ای با کدهای ۰۱ تا ۰۵) + ۶ ماده اولیه (آرد، شکر، مایه خمیر، نمک، روغن مایع، کارتن بسته‌بندی) + ۴ سرفصل هزینه — جمعاً ۱۷ ردیف.
+**Seed اولیه (ensureSeed — فقط وقتی DB خالی است، گارد وجود `seed-bt-01`):** Setting `main` + ۵ نوع نان + ۱۰ ماده اولیه (آرد، شکر، مایه خمیر **active=0**، نمک، روغن مایع، کارتن بسته‌بندی، لسیتین گرم، وانیل گرم، آرد سبوس‌دار) + ۴ سرفصل هزینه. اسکریپت مهاجرت داده‌های موجود: `scripts/migrate-v2.mjs` (idempotent — ستون‌ها + جدول + seed + ثبت SyncLog).
 
 ## ۶) API سینک — دو پیاده‌سازی موازی با پاریتی اجباری
 
@@ -127,7 +128,7 @@
 | `GET /api` | — | Hello world | health |
 | `POST /api/sync/push` | `{ops:[{tbl,row}]}` | `{accepted}` | LWW: اگر ردیف سرور جدیدتر یا هم‌زمان بود skip ولی در `accepted` شمرده می‌شود تا outbox کلاینت پاک شود؛ batch درج با `INSERT OR REPLACE` |
 | `GET /api/sync/pull?since=&limit=` | cursor | `{rows:[{tbl,row}], cursor, hasMore}` | افزایشی از SyncLog با seq>since، به‌ترتیب، صفحه‌بندی |
-| `GET /api/sync/full` | — | `{rows:[{tbl,row}], cursor, serverTime}` | snapshot کامل ۱۴ جدول برای bootstrap دستگاه جدید |
+| `GET /api/sync/full` | — | `{rows:[{tbl,row}], cursor, serverTime}` | snapshot کامل ۱۶ جدول برای bootstrap دستگاه جدید |
 | `POST /api/backup` | — | فایل/لیست بکاپ | فقط Node؛ کپی SQLite با نگهداشت ۱۴ نسخه + auto روزانه؛ روی serverless → 501 با پیام فارسی |
 
 - **شکل `row` در پاسخ‌ها با نام استورهای کلاینت (camelCase مثل `breadTypes`) است.**
@@ -152,7 +153,7 @@
 - `pullIncremental`: حلقه صفحات ۳۰۰تایی با cursor و گارد حداکثر ۲۰۰ دور
 - `bootstrap`: **فقط وقتی دستگاه خالی است** — اگر `sales+productions+customers` لوکال > 0 باشد bootstrap نمی‌کند (حفظ داده کاربر) و فقط `markBootstrapped`
 - `syncNow`: قفل با `running` + صف `syncQueued`؛ ترتیب: bootstrap → push → pull
-- `startSyncEngine`: listeners برای `online/offline/waffly-data-changed/visibilitychange` + `setInterval` هر ۲۰ ثانیه + socket اختیاری؛ تابع پاک‌سازی برمی‌گرداند
+- `startSyncEngine`: listeners برای `online/offline/waffly-data-changed/visibilitychange/focus` + `setInterval` هر ۲۰ ثانیه + **listeners کپاسیتور (`appStateChange` + `resume` با import پویا از @capacitor/app) — هر برگشت از پس‌زمینه اندروید فوراً syncNow** چون WebView تایمرها را throttle می‌کند و visibilitychange همیشه fire نمی‌شود؛ socket.io فقط با env صریح `NEXT_PUBLIC_SOCKET_URL` فعال می‌شود (در production/APK فقط polling)؛ تابع پاک‌سازی برمی‌گرداند
 - `repairSync`: همه رکوردهای محلی را دوباره در outbox می‌ریزد (ابزار تعمیر دستی از تنظیمات)
 - state سینک: `{online, syncing, pendingCount, lastSyncAt, error}` با `useSyncStore()`
 
@@ -161,14 +162,14 @@
 | نما | قابلیت‌ها |
 |---|---|
 | **dashboard** | ۵ کارت خلاصه + ۳ نمودار Recharts + هشدارها (موجودی بحرانی مواد، چک‌های نزدیک به سررسید `checkAlertDays`، بدحسابی‌ها) |
-| **production** | ثبت تولید روزانه (نوع نان، تعداد کل، تعداد جعبه، تعداد در هر جعبه، ضایعات، انتقال از روز قبل با `carriedFrom`)، تولید خودکار و کدگذاری جعبه‌ها، ثبت مصرف مواد |
+| **production** | ثبت تولید روزانه (نوع نان، تعداد کل، تعداد جعبه، تعداد در هر جعبه، ضایعات، انتقال از روز قبل با `carriedFrom`)، تولید خودکار جعبه‌ها با کد TTDDMMNNSS + **بخش اختیاری اسانس در فرم (طعم از ESSENCE_TYPES + تعداد جعبه اسانس‌دار)**، **بخش بازشدنی «جعبه‌های این تولید» در کارت هر تولید با ویرایش/حذف تک‌تک جعبه‌ها** (دیالوگ ویرایش: نوع نان با هشدار ناهرمانی کد چاپی، سوییچ اسانس‌دار + طعم، یادداشت — کد چاپی ثابت می‌ماند)، مصرف مواد |
 | **sales** | فروش **چندقلمی** (آیتم‌ها: نوع نان/تعداد/قیمت واحد/تحویلی/مرجوعی/هزینه مرجوع)، تسویه کامل و **جزئی** (`paidAmount`)، روش پرداخت نقد/کارت/کارت‌به‌کارت/**چک** (سررسید، شماره، بانک)، تاریخ وصول واقعی، مدیریت بدحسابی، مشتری‌ها با نوع همکاری |
-| **purchases** | خرید مواد با قیمت و تامین‌کننده، موجودی انبار = خرید−مصرف با **حد بحرانی** (minStock) و میانگین قیمت، تسویه خریدها، تامین‌کننده‌ها |
+| **purchases** | خرید مواد با قیمت و تامین‌کننده، موجودی انبار = خرید−مصرف با **حد بحرانی** (minStock) و میانگین قیمت، تسویه خریدها، تامین‌کننده‌ها، **مدیریت اقلام با فعال/غیرفعال** (غیرفعال از انتخاب‌گرهای خرید/مصرف حذف می‌شود ولی در لیست اقلام با نشان دیده می‌شود) |
 | **machines** | دو نوع پروژه: تجهیزات نانوایی (BAKING) / دستگاه‌سازی تجاری (BUSINESS)؛ هزینه‌های مصرفی (CONSUMABLE) و سرمایه‌ای (CAPITAL)؛ سرمایه‌ای در سود دوره از مبنا جدا می‌شود |
-| **accounting** | دوره حسابداری با **روز شروع دلخواه** (`monthStartDay`)، سود با **۳ مبنا**، تفکیک هزینه‌های `includeInProfit`، خروجی **اکسل/PDF/چاپ** (xlsx + jspdf + html2canvas-pro) |
+| **accounting** | دوره حسابداری با **روز شروع دلخواه** (`monthStartDay`)، سود با **۳ مبنا**، تفکیک هزینه‌های `includeInProfit`، **بخش «سایر وجوه (خارج از حساب سود)» — ثبت/حذف IN/OUT با توضیح الزامی + خلاصه ورود/خروج/خالص که در هیچ فرمول سود وارد نمی‌شود**، خروجی **اکسل/PDF/چاپ** (xlsx + jspdf + html2canvas-pro) |
 | **settings** | نام کسب‌وکار، monthStartDay، badDebtDays، checkAlertDays، انتخاب کاربر فعال، بکاپ/دانلود دیتابیس (با API_BASE)، **تعمیر سینک** (repairSync)، نصب PWA (بنر + راهنمای iOS)، `storage.persist` |
 
-اجزای مشترک: `app-shell` (هدر سبز تیره `#13201A` با لوگو + سایدبار دسکتاپ + منوی کشویی موبایل + منوی کاربر فعال + `SyncBadge` + تاریخ شمسی امروز با کلاس `waffly-num`، هدر با `env(safe-area-inset-top)`)، `jalali-date` (پیکر شمسی با **نرمال‌سازی ارقام فارسی در onChange**)، `bits` (قطعات کوچک UI)، `sw-register` (ثبت SW با گارد `window.Capacitor`).
+اجزای مشترک: `app-shell` (هدر سبز تیره `#13201A` با لوگو + سایدبار دسکتاپ + منوی کشویی موبایل + منوی کاربر فعال + `SyncBadge` + تاریخ شمسی امروز با کلاس `waffly-num`، هدر با `env(safe-area-inset-top)`)، `jalali-date` (پیکر شمسی با **نرمال‌سازی ارقام فارسی در onChange**)، **`inline-picker` (پیکر بدون Portal با position:fixed — جایگزین اجباری `<Select>` داخل `<Dialog>` چون در WebView اندروید Radix Select داخل Dialog باز نمی‌شود)**، `bits` (قطعات کوچک UI)، `sw-register` (ثبت SW با گارد `window.Capacitor`).
 
 ## ۹) منطق کسب‌وکار (`calc.ts`، `boxcode.ts`، `jalali.ts`)
 
@@ -209,12 +210,16 @@ npx cap sync android          # خروجی out/ را داخل پروژه اند�
 cd android && JAVA_HOME=<مسیر jdk21> ./gradlew assembleRelease
 # خروجی: android/app/build/outputs/apk/release/app-release.apk
 ```
-- appId: `com.abbas20gh.waffly` — keystore: `android/keystore/waffly.keystore` + `android/keystore.properties` (پسورد فعلاً عمداً در ریپو است برای امضای یکسان؛ **قبل از انتشار در Play حتماً چرخش شود**)
+- appId: `com.abbas20gh.waffly` — **نسخه فعلی: versionCode 3 / versionName "2.0"** (در android/app/build.gradle — با هر آپدیت حتماً بالا برود)
+- **آپدیت‌پذیری بدون حذف:** با همان applicationId + همان keystore، نصب APK جدید روی قبلی = آپدیت با حفظ داده؛ SHA-256 گواهی v1.0 و v2.0 یکسان است: `a31b9080…cda` (keystore: `android/keystore/waffly.keystore` + `keystore.properties` — قبل از انتشار Play چرخش شود)
 - ثبت Service Worker داخل Capacitor غیرفعال است (گارد `window.Capacitor` در `sw-register.tsx` — حفظ شود)
-- فایل APK فعلی: `download/Waffly-v1.0.apk` (v1.0، امضاشده)
+- فایل APK فعلی: `download/Waffly-v2.0.apk` (v2.0، versionCode 3، امضاشده) + v1.0 نگه‌داری شده
+- پلاگین `@capacitor/app` نصب است — listenerهای `appStateChange/resume` سینک فوری بعد از برگشت از پس‌زمینه (رفع باگ دیده‌نشدن داده وب روی گوشی)
+- **نسخه‌گذاری SW:** `sw.js` placeholder `__WAFFLY_BUILD__` دارد که build-pages.mjs بعد از بیلد با شناسه یکتا پر می‌کند — هر دیپلوی کش PWA را باطل می‌کند
 
 **دیتابیس Turso:**
-- راه‌اندازی/انتقال: `node scripts/turso-setup.mjs [--data]` (ساخت ۱۵ جدول از اسکیما + INSERT OR REPLACE با گارد ضدتداخل)
+- راه‌اندازی/انتقال: `node scripts/turso-setup.mjs [--data]` (ساخت ۱۷ جدول از اسکیما + INSERT OR REPLACE با گارد ضدتداخل)
+- مهاجرت نسخه‌ای: `scripts/migrate-v2.mjs` (v2) — الگوی مهاجرت‌های بعدی هم همین: idempotent + ثبت SyncLog
 - مقایسه تعداد ردیف‌ها با لوکال: `node scripts/compare-counts.mjs`
 
 **dev لوکال:** `npm install` (postinstall = prisma generate) → `npx prisma db push` → `npm run dev` (پورت 3000) — با `DATABASE_URL=file:...` SQLite لوکال؛ seed خودکار در اولین درخواست ساخته می‌شود.
@@ -236,12 +241,14 @@ cd android && JAVA_HOME=<مسیر jdk21> ./gradlew assembleRelease
 11. **متن‌های UI فارسی و RTL**؛ تاریخ شمسی؛ نمایش اعداد فارسی ولی ذخیره لاتین.
 12. **Turso منبع حقیقت است و داده واقعی دارد** — روی production با داده واقعی آزمایش نکن؛ تست فقط با ردیف‌های آزمایشی که بعد پاک می‌شوند.
 
-## ۱۳) وضعیت فعلی و نکات شناخته‌شده (سپتامبر ۲۰۲۶ / شهریور ۱۴۰۵)
+## ۱۳) وضعیت فعلی و نکات شناخته‌شده (سپتامبر ۲۰۲۶ — نسخه v2.0)
 
-- production سبز: صفحه اصلی 200، `/api` سلامت، `/api/sync/full` → ۱۷ ردیف seed، `/api/sync/pull` سالم
-- داده Turso هنگام دیپلوی: BreadType:5، Material:7، ExpenseCategory:4، Setting:1 (+ هر داده‌ای که کاربر بعداً روی گوشی ثبت کرده)
+- production سبز: صفحه اصلی 200، `/api` سلامت، full شامل ۱۰ ماده (سه ماده جدید + مایه خمیر غیرفعال)، جدول `OtherFund` فعال؛ تست E2E push→pull→تومب‌استون روی production پاس شد (نرمال‌سازی ارقام فارسی تاریخ سرور هم تست شد)
+- **باگ سینک وب↔گوشی (v1) رفع شد:** ریشه = توقف JS در پس‌زمینه اندروید؛ راه‌حل = listenerهای کپاسیتور + focus + گارد socket
+- **باگ Select در دیالوگ (v1) رفع شد:** ریشه = Portal تو در تو در WebView؛ راه‌حل = InlinePicker بدون Portal
+- **مهاجرت v2 روی Turso اجرا شد:** ستون‌های active/hasEssence/essenceType/note + جدول OtherFund + غیرفعال‌شدن مایه خمیر + افزودن لسیتین/وانیل/آرد سبوس‌دار با ثبت SyncLog؛ بکاپ کامل قبل مهاجرت در `db/turso-backup-*.json` (لوکال)
 - **باگ تاریخی رفع‌شده که باید بدانی:** پیکر تاریخ ارقام فارسی برمی‌گرداند → تاریخ‌های خراب در DB مقایسه رشته‌ای را می‌شکنند → راه‌حل: نرمال‌سازی دو لایه (بند ۱۲-۴) و ترمیم رکورد خراب با push دستی
-- SyncLog در production خالی است — طبیعی و عمدی (bootstrap دستگاه‌ها از `/api/sync/full`)
+- SyncLog در production فعال است (هر push یک ردیف می‌نویسد) — cursor دستگاه‌ها با آن پیش می‌رود
 - سرویس socket.io در `mini-services/` فقط برای real-time محیط سندباکس است؛ روی Cloudflare بی‌اثر (polling 20s)
 - توکن‌های حساس (CF/Turso) در این سند و در سورس **هست نیستند** — در Cloudflare Dashboard (secrets پروژه Pages) و `.env` لوکال کاربر هستند؛ به AI داده نشوند
 - `.github/workflows/build-apk.yml` (CI ساخت APK) روی دیسک آماده است ولی تا وقتی توکن گیت‌هاب scope Actions/Workflow ندارد از push عمداً خارج مانده (در `.gitignore`)
