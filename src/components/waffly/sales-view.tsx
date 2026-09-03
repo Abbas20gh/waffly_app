@@ -4,7 +4,7 @@
 import { useMemo, useState } from 'react'
 import { toast } from '@/hooks/use-toast'
 import {
-  ShoppingCart, Plus, Trash2, Users, Landmark, AlertOctagon, Check, Wallet, Phone,
+  ShoppingCart, Plus, Trash2, Users, Landmark, AlertOctagon, Check, Wallet, Phone, Pencil,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -60,6 +60,7 @@ function SalesTab() {
   const breadTypes = useTable<BreadType>('breadTypes')
   const goods = useTable<Good>('goods')
   const [open, setOpen] = useState(false)
+  const [editing, setEditing] = useState<Sale | null>(null)
   const [filter, setFilter] = useState<'all' | 'unpaid' | 'checks'>('all')
 
   const emptyItem: SaleItem = { breadTypeId: '', qty: 0, unitPrice: 0, delivered: 0, returned: 0, returnCost: 0, kind: 'BREAD' }
@@ -82,6 +83,7 @@ function SalesTab() {
   const grandTotal = Math.max(0, itemsTotal - returnTotal)
 
   const openNew = () => {
+    setEditing(null)
     setForm({
       date: todayJalali(),
       customerId: '',
@@ -94,6 +96,26 @@ function SalesTab() {
       checkBank: '',
       paymentDate: '',
       note: '',
+    })
+    setOpen(true)
+  }
+
+  const openEdit = (s: Sale) => {
+    let items: SaleItem[] = []
+    try { items = (JSON.parse(s.items || '[]') as SaleItem[]).map(it => ({ ...it })) } catch { /* JSON خراب → خالی */ }
+    setEditing(s)
+    setForm({
+      date: s.date,
+      customerId: s.customerId,
+      items: items.length ? items : [{ ...emptyItem }],
+      settledStatus: s.settledStatus,
+      paidAmount: s.settledStatus === 'PARTIAL' ? String(s.paidAmount || '') : '',
+      paymentMethod: s.paymentMethod || 'CASH',
+      checkDueDate: s.checkDueDate || '',
+      checkNumber: s.checkNumber || '',
+      checkBank: s.checkBank || '',
+      paymentDate: s.paymentDate || '',
+      note: s.note || '',
     })
     setOpen(true)
   }
@@ -114,7 +136,9 @@ function SalesTab() {
       ? 'PAID'
       : paid > 0.5 ? 'PARTIAL' : 'UNPAID'
     await putRecord<Sale>('sales', {
-      id: uid(),
+      ...(editing || {}),
+      id: editing ? editing.id : uid(),
+      updatedAt: editing ? editing.updatedAt : 0,
       date: form.date,
       customerId: form.customerId,
       items: JSON.stringify(items),
@@ -127,12 +151,12 @@ function SalesTab() {
       checkBank: form.paymentMethod === 'CHECK' ? (form.checkBank || null) : null,
       paymentDate: status === 'PAID' ? (form.paymentDate || null) : (form.paymentDate || null),
       note: form.note || null,
-      createdBy: getActiveUser() || null,
-      updatedAt: 0,
+      createdBy: editing?.createdBy ?? (getActiveUser() || null),
       deleted: 0,
     })
-    toast({ title: 'فروش ثبت شد', description: `${faMoney(grandTotal)} تومان` })
+    toast({ title: editing ? 'فروش ویرایش شد' : 'فروش ثبت شد', description: `${faMoney(grandTotal)} تومان` })
     setOpen(false)
+    setEditing(null)
   }
 
   const quickSettle = async (s: Sale) => {
@@ -193,6 +217,14 @@ function SalesTab() {
                       <SettleBadge status={st} paid={s.paidAmount} total={s.totalAmount} />
                       <Money value={s.totalAmount} className="font-bold text-sm" />
                       <span className="text-[10px] text-muted-foreground">تومان</span>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" aria-label="ویرایش"
+                        onClick={() => openEdit(s)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" aria-label="حذف"
+                        onClick={() => void removeRecord('sales', s.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                     <p className="text-[11px] text-muted-foreground waffly-num">
                       {items.map((it, i) => {
@@ -219,7 +251,8 @@ function SalesTab() {
       </Card>
 
       <SaleFormDialog
-        open={open} onOpenChange={setOpen}
+        open={open} onOpenChange={v => { setOpen(v); if (!v) setEditing(null) }}
+        isEdit={!!editing}
         form={form} setForm={setForm}
         customers={active(customers)} breadTypes={active(breadTypes)} goods={active(goods).filter(g => g.active !== 0)}
         itemsTotal={itemsTotal} returnTotal={returnTotal} grandTotal={grandTotal}
@@ -235,9 +268,10 @@ function SalesTab() {
   )
 }
 
-function SaleFormDialog({ open, onOpenChange, form, setForm, customers, breadTypes, goods, itemsTotal, returnTotal, grandTotal, onSave, onQuickAddCustomer }: {
+function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, breadTypes, goods, itemsTotal, returnTotal, grandTotal, onSave, onQuickAddCustomer }: {
   open: boolean
   onOpenChange: (v: boolean) => void
+  isEdit?: boolean
   form: {
     date: string; customerId: string; items: SaleItem[]
     settledStatus: Sale['settledStatus']; paidAmount: string
@@ -272,8 +306,8 @@ function SaleFormDialog({ open, onOpenChange, form, setForm, customers, breadTyp
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[92dvh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>ثبت فروش</DialogTitle>
-          <DialogDescription>نان‌ها و کالاها (مثل مشعلی و فانتزی) را انتخاب کنید؛ کالاها با واحد «جعبه» ثبت می‌شوند و جمع خودکار حساب می‌شود.</DialogDescription>
+          <DialogTitle>{isEdit ? 'ویرایش فروش' : 'ثبت فروش'}</DialogTitle>
+          <DialogDescription>{isEdit ? 'همهٔ فیلدها و اقلام قابل تغییر است؛ موجودی و آمار بعد از ذخیره خودکار اصلاح می‌شود.' : 'نان‌ها و کالاها (مثل مشعلی و فانتزی) را انتخاب کنید؛ کالاها با واحد «جعبه» ثبت می‌شوند و جمع خودکار حساب می‌شود.'}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="grid sm:grid-cols-2 gap-3">
@@ -442,7 +476,7 @@ function SaleFormDialog({ open, onOpenChange, form, setForm, customers, breadTyp
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>انصراف</Button>
-          <Button onClick={onSave}>ثبت فروش</Button>
+          <Button onClick={onSave}>{isEdit ? 'ذخیره تغییرات' : 'ثبت فروش'}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -453,20 +487,35 @@ function SaleFormDialog({ open, onOpenChange, form, setForm, customers, breadTyp
 function CustomersTab() {
   const customers = useTable<Customer>('customers')
   const sales = useTable<Sale>('sales')
+  const [editing, setEditing] = useState<Customer | null>(null)
   const [form, setForm] = useState({ name: '', phone: '', address: '', cooperationType: '' })
+
+  const openEdit = (c: Customer) => { setEditing(c); setForm({ name: c.name, phone: c.phone || '', address: c.address || '', cooperationType: c.cooperationType || '' }) }
 
   const save = async () => {
     if (!form.name.trim()) { toast({ title: 'نام مشتری لازم است', variant: 'destructive' }); return }
-    await putRecord<Customer>('customers', {
-      id: uid(),
-      name: form.name.trim(),
-      phone: form.phone || null,
-      address: form.address || null,
-      cooperationType: form.cooperationType || null,
-      updatedAt: 0, deleted: 0,
-    })
+    if (editing) {
+      await putRecord<Customer>('customers', {
+        ...editing,
+        name: form.name.trim(),
+        phone: form.phone || null,
+        address: form.address || null,
+        cooperationType: form.cooperationType || null,
+      })
+      toast({ title: 'مشتری ویرایش شد' })
+    } else {
+      await putRecord<Customer>('customers', {
+        id: uid(),
+        name: form.name.trim(),
+        phone: form.phone || null,
+        address: form.address || null,
+        cooperationType: form.cooperationType || null,
+        updatedAt: 0, deleted: 0,
+      })
+      toast({ title: 'مشتری ذخیره شد' })
+    }
     setForm({ name: '', phone: '', address: '', cooperationType: '' })
-    toast({ title: 'مشتری ذخیره شد' })
+    setEditing(null)
   }
 
   const stats = useMemo(() => {
@@ -486,7 +535,7 @@ function CustomersTab() {
     <div className="grid lg:grid-cols-5 gap-4">
       <Card className="waffly-card lg:col-span-2 h-fit">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2"><Users className="h-4 w-4" /> مشتری جدید</CardTitle>
+          <CardTitle className="text-sm flex items-center gap-2"><Users className="h-4 w-4" /> {editing ? `ویرایش مشتری: ${editing.name}` : 'مشتری جدید'}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <FormRow label="نام و نام خانوادگی / نام مغازه">
@@ -501,7 +550,8 @@ function CustomersTab() {
           <FormRow label="آدرس">
             <Input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} className="h-11" />
           </FormRow>
-          <Button className="w-full h-11" onClick={save}>ذخیره مشتری</Button>
+          <Button className="w-full h-11" onClick={save}>{editing ? 'ذخیره تغییرات' : 'ذخیره مشتری'}</Button>
+          {editing && <Button variant="ghost" className="w-full" onClick={() => { setEditing(null); setForm({ name: '', phone: '', address: '', cooperationType: '' }) }}>انصراف از ویرایش</Button>}
         </CardContent>
       </Card>
 
@@ -528,6 +578,10 @@ function CustomersTab() {
                       {st && st.due > 0.5 && <p className="text-[11px] text-red-600 font-bold waffly-num">بدهی: {faMoney(st.due)}</p>}
                       {st && <p className="text-[10px] text-muted-foreground waffly-num">مجموع: {faMoney(st.total)}</p>}
                     </div>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" aria-label="ویرایش"
+                      onClick={() => openEdit(c)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" aria-label="حذف"
                       onClick={() => void removeRecord('customers', c.id)}>
                       <Trash2 className="h-4 w-4" />

@@ -3,7 +3,7 @@
 // خرید مواد اولیه — خریدها، انبار، تامین‌کنندگان، اقلام
 import { useMemo, useState } from 'react'
 import { toast } from '@/hooks/use-toast'
-import { ShoppingBasket, Plus, Trash2, Warehouse, Truck, PackageSearch, AlertTriangle } from 'lucide-react'
+import { ShoppingBasket, Plus, Trash2, Warehouse, Truck, PackageSearch, AlertTriangle, Pencil } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,6 +22,9 @@ import { cn } from '@/lib/utils'
 type Tab = 'purchases' | 'stock' | 'suppliers' | 'items' | 'goods'
 
 const UNITS = ['کیلوگرم', 'گرم', 'کیسه', 'گونی', 'عدد', 'لیتر', 'بشکه', 'بسته']
+
+/** عدد بدون صفرهای اضافی و با حداکثر ۴ رقم اعشار — برای پیش‌پرکردن فرم ویرایش */
+const trimNum = (n: number) => String(Math.round(n * 10000) / 10000)
 
 export function PurchasesView() {
   const [tab, setTab] = useState<Tab>('purchases')
@@ -54,25 +57,50 @@ function PurchasesTab() {
   const goods = useTable<Good>('goods')
   const suppliers = useTable<Supplier>('suppliers')
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({
+  const [editing, setEditing] = useState<Purchase | null>(null)
+  const blankForm = {
     date: todayJalali(), itemKind: 'MATERIAL' as 'MATERIAL' | 'GOOD', materialId: '',
     quantity: '', cost: '', pricePerBox: '',
     supplierId: '', settledStatus: 'PAID' as Purchase['settledStatus'], paidAmount: '', note: '',
-  })
+  }
+  const [form, setForm] = useState(blankForm)
+
+  const openNew = () => { setEditing(null); setForm({ ...blankForm, date: todayJalali() }); setOpen(true) }
+  const openEdit = (p: Purchase) => {
+    const isG = p.itemKind === 'GOOD'
+    setEditing(p)
+    setForm({
+      date: p.date, itemKind: p.itemKind || 'MATERIAL', materialId: p.materialId,
+      quantity: trimNum(p.quantity), cost: isG ? '' : trimNum(p.cost),
+      pricePerBox: isG && p.quantity > 0 ? trimNum(p.cost / p.quantity) : '',
+      supplierId: p.supplierId || '', settledStatus: p.settledStatus,
+      paidAmount: p.settledStatus === 'PARTIAL' ? trimNum(p.paidAmount || 0) : '',
+      note: p.note || '',
+    })
+    setOpen(true)
+  }
   const mat = form.itemKind === 'MATERIAL' ? materials.find(m => m.id === form.materialId) : undefined
   const good = form.itemKind === 'GOOD' ? goods.find(g => g.id === form.materialId) : undefined
   // کالا همیشه جعبه‌ای است (v2.5) — تعداد جعبه × قیمت هر جعبه
   const isGood = form.itemKind === 'GOOD'
   const qtyNum = parseFloat(form.quantity || '0')
-  const costNum = isGood ? qtyNum * (parseFloat(form.pricePerBox || '0') || 0) : parseFloat(form.cost || '0')
+  // در ویرایش کالا اگر تعداد/قیمت دست‌نخورده باشد هزینهٔ اصلی حفظ می‌شود (بدون خطای گردکردن)
+  const goodCostUntouched = !!editing && isGood &&
+    form.quantity === trimNum(editing.quantity) && form.pricePerBox === (editing.quantity > 0 ? trimNum(editing.cost / editing.quantity) : '')
+  const costNum = isGood
+    ? (goodCostUntouched ? editing!.cost : qtyNum * (parseFloat(form.pricePerBox || '0') || 0))
+    : parseFloat(form.cost || '0')
 
   const switchKind = (kind: 'MATERIAL' | 'GOOD') => setForm(f => ({ ...f, itemKind: kind, materialId: '', quantity: '', cost: '', pricePerBox: '' }))
 
   const save = async () => {
     if (!form.materialId || qtyNum <= 0 || costNum <= 0) { toast({ title: 'قلم، مقدار و هزینه را وارد کنید', variant: 'destructive' }); return }
     const paid = form.settledStatus === 'PAID' ? costNum : parseFloat(form.paidAmount || '0')
+    // ویرایش = همان id با putRecord (updatedAt جدید → سینک)؛ createdBy اصلی حفظ می‌شود
     await putRecord<Purchase>('purchases', {
-      id: uid(),
+      ...(editing || {}),
+      id: editing ? editing.id : uid(),
+      updatedAt: editing ? editing.updatedAt : 0,
       date: form.date,
       materialId: form.materialId,
       quantity: qtyNum,
@@ -83,14 +111,15 @@ function PurchasesTab() {
       itemKind: form.itemKind,
       boxesCount: isGood ? qtyNum : 0,
       note: form.note || null,
-      createdBy: getActiveUser() || null,
-      updatedAt: 0, deleted: 0,
+      createdBy: editing?.createdBy ?? (getActiveUser() || null),
+      deleted: 0,
     })
     toast({
-      title: 'خرید ثبت شد',
+      title: editing ? 'خرید ویرایش شد' : 'خرید ثبت شد',
       description: `${(isGood ? good?.name : mat?.name) || ''}: ${isGood ? `${faDigits(qtyNum)} جعبه` : `${faDigits(qtyNum)} ${(mat?.unit || '')}`} — ${faMoney(costNum)} تومان`,
     })
     setOpen(false)
+    setEditing(null)
     setForm(f => ({ ...f, quantity: '', cost: '', pricePerBox: '', paidAmount: '', note: '' }))
   }
 
@@ -102,7 +131,7 @@ function PurchasesTab() {
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <Button className="h-11" onClick={() => setOpen(true)}><Plus className="ml-1 h-4 w-4" /> خرید جدید</Button>
+        <Button className="h-11" onClick={openNew}><Plus className="ml-1 h-4 w-4" /> خرید جدید</Button>
       </div>
 
       <Card className="waffly-card">
@@ -128,6 +157,10 @@ function PurchasesTab() {
                     </div>
                     <SettleBadge status={st} paid={p.paidAmount} total={p.cost} />
                     <Money value={p.cost} className="font-bold text-sm" />
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" aria-label="ویرایش"
+                      onClick={() => openEdit(p)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" aria-label="حذف"
                       onClick={() => void removeRecord('purchases', p.id)}>
                       <Trash2 className="h-4 w-4" />
@@ -143,7 +176,8 @@ function PurchasesTab() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-md max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>ثبت خرید</DialogTitle>
+            <DialogTitle>{editing ? 'ویرایش خرید' : 'ثبت خرید'}</DialogTitle>
+            {editing && <p className="text-[11px] text-muted-foreground">همهٔ فیلدها قابل تغییر است؛ بعد از ذخیره، موجودی و آمار خودکار به‌روز می‌شود.</p>}
           </DialogHeader>
           <div className="space-y-4">
             <FormRow label="نوع قلم">
@@ -219,8 +253,8 @@ function PurchasesTab() {
             </FormRow>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>انصراف</Button>
-            <Button onClick={save}>ثبت خرید</Button>
+            <Button variant="outline" onClick={() => { setOpen(false); setEditing(null) }}>انصراف</Button>
+            <Button onClick={save}>{editing ? 'ذخیره تغییرات' : 'ثبت خرید'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -358,25 +392,34 @@ function StockTab() {
 
 function GoodsTab() {
   const goods = useTable<Good>('goods')
+  const [editing, setEditing] = useState<Good | null>(null)
   const [form, setForm] = useState({ name: '', minStock: '' })
+
+  const openEdit = (g: Good) => { setEditing(g); setForm({ name: g.name, minStock: g.minStock ? trimNum(g.minStock) : '' }) }
 
   const save = async () => {
     if (!form.name.trim()) { toast({ title: 'نام کالا لازم است', variant: 'destructive' }); return }
-    await putRecord<Good>('goods', {
-      id: uid(), name: form.name.trim(),
-      piecesPerBox: 1, // منسوخ — واحد همه‌جا جعبه است (v2.5)
-      minStock: parseFloat(form.minStock || '0') || 0,
-      active: 1, updatedAt: 0, deleted: 0,
-    })
+    if (editing) {
+      await putRecord<Good>('goods', { ...editing, name: form.name.trim(), minStock: parseFloat(form.minStock || '0') || 0 })
+      toast({ title: 'کالا ویرایش شد' })
+    } else {
+      await putRecord<Good>('goods', {
+        id: uid(), name: form.name.trim(),
+        piecesPerBox: 1, // منسوخ — واحد همه‌جا جعبه است (v2.5)
+        minStock: parseFloat(form.minStock || '0') || 0,
+        active: 1, updatedAt: 0, deleted: 0,
+      })
+      toast({ title: 'کالا اضافه شد' })
+    }
     setForm({ name: '', minStock: '' })
-    toast({ title: 'کالا اضافه شد' })
+    setEditing(null)
   }
 
   return (
     <div className="grid lg:grid-cols-5 gap-4">
       <Card className="waffly-card lg:col-span-2 h-fit">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">کالای جدید (خرید و فروش بدون تولید)</CardTitle>
+          <CardTitle className="text-sm">{editing ? `ویرایش کالا: ${editing.name}` : 'کالای جدید (خرید و فروش بدون تولید)'}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <FormRow label="نام کالا" hint="مثلاً: نان مشعلی، نان فانتزی">
@@ -385,7 +428,8 @@ function GoodsTab() {
           <FormRow label="حد بحرانی هشدار (جعبه)" hint="وقتی موجودی به این تعداد جعبه رسید هشدار می‌دهد">
             <Input inputMode="decimal" className="waffly-num-input h-11" value={form.minStock} onChange={e => setForm(f => ({ ...f, minStock: e.target.value }))} />
           </FormRow>
-          <Button className="w-full h-11" onClick={save}>افزودن کالا</Button>
+          <Button className="w-full h-11" onClick={save}>{editing ? 'ذخیره تغییرات' : 'افزودن کالا'}</Button>
+          {editing && <Button variant="ghost" className="w-full" onClick={() => { setEditing(null); setForm({ name: '', minStock: '' }) }}>انصراف از ویرایش</Button>}
           <p className="text-[11px] text-muted-foreground leading-5">
             کالاها همیشه با واحد «جعبه» ثبت می‌شوند — خرید و فروش جعبه‌ای، بدون نیاز به تعداد داخل جعبه. در همان فاکتور فروش کنار نان‌ها می‌آیند و بهای خریدشان (میانگین موزون هر جعبه) از سود کم می‌شود.
           </p>
@@ -403,6 +447,10 @@ function GoodsTab() {
                   <span className="text-sm font-medium flex-1">{g.name}</span>
                   {g.active === 0 && <span className="rounded-full bg-muted text-muted-foreground text-[10px] px-2 py-0.5">غیرفعال</span>}
                   <span className="text-[11px] text-muted-foreground waffly-num">واحد: جعبه • حد: {faDigits(g.minStock)}</span>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground" aria-label="ویرایش"
+                    onClick={() => openEdit(g)}>
+                    <Pencil className="h-4 w-4" />
+                  </Button>
                   <Button
                     variant="ghost" size="sm" className="h-8 shrink-0 text-[11px]"
                     onClick={() => void putRecord<Good>('goods', { ...g, active: g.active === 0 ? 1 : 0 })}
@@ -426,16 +474,25 @@ function GoodsTab() {
 function SuppliersTab() {
   const suppliers = useTable<Supplier>('suppliers')
   const purchases = useTable<Purchase>('purchases')
+  const [editing, setEditing] = useState<Supplier | null>(null)
   const [form, setForm] = useState({ name: '', phone: '', address: '' })
+
+  const openEdit = (s: Supplier) => { setEditing(s); setForm({ name: s.name, phone: s.phone || '', address: s.address || '' }) }
 
   const save = async () => {
     if (!form.name.trim()) { toast({ title: 'نام تامین‌کننده لازم است', variant: 'destructive' }); return }
-    await putRecord<Supplier>('suppliers', {
-      id: uid(), name: form.name.trim(), phone: form.phone || null, address: form.address || null,
-      updatedAt: 0, deleted: 0,
-    })
+    if (editing) {
+      await putRecord<Supplier>('suppliers', { ...editing, name: form.name.trim(), phone: form.phone || null, address: form.address || null })
+      toast({ title: 'تامین‌کننده ویرایش شد' })
+    } else {
+      await putRecord<Supplier>('suppliers', {
+        id: uid(), name: form.name.trim(), phone: form.phone || null, address: form.address || null,
+        updatedAt: 0, deleted: 0,
+      })
+      toast({ title: 'تامین‌کننده ذخیره شد' })
+    }
     setForm({ name: '', phone: '', address: '' })
-    toast({ title: 'تامین‌کننده ذخیره شد' })
+    setEditing(null)
   }
 
   const stats = useMemo(() => {
@@ -454,12 +511,13 @@ function SuppliersTab() {
   return (
     <div className="grid lg:grid-cols-5 gap-4">
       <Card className="waffly-card lg:col-span-2 h-fit">
-        <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Truck className="h-4 w-4" /> تامین‌کننده جدید</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Truck className="h-4 w-4" /> {editing ? `ویرایش تامین‌کننده: ${editing.name}` : 'تامین‌کننده جدید'}</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           <FormRow label="نام"><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="h-11" /></FormRow>
           <FormRow label="تلفن"><Input inputMode="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="waffly-num h-11" dir="ltr" /></FormRow>
           <FormRow label="آدرس"><Input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} className="h-11" /></FormRow>
-          <Button className="w-full h-11" onClick={save}>ذخیره</Button>
+          <Button className="w-full h-11" onClick={save}>{editing ? 'ذخیره تغییرات' : 'ذخیره'}</Button>
+          {editing && <Button variant="ghost" className="w-full" onClick={() => { setEditing(null); setForm({ name: '', phone: '', address: '' }) }}>انصراف از ویرایش</Button>}
         </CardContent>
       </Card>
       <Card className="waffly-card lg:col-span-3">
@@ -486,6 +544,10 @@ function SuppliersTab() {
                         <p className="text-[10px] text-muted-foreground waffly-num">مجموع: {faMoney(st.total)}</p>
                       </div>
                     )}
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" aria-label="ویرایش"
+                      onClick={() => openEdit(s)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" aria-label="حذف"
                       onClick={() => void removeRecord('suppliers', s.id)}>
                       <Trash2 className="h-4 w-4" />
@@ -503,22 +565,31 @@ function SuppliersTab() {
 
 function ItemsTab() {
   const materials = useTable<Material>('materials')
+  const [editing, setEditing] = useState<Material | null>(null)
   const [form, setForm] = useState({ name: '', unit: UNITS[0], minStock: '' })
+
+  const openEdit = (m: Material) => { setEditing(m); setForm({ name: m.name, unit: m.unit || UNITS[0], minStock: m.minStock ? trimNum(m.minStock) : '' }) }
 
   const save = async () => {
     if (!form.name.trim()) { toast({ title: 'نام قلم لازم است', variant: 'destructive' }); return }
-    await putRecord<Material>('materials', {
-      id: uid(), name: form.name.trim(), unit: form.unit, minStock: parseFloat(form.minStock || '0') || 0,
-      active: 1, updatedAt: 0, deleted: 0,
-    })
+    if (editing) {
+      await putRecord<Material>('materials', { ...editing, name: form.name.trim(), unit: form.unit, minStock: parseFloat(form.minStock || '0') || 0 })
+      toast({ title: 'قلم ویرایش شد' })
+    } else {
+      await putRecord<Material>('materials', {
+        id: uid(), name: form.name.trim(), unit: form.unit, minStock: parseFloat(form.minStock || '0') || 0,
+        active: 1, updatedAt: 0, deleted: 0,
+      })
+      toast({ title: 'قلم اضافه شد' })
+    }
     setForm({ name: '', unit: UNITS[0], minStock: '' })
-    toast({ title: 'قلم اضافه شد' })
+    setEditing(null)
   }
 
   return (
     <div className="grid lg:grid-cols-5 gap-4">
       <Card className="waffly-card lg:col-span-2 h-fit">
-        <CardHeader className="pb-2"><CardTitle className="text-sm">قلم جدید مواد اولیه</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">{editing ? `ویرایش قلم: ${editing.name}` : 'قلم جدید مواد اولیه'}</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           <FormRow label="نام قلم"><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="h-11" /></FormRow>
           <FormRow label="واحد اندازه‌گیری" hint="هر قلم واحد مخصوص خودش را دارد">
@@ -531,7 +602,8 @@ function ItemsTab() {
           <FormRow label="حد بحرانی هشدار" hint="وقتی موجودی به این مقدار برسد هشدار می‌دهد">
             <Input inputMode="decimal" className="waffly-num-input h-11" value={form.minStock} onChange={e => setForm(f => ({ ...f, minStock: e.target.value }))} />
           </FormRow>
-          <Button className="w-full h-11" onClick={save}>افزودن قلم</Button>
+          <Button className="w-full h-11" onClick={save}>{editing ? 'ذخیره تغییرات' : 'افزودن قلم'}</Button>
+          {editing && <Button variant="ghost" className="w-full" onClick={() => { setEditing(null); setForm({ name: '', unit: UNITS[0], minStock: '' }) }}>انصراف از ویرایش</Button>}
         </CardContent>
       </Card>
       <Card className="waffly-card lg:col-span-3">
@@ -544,6 +616,10 @@ function ItemsTab() {
                 {m.active === 0 && <span className="rounded-full bg-muted text-muted-foreground text-[10px] px-2 py-0.5">غیرفعال</span>}
                 <span className="text-[11px] text-muted-foreground">واحد: {m.unit}</span>
                 <span className="text-[11px] text-muted-foreground waffly-num">حد: {faDigits(m.minStock)}</span>
+                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground" aria-label="ویرایش"
+                  onClick={() => openEdit(m)}>
+                  <Pencil className="h-4 w-4" />
+                </Button>
                 <Button
                   variant="ghost" size="sm" className="h-8 shrink-0 text-[11px]"
                   onClick={() => void putRecord<Material>('materials', { ...m, active: m.active === 0 ? 1 : 0 })}

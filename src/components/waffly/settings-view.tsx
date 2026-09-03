@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import { toast } from '@/hooks/use-toast'
 import {
   Settings as SettingsIcon, Save, DatabaseBackup, Download, Upload,
-  CalendarDays, ShieldAlert, RefreshCw, HardDriveDownload, Smartphone, Plus, Trash2,
+  CalendarDays, ShieldAlert, RefreshCw, HardDriveDownload, Smartphone, Plus, Trash2, Pencil,
 } from 'lucide-react'
 import {
   useSetting, useTable, putRecord, removeRecord, exportAllToJson, importAllFromJson, uid,
@@ -39,6 +39,7 @@ export function SettingsView() {
   const [busy, setBusy] = useState(false)
   const [pwaState, setPwaState] = useState<{ platform: string; standalone: boolean }>({ platform: '', standalone: false })
   const [newCat, setNewCat] = useState('')
+  const [editingCat, setEditingCat] = useState<ExpenseCategory | null>(null)
 
   useEffect(() => {
     const id = requestAnimationFrame(() => {
@@ -112,15 +113,21 @@ export function SettingsView() {
 
   const addCategory = async () => {
     if (!newCat.trim()) return
-    await putRecord<ExpenseCategory>('expenseCategories', { id: uid(), name: newCat.trim(), includeInProfit: 1, updatedAt: 0, deleted: 0 })
+    if (editingCat) {
+      await putRecord<ExpenseCategory>('expenseCategories', { ...editingCat, name: newCat.trim() })
+      toast({ title: 'سرفصل ویرایش شد' })
+    } else {
+      await putRecord<ExpenseCategory>('expenseCategories', { id: uid(), name: newCat.trim(), includeInProfit: 1, updatedAt: 0, deleted: 0 })
+      toast({ title: 'سرفصل اضافه شد' })
+    }
     setNewCat('')
-    toast({ title: 'سرفصل اضافه شد' })
+    setEditingCat(null)
   }
 
   return (
     <div className="space-y-5">
       {/* APP_VERSION — با هر آپدیت APK/وب به‌روز شود */}
-      <PageHeader title="تنظیمات" subtitle="دوره حسابداری، هشدارها، سینک، پشتیبان‌گیری و نصب اپ — نسخه ۲.۵.۲" icon={<SettingsIcon className="h-5 w-5" />} />
+      <PageHeader title="تنظیمات" subtitle="دوره حسابداری، هشدارها، سینک، پشتیبان‌گیری و نصب اپ — نسخه ۲.۶.۰" icon={<SettingsIcon className="h-5 w-5" />} />
 
       <div className="grid lg:grid-cols-2 gap-4 items-start">
         <Card className="waffly-card">
@@ -155,6 +162,10 @@ export function SettingsView() {
                 {expenseCategories.filter(c => !c.deleted).map(c => (
                   <div key={c.id} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
                     <span className="flex-1">{c.name}</span>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" aria-label="ویرایش"
+                      onClick={() => { setEditingCat(c); setNewCat(c.name) }}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
                     <Button
                       size="sm" variant="outline" className="h-7 text-[10px]"
                       onClick={() => void putRecord<ExpenseCategory>('expenseCategories', { ...c, includeInProfit: c.includeInProfit ? 0 : 1 })}
@@ -169,8 +180,9 @@ export function SettingsView() {
                 ))}
               </div>
               <div className="flex gap-2">
-                <Input value={newCat} onChange={e => setNewCat(e.target.value)} placeholder="سرفصل جدید…" className="h-10" />
-                <Button variant="outline" className="h-10 shrink-0" onClick={addCategory}><Plus className="h-4 w-4" /> افزودن</Button>
+                <Input value={newCat} onChange={e => setNewCat(e.target.value)} placeholder={editingCat ? `ویرایش «${editingCat.name}»…` : 'سرفصل جدید…'} className="h-10" />
+                <Button variant="outline" className="h-10 shrink-0" onClick={addCategory}>{editingCat ? 'ذخیره' : <><Plus className="h-4 w-4" /> افزودن</>}</Button>
+                {editingCat && <Button variant="ghost" className="h-10 shrink-0" onClick={() => { setEditingCat(null); setNewCat('') }}>انصراف</Button>}
               </div>
             </div>
           </CardContent>

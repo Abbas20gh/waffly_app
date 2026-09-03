@@ -3,7 +3,7 @@
 // دستگاه‌سازی — تجهیزات نانوایی (در حال ساخت) و کسب‌وکار دستگاه‌سازی
 import { useState } from 'react'
 import { toast } from '@/hooks/use-toast'
-import { Wrench, Plus, Trash2, Factory, Hammer, DollarSign } from 'lucide-react'
+import { Wrench, Plus, Trash2, Factory, Hammer, DollarSign, Pencil } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -28,7 +28,10 @@ export function MachinesView() {
 function MachinesBody({ machines, machineCosts }: { machines: Machine[]; machineCosts: MachineCost[] }) {
   const [section, setSection] = useState<'BAKING' | 'BUSINESS'>('BAKING')
   const [machineDlg, setMachineDlg] = useState(false)
+  const [editingMachine, setEditingMachine] = useState<Machine | null>(null)
+  const [mFormKind, setMFormKind] = useState<Machine['kind']>('BAKING')
   const [costDlgFor, setCostDlgFor] = useState<Machine | null>(null)
+  const [editingCost, setEditingCost] = useState<MachineCost | null>(null)
   const [mForm, setMForm] = useState({ name: '', startDate: todayJalali(), status: 'IN_PROGRESS' as Machine['status'], note: '' })
   const [cForm, setCForm] = useState({ kind: 'CONSUMABLE' as MachineCost['kind'], name: '', quantity: '1', date: todayJalali(), cost: '', note: '' })
 
@@ -39,15 +42,43 @@ function MachinesBody({ machines, machineCosts }: { machines: Machine[]; machine
     return { consumable: acc.consumable + t.consumable, capital: acc.capital + t.capital }
   }, { consumable: 0, capital: 0 })
 
+  const openNewMachine = () => {
+    setEditingMachine(null)
+    setMFormKind(section)
+    setMForm({ name: '', startDate: todayJalali(), status: 'IN_PROGRESS', note: '' })
+    setMachineDlg(true)
+  }
+  const openEditMachine = (m: Machine) => {
+    setEditingMachine(m)
+    setMFormKind(m.kind)
+    setMForm({ name: m.name, startDate: m.startDate, status: m.status, note: m.note || '' })
+    setMachineDlg(true)
+  }
+
   const saveMachine = async () => {
     if (!mForm.name.trim()) { toast({ title: 'نام دستگاه لازم است', variant: 'destructive' }); return }
     await putRecord<Machine>('machines', {
-      id: uid(), name: mForm.name.trim(), kind: section, startDate: mForm.startDate,
-      status: mForm.status, note: mForm.note || null, updatedAt: 0, deleted: 0,
+      ...(editingMachine || {}),
+      id: editingMachine ? editingMachine.id : uid(),
+      updatedAt: editingMachine ? editingMachine.updatedAt : 0,
+      name: mForm.name.trim(), kind: mFormKind, startDate: mForm.startDate,
+      status: mForm.status, note: mForm.note || null, deleted: 0,
     })
     setMForm({ name: '', startDate: todayJalali(), status: 'IN_PROGRESS', note: '' })
     setMachineDlg(false)
-    toast({ title: 'دستگاه ثبت شد' })
+    setEditingMachine(null)
+    toast({ title: editingMachine ? 'دستگاه ویرایش شد' : 'دستگاه ثبت شد' })
+  }
+
+  const openNewCost = (m: Machine) => {
+    setCostDlgFor(m)
+    setEditingCost(null)
+    setCForm({ kind: 'CONSUMABLE', name: '', quantity: '1', date: todayJalali(), cost: '', note: '' })
+  }
+  const openEditCost = (c: MachineCost, m: Machine) => {
+    setCostDlgFor(m)
+    setEditingCost(c)
+    setCForm({ kind: c.kind, name: c.name, quantity: c.quantity ? String(c.quantity) : '1', date: c.date, cost: c.cost ? String(c.cost) : '', note: c.note || '' })
   }
 
   const saveCost = async () => {
@@ -55,14 +86,18 @@ function MachinesBody({ machines, machineCosts }: { machines: Machine[]; machine
     const cost = parseFloat(cForm.cost || '0')
     if (!cForm.name.trim() || cost <= 0) { toast({ title: 'شرح و مبلغ لازم است', variant: 'destructive' }); return }
     await putRecord<MachineCost>('machineCosts', {
-      id: uid(), machineId: costDlgFor.id, kind: cForm.kind, name: cForm.name.trim(),
+      ...(editingCost || {}),
+      id: editingCost ? editingCost.id : uid(),
+      updatedAt: editingCost ? editingCost.updatedAt : 0,
+      machineId: costDlgFor.id, kind: cForm.kind, name: cForm.name.trim(),
       quantity: parseFloat(cForm.quantity || '1') || 1, date: cForm.date, cost,
       note: cForm.note.trim() ? cForm.note.trim() : null,
-      updatedAt: 0, deleted: 0,
+      deleted: 0,
     })
     setCForm({ kind: 'CONSUMABLE', name: '', quantity: '1', date: todayJalali(), cost: '', note: '' })
     setCostDlgFor(null)
-    toast({ title: 'هزینه ثبت شد' })
+    setEditingCost(null)
+    toast({ title: editingCost ? 'هزینه ویرایش شد' : 'هزینه ثبت شد' })
   }
 
   const statusLabel: Record<Machine['status'], string> = {
@@ -92,7 +127,7 @@ function MachinesBody({ machines, machineCosts }: { machines: Machine[]; machine
           <Hammer className="inline h-4 w-4 ml-1" /> دستگاه‌سازی (کسب‌وکار)
         </button>
         <div className="flex-1" />
-        <Button className="h-10" onClick={() => setMachineDlg(true)}><Plus className="ml-1 h-4 w-4" /> دستگاه جدید</Button>
+        <Button className="h-10" onClick={openNewMachine}><Plus className="ml-1 h-4 w-4" /> دستگاه جدید</Button>
       </div>
 
       {/* جمع کل بخش */}
@@ -151,6 +186,10 @@ function MachinesBody({ machines, machineCosts }: { machines: Machine[]; machine
                           <div className="flex-1" />
                           <Money value={c.cost} className="font-bold" />
                           <span className="text-[10px] text-muted-foreground">تومان</span>
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground" aria-label="ویرایش هزینه"
+                            onClick={() => openEditCost(c, m)}>
+                            <Pencil className="h-3 w-3" />
+                          </Button>
                           <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-red-600" aria-label="حذف هزینه"
                             onClick={() => void removeRecord('machineCosts', c.id)}>
                             <Trash2 className="h-3.5 w-3.5" />
@@ -160,7 +199,7 @@ function MachinesBody({ machines, machineCosts }: { machines: Machine[]; machine
                     </div>
                   )}
                   <div className="flex gap-2 pt-1">
-                    <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => setCostDlgFor(m)}>
+                    <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => openNewCost(m)}>
                       <DollarSign className="h-3.5 w-3.5" /> ثبت هزینه
                     </Button>
                     <InlinePicker
@@ -174,6 +213,10 @@ function MachinesBody({ machines, machineCosts }: { machines: Machine[]; machine
                       onChange={v => void putRecord<Machine>('machines', { ...m, status: v as Machine['status'] })}
                     />
                     <div className="flex-1" />
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" aria-label="ویرایش دستگاه"
+                      onClick={() => openEditMachine(m)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" aria-label="حذف دستگاه"
                       onClick={() => void removeRecord('machines', m.id)}>
                       <Trash2 className="h-4 w-4" />
@@ -190,11 +233,25 @@ function MachinesBody({ machines, machineCosts }: { machines: Machine[]; machine
       <Dialog open={machineDlg} onOpenChange={setMachineDlg}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{section === 'BAKING' ? 'تجهیزات نانوایی' : 'دستگاه سفارشی'} جدید</DialogTitle>
+            <DialogTitle>{editingMachine ? `ویرایش دستگاه: ${editingMachine.name}` : (section === 'BAKING' ? 'تجهیزات نانوایی' : 'دستگاه سفارشی') + ' جدید'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <FormRow label="نام دستگاه / تجهیز">
               <Input value={mForm.name} onChange={e => setMForm(f => ({ ...f, name: e.target.value }))} className="h-11" />
+            </FormRow>
+            <FormRow label="بخش" hint="تغییر بخش، دستگاه را به تب دیگر منتقل می‌کند">
+              <InlinePicker
+                value={mFormKind}
+                options={[{ value: 'BAKING', label: 'تجهیزات نانوایی' }, { value: 'BUSINESS', label: 'دستگاه‌سازی (کسب‌وکار)' }]}
+                onChange={v => setMFormKind(v as Machine['kind'])}
+              />
+            </FormRow>
+            <FormRow label="وضعیت">
+              <InlinePicker
+                value={mForm.status}
+                options={[{ value: 'IN_PROGRESS', label: 'در حال ساخت' }, { value: 'DONE', label: 'تکمیل شد' }, { value: 'PAUSED', label: 'متوقف' }]}
+                onChange={v => setMForm(f => ({ ...f, status: v as Machine['status'] }))}
+              />
             </FormRow>
             <FormRow label="تاریخ شروع">
               <JalaliDateInput value={mForm.startDate} onChange={v => setMForm(f => ({ ...f, startDate: v }))} />
@@ -204,8 +261,8 @@ function MachinesBody({ machines, machineCosts }: { machines: Machine[]; machine
             </FormRow>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setMachineDlg(false)}>انصراف</Button>
-            <Button onClick={saveMachine}>ثبت</Button>
+            <Button variant="outline" onClick={() => { setMachineDlg(false); setEditingMachine(null) }}>انصراف</Button>
+            <Button onClick={saveMachine}>{editingMachine ? 'ذخیره تغییرات' : 'ثبت'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -214,7 +271,7 @@ function MachinesBody({ machines, machineCosts }: { machines: Machine[]; machine
       <Dialog open={!!costDlgFor} onOpenChange={v => !v && setCostDlgFor(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>ثبت هزینه — {costDlgFor?.name}</DialogTitle>
+            <DialogTitle>{editingCost ? 'ویرایش هزینه' : 'ثبت هزینه'} — {costDlgFor?.name}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <FormRow label="نوع هزینه" hint="قطعات سرمایه‌ای فقط ثبت می‌شوند و در سود محاسبه نمی‌شوند">
@@ -246,8 +303,8 @@ function MachinesBody({ machines, machineCosts }: { machines: Machine[]; machine
             </FormRow>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCostDlgFor(null)}>انصراف</Button>
-            <Button onClick={saveCost}>ثبت هزینه</Button>
+            <Button variant="outline" onClick={() => { setCostDlgFor(null); setEditingCost(null) }}>انصراف</Button>
+            <Button onClick={saveCost}>{editingCost ? 'ذخیره تغییرات' : 'ثبت هزینه'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

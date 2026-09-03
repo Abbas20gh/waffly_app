@@ -1,7 +1,7 @@
 'use client'
 
 // تولید — ثبت روزانه، جعبه‌ها و کدها، مصرف مواد، انواع نان
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { toast } from '@/hooks/use-toast'
 import { Wheat, Package, Trash2, Boxes, Plus, Cookie, Pencil, Sparkles, ChevronDown } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -18,7 +18,7 @@ import { useTable, useDexie, dexie, putRecord, putMany, removeRecord, uid, getAc
 import type { BreadType, Box, Production, Material, Consumption } from '@/lib/types'
 import { ESSENCE_TYPES } from '@/lib/types'
 import { todayJalali, faDigits, parseJalali, prettyJalali, addJalaliDays } from '@/lib/jalali'
-import { boxCode, nextBoxSerial } from '@/lib/boxcode'
+import { boxCode, nextBoxSerial, planProductionBoxes } from '@/lib/boxcode'
 import { active } from '@/lib/calc'
 
 type Tab = 'daily' | 'boxes' | 'consumption' | 'types'
@@ -54,8 +54,7 @@ function DailyTab() {
   const [open, setOpen] = useState(false)
   const [expandedProd, setExpandedProd] = useState<string | null>(null)
   const [editBox, setEditBox] = useState<Box | null>(null)
-
-  const editing = null // ثبت جدید
+  const [editing, setEditing] = useState<Production | null>(null)
   const [form, setForm] = useState({
     date: todayJalali(),
     breadTypeId: '',
@@ -72,30 +71,117 @@ function DailyTab() {
   const bt = breadTypes.find(b => b.id === form.breadTypeId)
 
   const openNew = () => {
+    setEditing(null)
     setForm({ date: todayJalali(), breadTypeId: active(breadTypes)[0]?.id || '', totalProduced: '', boxesCount: '', perBoxCount: '', waste: '', carriedFrom: '', note: '', essenceOn: false, essenceType: ESSENCE_TYPES[0] || '', essenceCount: '' })
     setOpen(true)
   }
 
+  const liveBoxesOf = (prodId: string) => boxes.filter(b => !b.deleted && b.productionId === prodId)
+
+  const openEdit = (p: Production) => {
+    const pBoxes = liveBoxesOf(p.id)
+    const essCount = pBoxes.filter(b => b.hasEssence).length
+    setEditing(p)
+    setForm({
+      date: p.date,
+      breadTypeId: p.breadTypeId,
+      totalProduced: p.totalProduced ? String(p.totalProduced) : '',
+      boxesCount: String(pBoxes.length || p.boxesCount || 0),
+      perBoxCount: p.perBoxCount ? String(p.perBoxCount) : '',
+      waste: p.waste ? String(p.waste) : '',
+      carriedFrom: p.carriedFrom || '',
+      note: p.note || '',
+      essenceOn: essCount > 0,
+      essenceType: pBoxes.find(b => b.hasEssence)?.essenceType || ESSENCE_TYPES[0] || '',
+      essenceCount: essCount ? String(essCount) : '',
+    })
+    setOpen(true)
+  }
+
   // پیش‌نمایش کدهای جعبه — ماه + روز + شمارهٔ جعبهٔ همان روز (ادامهٔ شماره‌های موجود)
+  // در حالت ویرایش فقط کد جعبه‌های جدیدِ اضافه‌شده نشان داده می‌شود
+  const liveBoxCount = editing ? boxes.filter(b => !b.deleted && b.productionId === editing.id).length : 0
   const previewCodes = useMemo(() => {
     const count = parseInt(form.boxesCount || '0', 10)
     if (!bt || count <= 0) return []
+    const addCount = editing ? Math.max(0, count - liveBoxCount) : count
+    if (addCount <= 0) return []
     const start = nextBoxSerial(boxes.map(b => b.code), form.date)
-    const n = Math.min(count, 5)
+    const n = Math.min(addCount, 5)
     const codes: string[] = []
     for (let i = 0; i < n; i++) codes.push(boxCode(form.date, start + i))
     return codes
-  }, [bt, boxes, form.boxesCount, form.date])
+  }, [bt, boxes, form.boxesCount, form.date, editing, liveBoxCount])
 
   const save = async () => {
     if (!form.breadTypeId || !bt) { toast({ title: 'نوع نان را انتخاب کنید', variant: 'destructive' }); return }
-    const serialStart = nextBoxSerial(boxes.map(b => b.code), form.date)
     const total = parseFloat(form.totalProduced || '0')
     const boxCount = parseInt(form.boxesCount || '0', 10)
     const per = parseInt(form.perBoxCount || '0', 10)
     const waste = parseFloat(form.waste || '0')
     if (total <= 0 && boxCount <= 0) { toast({ title: 'تعداد تولید یا جعبه را وارد کنید', variant: 'destructive' }); return }
 
+    if (editing) {
+      // ویرایش تولید — تعداد جعبه: زیاد کردن → جعبهٔ جدید با کد ادامه‌دار؛ کم کردن → حذف از آخر (بزرگ‌ترین کد)
+      // کدهای چاپی موجود هرگز تغییر نمی‌کنند؛ نوع/تاریخ به جعبه‌های موجود هم‌تراز می‌شود
+      const live = liveBoxesOf(editing.id).sort((a, b) => a.code.localeCompare(b.code))
+      const { addCodes, removeIds } = planProductionBoxes(live, boxCount, form.date, boxes.map(b => b.code))
+      const addCount = addCodes.length
+      const removeCount = removeIds.length
+      const essenceCount = form.essenceOn
+        ? Math.max(0, Math.min(addCount, parseInt(form.essenceCount || '0', 10) || 0))
+        : 0
+      await putRecord<Production>('productions', {
+        ...editing,
+        date: form.date,
+        breadTypeId: bt.id,
+        totalProduced: total || boxCount * per,
+        boxesCount: boxCount,
+        perBoxCount: per,
+        waste: waste || 0,
+        carriedFrom: form.carriedFrom || null,
+        note: form.note || null,
+        createdBy: editing.createdBy ?? null,
+        deleted: 0,
+      })
+      const cascade = live
+        .filter(b => b.breadTypeId !== bt.id || b.date !== form.date || (per > 0 && editing.perBoxCount > 0 && b.count === editing.perBoxCount && per !== editing.perBoxCount))
+        .map(b => ({ ...b, breadTypeId: bt.id, date: form.date, count: (per > 0 && editing.perBoxCount > 0 && b.count === editing.perBoxCount) ? per : b.count, updatedAt: 0, deleted: 0 }))
+      const newBoxes: Box[] = []
+      if (addCount > 0 && per > 0) {
+        for (let i = 0; i < addCount; i++) {
+          const withEssence = i < essenceCount
+          newBoxes.push({
+            id: uid(),
+            code: addCodes[i],
+            productionId: editing.id,
+            breadTypeId: bt.id,
+            count: per,
+            date: form.date,
+            hasEssence: withEssence ? 1 : 0,
+            essenceType: withEssence ? (form.essenceType || ESSENCE_TYPES[0] || null) : null,
+            note: null,
+            updatedAt: 0,
+            deleted: 0,
+          })
+        }
+      }
+      if (cascade.length || newBoxes.length) await putMany('boxes', [...cascade, ...newBoxes])
+      for (const id of removeIds) await removeRecord('boxes', id)
+      toast({
+        title: 'تولید ویرایش شد',
+        description: [
+          addCount > 0 ? `${faDigits(addCount)} جعبه با کد جدید اضافه شد` : '',
+          removeCount > 0 ? `${faDigits(removeCount)} جعبه حذف شد` : '',
+          cascade.length > 0 ? 'نوع/تاریخ جعبه‌های موجود هم‌تراز شد' : '',
+        ].filter(Boolean).join(' • ') || undefined,
+      })
+      setOpen(false)
+      setEditing(null)
+      return
+    }
+
+    const serialStart = nextBoxSerial(boxes.map(b => b.code), form.date)
     const prodId = uid()
     const essenceCount = form.essenceOn
       ? Math.max(0, Math.min(boxCount, parseInt(form.essenceCount || '0', 10) || 0))
@@ -195,6 +281,13 @@ function DailyTab() {
                       </Button>
                     )}
                     <Button
+                      variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
+                      aria-label="ویرایش"
+                      onClick={() => openEdit(p)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
                       variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600 shrink-0"
                       aria-label="حذف"
                       onClick={() => { void removeRecord('productions', p.id); toast({ title: 'حذف شد' }) }}
@@ -241,8 +334,8 @@ function DailyTab() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>ثبت تولید روزانه</DialogTitle>
-            <DialogDescription>کد جعبه‌ها خودکار ساخته می‌شود: ماه + روز تولید + شمارهٔ جعبهٔ همان روز (۵ رقم)</DialogDescription>
+            <DialogTitle>{editing ? 'ویرایش تولید' : 'ثبت تولید روزانه'}</DialogTitle>
+            <DialogDescription>{editing ? 'کدهای چاپی موجود ثابت می‌مانند؛ کم/زیاد کردن تعداد جعبه، جعبه حذف یا جعبهٔ جدید با کد ادامه‌دار می‌سازد.' : 'کد جعبه‌ها خودکار ساخته می‌شود: ماه + روز تولید + شمارهٔ جعبهٔ همان روز (۵ رقم)'}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <FormRow label="نوع نان">
@@ -257,7 +350,7 @@ function DailyTab() {
               <JalaliDateInput value={form.date} onChange={v => setForm(f => ({ ...f, date: v }))} />
             </FormRow>
             <div className="grid grid-cols-3 gap-3">
-              <FormRow label="جعبه‌ها">
+              <FormRow label="جعبه‌ها" hint={editing ? `الان ${faDigits(liveBoxesOf(editing.id).length)} جعبه دارد — کم/زیاد کردن عدد، جعبه حذف/اضافه می‌کند` : undefined}>
                 <Input inputMode="numeric" className="waffly-num-input h-11" value={form.boxesCount} onChange={e => setForm(f => ({ ...f, boxesCount: e.target.value }))} placeholder="۰" />
               </FormRow>
               <FormRow label="نان در هر جعبه">
@@ -294,7 +387,7 @@ function DailyTab() {
                       <Input inputMode="numeric" className="waffly-num-input h-11" value={form.essenceCount} onChange={e => setForm(f => ({ ...f, essenceCount: e.target.value }))} placeholder="۰" />
                     </FormRow>
                   </div>
-                  <p className="text-[10px] text-muted-foreground leading-5">بعداً می‌توانید از دکمه «جعبه‌ها» در کارت هر تولید، اسانس هر جعبه را جداگانه ویرایش یا حذف کنید.</p>
+                  <p className="text-[10px] text-muted-foreground leading-5">{editing ? 'اسانس فقط روی جعبه‌های جدیدِ اضافه‌شده اعمال می‌شود؛ اسانس جعبه‌های فعلی را از دکمهٔ «جعبه‌ها» ویرایش کنید.' : 'بعداً می‌توانید از دکمه «جعبه‌ها» در کارت هر تولید، اسانس هر جعبه را جداگانه ویرایش یا حذف کنید.'}</p>
                 </>
               )}
             </div>
@@ -303,7 +396,7 @@ function DailyTab() {
             </FormRow>
             {previewCodes.length > 0 && (
               <div className="rounded-xl bg-muted/60 border p-3">
-                <p className="text-[11px] font-bold mb-1.5 flex items-center gap-1.5"><Boxes className="h-3.5 w-3.5" /> پیش‌نمایش کد جعبه‌ها</p>
+                <p className="text-[11px] font-bold mb-1.5 flex items-center gap-1.5"><Boxes className="h-3.5 w-3.5" /> {editing ? 'کد جعبه‌های جدید' : 'پیش‌نمایش کد جعبه‌ها'}</p>
                 <div className="flex flex-wrap gap-1.5" dir="ltr">
                   {previewCodes.map(c => (
                     <code key={c} className="rounded bg-background border px-2 py-0.5 text-[11px] waffly-num">{c}</code>
@@ -316,13 +409,12 @@ function DailyTab() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>انصراف</Button>
-            <Button onClick={save}>ثبت تولید</Button>
+            <Button variant="outline" onClick={() => { setOpen(false); setEditing(null) }}>انصراف</Button>
+            <Button onClick={save}>{editing ? 'ذخیره تغییرات' : 'ثبت تولید'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
       <BoxEditDialog box={editBox} breadTypes={breadTypes} onClose={() => setEditBox(null)} />
-      {editing === null && null}
     </div>
   )
 }
@@ -394,24 +486,32 @@ function BoxesTab() {
 function ConsumptionTab() {
   const materials = useTable<Material>('materials')
   const consumptions = useTable<Consumption>('consumptions')
+  const [editing, setEditing] = useState<Consumption | null>(null)
   const [form, setForm] = useState({ date: todayJalali(), materialId: '', quantity: '', note: '' })
   const mat = materials.find(m => m.id === form.materialId)
+
+  const openEdit = (c: Consumption) => {
+    setEditing(c)
+    setForm({ date: c.date, materialId: c.materialId, quantity: c.quantity ? String(Math.round(c.quantity * 100) / 100) : '', note: c.note || '' })
+  }
 
   const save = async () => {
     const qty = parseFloat(form.quantity || '0')
     if (!form.materialId || qty <= 0) { toast({ title: 'ماده و مقدار را وارد کنید', variant: 'destructive' }); return }
     await putRecord<Consumption>('consumptions', {
-      id: uid(),
+      ...(editing || {}),
+      id: editing ? editing.id : uid(),
+      updatedAt: editing ? editing.updatedAt : 0,
       date: form.date,
       materialId: form.materialId,
       quantity: qty,
       note: form.note || null,
-      createdBy: getActiveUser() || null,
-      updatedAt: 0,
+      createdBy: editing?.createdBy ?? (getActiveUser() || null),
       deleted: 0,
     })
     setForm(f => ({ ...f, quantity: '', note: '' }))
-    toast({ title: 'مصرف ثبت شد', description: `${mat?.name}: ${faDigits(qty)} ${mat?.unit}` })
+    setEditing(null)
+    toast({ title: editing ? 'مصرف ویرایش شد' : 'مصرف ثبت شد', description: `${mat?.name}: ${faDigits(qty)} ${mat?.unit}` })
   }
 
   const recent = [...consumptions].filter(c => !c.deleted).sort((a, b) => (b.date + b.updatedAt).localeCompare(a.date + a.updatedAt)).slice(0, 30)
@@ -421,7 +521,7 @@ function ConsumptionTab() {
     <div className="grid lg:grid-cols-5 gap-4">
       <Card className="waffly-card lg:col-span-2 h-fit">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2"><Cookie className="h-4 w-4" /> ثبت مصرف امروز</CardTitle>
+          <CardTitle className="text-sm flex items-center gap-2"><Cookie className="h-4 w-4" /> {editing ? 'ویرایش مصرف' : 'ثبت مصرف امروز'}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <FormRow label="ماده اولیه">
@@ -441,7 +541,8 @@ function ConsumptionTab() {
           <FormRow label="یادداشت">
             <Input value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} className="h-11" />
           </FormRow>
-          <Button className="w-full h-11" onClick={save}>ثبت مصرف</Button>
+          <Button className="w-full h-11" onClick={save}>{editing ? 'ذخیره تغییرات' : 'ثبت مصرف'}</Button>
+          {editing && <Button variant="ghost" className="w-full" onClick={() => { setEditing(null); setForm(f => ({ ...f, quantity: '', note: '' })) }}>انصراف از ویرایش</Button>}
         </CardContent>
       </Card>
 
@@ -461,6 +562,10 @@ function ConsumptionTab() {
                       <p className="text-[11px] text-muted-foreground waffly-num">{prettyJalali(c.date)}{c.createdBy ? ` • ${c.createdBy}` : ''}{c.note ? ` • ${c.note}` : ''}</p>
                     </div>
                     <span className="text-sm font-bold waffly-num">{faDigits(c.quantity)} <span className="text-[11px] font-normal text-muted-foreground">{m?.unit}</span></span>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" aria-label="ویرایش"
+                      onClick={() => openEdit(c)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" aria-label="حذف"
                       onClick={() => { void removeRecord('consumptions', c.id) }}>
                       <Trash2 className="h-4 w-4" />
@@ -479,30 +584,40 @@ function ConsumptionTab() {
 // ================= انواع نان =================
 function TypesTab() {
   const breadTypes = useTable<BreadType>('breadTypes')
+  const [editing, setEditing] = useState<BreadType | null>(null)
   const [form, setForm] = useState({ name: '' })
+
+  const openEdit = (b: BreadType) => { setEditing(b); setForm({ name: b.name }) }
 
   const save = async () => {
     const name = form.name.trim()
     if (!name) { toast({ title: 'نام نوع نان را وارد کنید', variant: 'destructive' }); return }
-    // کد داخلی ۲ رقمی فقط برای سازگاری سینک نگه داشته می‌شود و دیگر در کد جعبه نقشی ندارد
-    const maxCode = breadTypes.reduce((m, b) => Math.max(m, parseInt(b.code || '0', 10) || 0), 0)
-    const code = String(Math.min(99, maxCode + 1)).padStart(2, '0')
-    await putRecord<BreadType>('breadTypes', { id: uid(), name, code, active: 1, updatedAt: 0, deleted: 0 })
+    if (editing) {
+      await putRecord<BreadType>('breadTypes', { ...editing, name })
+      toast({ title: 'نوع نان ویرایش شد' })
+    } else {
+      // کد داخلی ۲ رقمی فقط برای سازگاری سینک نگه داشته می‌شود و دیگر در کد جعبه نقشی ندارد
+      const maxCode = breadTypes.reduce((m, b) => Math.max(m, parseInt(b.code || '0', 10) || 0), 0)
+      const code = String(Math.min(99, maxCode + 1)).padStart(2, '0')
+      await putRecord<BreadType>('breadTypes', { id: uid(), name, code, active: 1, updatedAt: 0, deleted: 0 })
+      toast({ title: 'نوع نان اضافه شد' })
+    }
     setForm({ name: '' })
-    toast({ title: 'نوع نان اضافه شد' })
+    setEditing(null)
   }
 
   return (
     <div className="grid lg:grid-cols-5 gap-4">
       <Card className="waffly-card lg:col-span-2 h-fit">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">افزودن نوع/طعم جدید</CardTitle>
+          <CardTitle className="text-sm">{editing ? `ویرایش نوع نان: ${editing.name}` : 'افزودن نوع/طعم جدید'}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <FormRow label="نام نوع نان" hint="مثلاً: نان بزرگ، کاسه‌ای، با طعم وانیل…">
             <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="h-11" />
           </FormRow>
-          <Button className="w-full h-11" onClick={save}><Plus className="ml-1 h-4 w-4" /> افزودن</Button>
+          <Button className="w-full h-11" onClick={save}><Plus className="ml-1 h-4 w-4" /> {editing ? 'ذخیره تغییرات' : 'افزودن'}</Button>
+          {editing && <Button variant="ghost" className="w-full" onClick={() => { setEditing(null); setForm({ name: '' }) }}>انصراف از ویرایش</Button>}
         </CardContent>
       </Card>
 
@@ -513,6 +628,10 @@ function TypesTab() {
             {active(breadTypes).map(b => (
               <div key={b.id} className="flex items-center gap-3 rounded-lg border px-3 py-2.5">
                 <span className="text-sm font-medium flex-1">{b.name}</span>
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" aria-label="ویرایش"
+                  onClick={() => openEdit(b)}>
+                  <Pencil className="h-4 w-4" />
+                </Button>
                 <Button
                   variant="ghost" size="sm" className="h-8 text-[11px]"
                   onClick={() => putRecord<BreadType>('breadTypes', { ...b, active: b.active ? 0 : 1 })}
@@ -538,21 +657,20 @@ function BoxEditDialog({ box, breadTypes, onClose }: {
   breadTypes: BreadType[]
   onClose: () => void
 }) {
-  const [breadTypeId, setBreadTypeId] = useState('')
-  const [hasEssence, setHasEssence] = useState(false)
-  const [essenceType, setEssenceType] = useState(ESSENCE_TYPES[0] || '')
-  const [note, setNote] = useState('')
-
-  useEffect(() => {
-    if (box) {
-      setBreadTypeId(box.breadTypeId)
-      setHasEssence(!!box.hasEssence)
-      setEssenceType(box.essenceType || ESSENCE_TYPES[0] || '')
-      setNote(box.note || '')
-    }
-  }, [box])
-
+  // ریمانت با key تا state از props مقداردهی شود (بدون useEffect/setState)
   if (!box) return null
+  return <BoxEditForm key={box.id} box={box} breadTypes={breadTypes} onClose={onClose} />
+}
+
+function BoxEditForm({ box, breadTypes, onClose }: {
+  box: Box
+  breadTypes: BreadType[]
+  onClose: () => void
+}) {
+  const [breadTypeId, setBreadTypeId] = useState(box.breadTypeId)
+  const [hasEssence, setHasEssence] = useState(!!box.hasEssence)
+  const [essenceType, setEssenceType] = useState(box.essenceType || ESSENCE_TYPES[0] || '')
+  const [note, setNote] = useState(box.note || '')
 
   const save = async () => {
     await putRecord<Box>('boxes', {
@@ -569,7 +687,7 @@ function BoxEditDialog({ box, breadTypes, onClose }: {
   }
 
   return (
-    <Dialog open={!!box} onOpenChange={v => { if (!v) onClose() }}>
+    <Dialog open onOpenChange={v => { if (!v) onClose() }}>
       <DialogContent className="max-w-md max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex flex-wrap items-center gap-2">

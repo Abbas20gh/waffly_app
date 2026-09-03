@@ -5,7 +5,7 @@ import { useMemo, useRef, useState } from 'react'
 import { toast } from '@/hooks/use-toast'
 import {
   Calculator, ChevronRight, ChevronLeft, FileSpreadsheet, FileText, Printer,
-  TrendingUp, TrendingDown, Wallet, Scale, Plus, Trash2, PiggyBank,
+  TrendingUp, TrendingDown, Wallet, Scale, Plus, Trash2, PiggyBank, Pencil,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -30,7 +30,19 @@ export function AccountingView() {
   const reportRef = useRef<HTMLDivElement>(null)
   const [mode, setMode] = useState<ProfitMode>('net')
   const [fundOpen, setFundOpen] = useState(false)
+  const [editingFund, setEditingFund] = useState<OtherFund | null>(null)
   const [fundForm, setFundForm] = useState({ date: todayJalali(), type: 'IN' as OtherFund['type'], amount: '', description: '' })
+
+  const openNewFund = () => {
+    setEditingFund(null)
+    setFundForm({ date: todayJalali(), type: 'IN', amount: '', description: '' })
+    setFundOpen(true)
+  }
+  const openEditFund = (f: OtherFund) => {
+    setEditingFund(f)
+    setFundForm({ date: f.date, type: f.type, amount: f.amount ? String(f.amount) : '', description: f.description || '' })
+    setFundOpen(true)
+  }
 
   const basePeriod = periodOf(todayJalali(), d.setting.monthStartDay)
   const period = useMemo(() => shiftPeriod(basePeriod, offset, d.setting.monthStartDay), [basePeriod, offset, d.setting.monthStartDay])
@@ -43,17 +55,22 @@ export function AccountingView() {
     if (amount <= 0) { toast({ title: 'مبلغ را وارد کنید', variant: 'destructive' }); return }
     if (!fundForm.description.trim()) { toast({ title: 'توضیح منشأ پول الزامی است', variant: 'destructive' }); return }
     await putRecord<OtherFund>('otherFunds', {
-      id: uid(),
+      ...(editingFund || {}),
+      id: editingFund ? editingFund.id : uid(),
+      updatedAt: editingFund ? editingFund.updatedAt : 0,
       date: fundForm.date,
       type: fundForm.type,
       amount,
       description: fundForm.description.trim(),
-      updatedAt: 0,
       deleted: 0,
     })
     setFundForm(f => ({ ...f, amount: '', description: '' }))
     setFundOpen(false)
-    toast({ title: 'سایر وجه ثبت شد', description: 'خارج از حساب سود ثبت شد و در سودآوری محاسبه نمی‌شود.' })
+    setEditingFund(null)
+    toast({
+      title: editingFund ? 'سایر وجه ویرایش شد' : 'سایر وجه ثبت شد',
+      description: 'خارج از حساب سود ثبت شد و در سودآوری محاسبه نمی‌شود.',
+    })
   }
 
   const modeInfo = {
@@ -181,7 +198,7 @@ export function AccountingView() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex flex-wrap items-center justify-between gap-2">
               <span className="flex items-center gap-2"><PiggyBank className="h-4 w-4" /> سایر وجوه (خارج از حساب سود)</span>
-              <Button size="sm" variant="outline" className="h-8 text-[11px] no-print" onClick={() => setFundOpen(true)}>
+              <Button size="sm" variant="outline" className="h-8 text-[11px] no-print" onClick={openNewFund}>
                 <Plus className="ml-1 h-3.5 w-3.5" /> ثبت سایر وجه
               </Button>
             </CardTitle>
@@ -205,6 +222,10 @@ export function AccountingView() {
                       <p className="text-[10px] text-muted-foreground waffly-num">{prettyJalali(f.date)}</p>
                     </div>
                     <Money value={f.amount} className={cn('text-sm font-bold', f.type === 'IN' ? 'text-green-700' : 'text-red-700')} />
+                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground no-print" aria-label="ویرایش"
+                      onClick={() => openEditFund(f)}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-muted-foreground hover:text-red-600 no-print" aria-label="حذف"
                       onClick={() => void removeRecord('otherFunds', f.id)}>
                       <Trash2 className="h-3.5 w-3.5" />
@@ -367,7 +388,7 @@ export function AccountingView() {
       <Dialog open={fundOpen} onOpenChange={setFundOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>ثبت سایر وجه (خارج از حساب سود)</DialogTitle>
+            <DialogTitle>{editingFund ? 'ویرایش سایر وجه' : 'ثبت سایر وجه (خارج از حساب سود)'}</DialogTitle>
             <DialogDescription>این مبلغ فقط ثبت و نمایش داده می‌شود؛ در سود و زیان تولید محاسبه نمی‌شود.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -394,8 +415,8 @@ export function AccountingView() {
             </FormRow>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setFundOpen(false)}>انصراف</Button>
-            <Button onClick={saveFund}>ثبت</Button>
+            <Button variant="outline" onClick={() => { setFundOpen(false); setEditingFund(null) }}>انصراف</Button>
+            <Button onClick={saveFund}>{editingFund ? 'ذخیره تغییرات' : 'ثبت'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

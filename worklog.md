@@ -378,3 +378,48 @@ Work Log:
 Stage Summary:
 - waffly.pages.dev الان نسخهٔ ۲.۵.۲ است: کد جعبهٔ معنایی ۵ رقمی (ماه+روز+شمارهٔ همان روز) زنده شد
 - همگام‌سازی سرور/Turso سالم و CORS فعال — APK v2.5.2 هم بدون تغییر گواهی (a31b9080…cda) آمادهٔ نصب است
+
+---
+Task ID: 2-a
+Agent: Explore
+Task: فهرست‌برداری وضعیت ادیت همهٔ موجودیت‌ها
+
+Work Log:
+- types.ts (۱۶ جدول سینک‌پذیر) + localdb.ts (putRecord/putMany/removeRecord/putRemoteRows/useTable) و sync-engine + push سرور (LWW با updatedAt) خوانده و مکانیک ذخیره/حذف/سینک مستند شد
+- هر ۷ ویو (تولید، خرید، فروش، حسابداری، دستگاه‌سازی، تنظیمات، داشبورد) تب‌به‌تب بررسی شد: فقط Box (BoxEditDialog)، Setting و چند سوییچ تک‌فیلدی (فعال/غیرفعال، حد بحرانی، وضعیت دستگاه/سرفصل) قابل ویرایش‌اند
+- ادیت کامل ندارند: Production (خط ۵۸ `editing = null` جای‌خالی بلاتکلیف)، Purchase، Sale (فقط تسویه سریع)، Consumption، Customer، Supplier، OtherFund، MachineCost، و rename انواع نان/قلم/کالا/مشتری/تامین‌کننده/سرفصل
+- Expense (هزینه) اصلاً UI ندارد — فقط سرفصل‌ها (expenseCategories) در تنظیمات مدیریت می‌شوند؛ جدول در گزارش‌ها مصرف می‌شود
+- مقادیر مشتق همه زنده از رکوردها محاسبه می‌شوند (calc.ts: materialStocks/goodsStocks/periodReport/buyerStats/otherFundsTotals/machineTotals) — هیچ تجمیعی در DB کش نمی‌شود؛ ادیت خودکار آمار را اصلاح می‌کند
+- sanitizeRow سمت سرور هر جدول را whitelist می‌کند؛ حذف = تومب‌استون (deleted:1 + updatedAt جدید)
+
+Stage Summary:
+- از ۱۶ موجودیت سینک‌پذیر فقط ۳ موجودیت ویرایش کامل/واقعی دارند (Box، Setting، و ادیت‌های تک‌فیلدی Machine/سایر)؛ بقیه فقط ایجاد+حذف دارند یا اصلاً CRUD ندارند (Expense)
+- الگوی ادیت آماده در کد هست: BoxEditDialog (رکورد ورودی + putRecord با همان id) و SaleFormDialog (فرم کنترل‌شده) — تعمیم به بقیه «با تغییر کم» است
+- ریسک اصلی: ادیت Production↔جعبه‌ها/کد چاپی، ادیت خرید↔میانگین بها (سراسری و پسانگر)، ادیت فاکتور↔موجودی کالا و LWW کل‌رکوردی بین دستگاه‌ها
+
+---
+Task ID: 20
+Agent: Main Agent (Super Z)
+Task: ویرایش همه‌جا — v2.6.0
+
+Work Log:
+- درخواست کاربر: «همه مواردی که در اپ ثبت می‌شوند قابلیت ادیت داشته باشند؛ مثلاً خرید با همهٔ مواردش»
+- فهرست‌برداری با ایجنت Explore (Task 2-a): خرید/فروش/تولید/مصرف/تامین‌کننده/مشتری/سایر وجوه/هزینهٔ دستگاه اصلاً ادیت نداشتند؛ انواع نان/اقلام/کالاها/دستگاه فقط سوییچ جزئی؛ الگوی مرجع BoxEditDialog
+- الگوی یکسان در ۶ نما: state editing + پیش‌پرکردن همان فرم/دیالوگ + putRecord با همان id (createdBy حفظ، updatedAt جدید) → سینک LWW خودکار؛ آمارها زنده‌اند و خودشان اصلاح می‌شوند
+- purchases-view: خرید (دیالوگ کامل — برای کالا حفظ هزینهٔ اصلی وقتی تعداد/قیمت دست‌نخورده) + کالا/تامین‌کننده/ماده (فرم‌های کناری با حالت ویرایش)
+- sales-view: فاکتور فروش (اقلام JSON + تسویه + چک + بازمحاسبهٔ total) + مشتری؛ دکمهٔ حذف هم به ردیف فروش‌ها اضافه شد (قبلاً فقط در بدحساب‌ها بود)
+- production-view: ویرایش تولید با مدیریت تعداد جعبه — تابع خالص planProductionBoxes در boxcode.ts (افزودن = کد ادامه‌دار، کاهش = حذف از آخر بر اساس کد، بدون بازیافت کد چاپی؛ تغییر نوع/تاریخ به جعبه‌ها cascade؛ previewCodes فقط کدهای جدید) + ویرایش مصرف + تغییر نام نوع نان
+- accounting-view: ویرایش سایر وجوه؛ machines-view: ویرایش دستگاه (نام/بخش/وضعیت/تاریخ) و هزینهٔ دستگاه؛ settings-view: تغییر نام سرفصل هزینه
+- رفع خطاها: ۶ خطای تایپ الگوی ...(editing||{}) (updatedAt صریح)، memo بدون دیپ کامل در previewCodes، الگوی setState-in-effect در BoxEditDialog (ریمانت با key) — eslint ۶ فایل تغییرکرده صفر خطا
+- تست: واحد planProductionBoxes ‏۱۲/۱۲ (scripts/test-edit-v260.ts) + رگرسیون boxcode v2.5.2 ‏۲۰/۲۰
+- E2E مرورگری: خرید ۱۰→۱۲ (پیش‌پرشدن کامل + موجودی انبار خودکار ۱۲ شد)؛ تولید ۳→۵→۳→۴ (کدهای ادامه‌دار، حذف از آخر، عدم بازیافت ۱۲۴/۱۲۵، پیش‌نمایش زندهٔ ۱۲۶)؛ فروش ۱۰→۱۲ (جمع ۵۰→۶۰ هزار خودکار)؛ سینک 200، بدون خطای کنسول
+- نکتهٔ E2E: منوی InlinePicker با هر scroll بسته می‌شود → کلیک options در تست فقط با eval داخل div.bg-popover
+- محیط: سندباکس ریست شده بود → JDK 21 پرتابل (.jdk) + platform-36/build-tools-36 (.android-sdk) + android/local.properties دوباره ساخته شد
+- نسخه ۲.۶.۰: settings subtitle + versionCode 11/versionName 2.6.0 + به‌روزرسانی download/Waffly-AI-Prompt.md (بخش ویرایش همه‌جا + planProductionBoxes + نسخه)
+- وب: build-pages (بدون API_BASE، کش SW mtl91o75) → wrangler pages deploy → چانک‌های زنده = بیلد محلی + مارکر «ذخیره تغییرات» در JS زنده
+- APK v2.6.0: build-pages با API_BASE (کش apk-mtl94x5s) → cap sync → gradle assembleRelease → versionCode 11 + گواهی یکسان a31b9080…cda = download/Waffly-v2.6.0.apk (8.3MB)
+
+Stage Summary:
+- از این نسخه هر رکورد ثبت‌شده در اپ قابل ویرایش کامل است؛ کدهای چاپی جعبه‌ها هنگام ویرایش تولید محفوظ می‌مانند و فقط جعبه‌های جدید کد می‌گیرند
+- ویرایش با همان مکانیک سینک (LWW کل‌رکوردی) کار می‌کند؛ هیچ تغییر اسکیما/سرور لازم نبود
+- توکن Cloudflare و Account ID کاربر فقط به‌صورت env لحظهٔ دیپلوی استفاده شد و در هیچ فایلی ذخیره نشد

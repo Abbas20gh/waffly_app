@@ -29,3 +29,27 @@ export function nextBoxSerial(existingCodes: string[], date: string): number {
   }
   return max + 1
 }
+
+/**
+ * برنامهٔ تغییر تعداد جعبه‌های یک تولید موجود (ویرایش تولید — v2.6)
+ * - liveBoxes: جعبه‌های زندهٔ همین تولید (مرتب‌شده بر اساس کد)
+ * - newCount: تعداد جدید جعبه‌ها
+ * - date: تاریخ (احتمالاً جدید) تولید — کدهای جدید از همین تاریخ می‌گیرند
+ * - allCodes: همهٔ کدهای موجود (شامل حذف‌شده‌ها — کد چاپی بازیافت نمی‌شود)
+ * خروجی: کدهای جعبه‌های جدید + شناسهٔ جعبه‌هایی که باید حذف شوند (از آخر؛ بزرگ‌ترین کد)
+ */
+export function planProductionBoxes(
+  liveBoxes: { id: string; code: string }[],
+  newCount: number,
+  date: string,
+  allCodes: string[],
+): { addCodes: string[]; removeIds: string[] } {
+  const count = Math.max(0, Math.round(newCount) || 0)
+  const add = Math.max(0, count - liveBoxes.length)
+  const remove = Math.max(0, liveBoxes.length - count)
+  const start = nextBoxSerial(allCodes, date)
+  const addCodes: string[] = []
+  for (let i = 0; i < add; i++) addCodes.push(boxCode(date, start + i))
+  const removeIds = remove > 0 ? liveBoxes.slice(liveBoxes.length - remove).map(b => b.id) : []
+  return { addCodes, removeIds }
+}
