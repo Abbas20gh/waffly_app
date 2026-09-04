@@ -468,3 +468,31 @@ Stage Summary:
 - از این نسخه انتخاب هر چیزی در دیالوگ‌ها (کد جعبه، مشتری، واریز به حساب، کالا، ...) با لمس واقعی روی گوشی کار می‌کند — رفع در سطح ui/dialog.tsx سراسری است و همهٔ دیالوگ‌ها را پوشش می‌دهد
 - اسکرول لیست بلند منوها (۸۰ جعبه) با لمس هم برگشت
 - درس ماندگار: تست دیالوگ/Portal فقط با ورودی واقعی؛ eval click باگ pointer-events را پنهان می‌کند
+
+---
+Task ID: 22
+Agent: Main Agent (Super Z)
+Task: v2.8.0 — قابلیت فاکتور طبق سند Waffly-Invoice-Feature.pdf (متنی/PNG/PDF + تخفیف + شماره سریال سروری + تلگرام/پیامک + فاکتور ترکیبی)
+
+Work Log:
+- سند کاربر خوانده شد؛ همه ۹ بخش اجرا شد (اسکیما، محتوا، طراحی، فنی، ارسال، سریال، تلگرام، چک‌لیست)
+- اسکیما در ۶ لایه: Sale += discountType/discountValue/invoiceNumber(nullable) + جدول جدید combinedInvoices + فیلدهای بانکی/تماس روی Setting + جدول سروری InvoiceCounter — types/localdb v5/sync-tables (+ نوع numNull برای null صحیح)/prisma db push/CF _sync (ALTER Sale ×۳ + CREATE CombinedInvoice + CREATE InvoiceCounter با INSERT OR IGNORE شروع از ۱۰۰۰)/شمارنده Prisma
+- endpoint ها در هر دو بک‌اند (قانون پاریتی): POST /api/invoice/next-number (Turso UPDATE...RETURNING atomic / Prisma interactive tx — تست: 1001→1002 پشت‌سرهم) و POST /api/invoice/send-telegram (text→sendMessage، PDF→sendDocument، PNG→sendPhoto؛ token/chat_id فقط env؛ بدون env → خطای فارسی واضح 500 — تست شد)
+- E2E واقعی (کلیک mouse/CDP نه eval — درس Task 21): فروش ۵۰×۱۰۰۰ با تخفیف ثابت ۵۰۰۰ → جمع نهایی زنده ۴۵٬۰۰۰ و ذخیره ✓؛ دکمه فاکتور → دیالوگ، شماره از سرور (۱۰۰۳) ✓؛ متن فاکتور با همه اجزا (سربرگ/اقلام/مرجوعی/تخفیف/تسویه/بانک/تشکر) ✓؛ پیش‌نمایش تصویری پالت کرم/پسته‌ای + آیکون بستنی SVG ✓
+- باگ‌های یافت و رفع‌شده در خود تست: ① react-pdf: «Page is not defined» (destructure داخل تابع، JSX در اسکوپ ماژول) → بازنویسی با namespace پویا ② شماره تکراری: effect ریست مدل با initialModel جدید هر رندر، شماره صادرشده را پاک می‌کرد → invoiceKey پایدار ③ PDF با @react-pdf/renderer در dev هنگ می‌کرد (toBlob برنمی‌گشت، بدون خطا) → **مهاجرت به html2canvas-pro + jsPDF** (استک اثبات‌شدهٔ خروجی حسابداری) از همان طراحی HTML — نکته کلیدی: html2canvas روی نود opacity:0 هنگ می‌کند → رندر موقت بیرون از صفحه (left:-2000px) با createRoot + unmount ④ duplicate toast OL (پیش‌موجود) گمراه‌کننده بود
+- خروجی‌ها تست شد: دانلود invoice-1004.pdf ✓، invoice-1004.png ✓ (هر دو با توست موفق)، پیامکی (وب بدون شماره → کپی + توست) ✓، تلگرام بدون توکن → پیام خطای واضح ✓
+- فاکتور ترکیبی: دکمه «فاکتور ترکیبی» → چک‌باکس ردیف‌ها + فیلتر خودکار «تسویه‌نشده» + گارد «همه یک مشتری» (با دو مشتری هم‌نام تست شد — درست بلاک می‌کند) → صدور → شماره ۱۰۰۶ از شمارنده سراسری، بخش‌بندی ««فروش تاریخ»» برای هر فروش با تخفیف/جمع هر بخش + جمع‌بندی نهایی (۶۹٬۰۰۰/مانده ۶۹٬۰۰۰) + رکورد در combinedInvoices ذخیره و سینک شد (بررسی Dexie) ✓
+- بازکردن مجدد فاکتورِ شماره‌دار = بدون درخواست شماره جدید (۱۰۰۴ ثابت ماند) ✓
+- تنظیمات: کارت «اطلاعات فاکتور» (به نام/بانک/کارت/شبا/تلفن‌ها) با پیش‌فرض‌های سند؛ سربرگ «نان بستنی آرتا» وقتی businessName=Waffly است
+- فونت‌ها: woff2 از قبل بود؛ TTF Regular/Bold از ریپوی رسمی Vazirmatn در public/fonts/pdf (در نهایت برای مسیر jsPDF لازم نشد — برای احتمال بازگشت به react-pdf نگه داشته شد)
+- پکیج‌ها: @react-pdf/renderer + html-to-image + @capacitor/share (شассивه در sync اندروید ثبت شد)؛ محیط: سندباکس دوباره ریست شده بود → JDK21 (.jdk) + cmdline-tools/platform-36/build-tools-36 (.android-sdk) + local.properties دوباره ساخته شد
+- Cloudflare: TELEGRAM_CHAT_ID=-1004377754969 با PATCH API روی env پروداکشن Pages ست شد (success)؛ TELEGRAM_BOT_TOKEN منتظر توکن بات از کاربر
+- وب: build-pages (کش mtmte39u) → deploy (بار اول تایم‌اوت شد، بار دوم کامل) → هر ۳ مارکر زنده (sales-view/диалог/menu-guard) ✓
+- APK v2.8.0: build-pages با API_BASE (کش apk-mtmtns93) → cap sync (پلاگین Share ثبت) → gradle → aapt versionCode=14/2.8.0 + گواهی a31b9080… ✓ = download/Waffly-v2.8.0.apk (8.5MB)
+- تست‌ها: unit فاکتور ۴۱/۴۱ (scripts/test-invoice-v280.ts) + رگرسیون boxcode ۲۰/۲۰ + edit v2.6 ۱۲/۱۲ — tsc/eslint فایل‌های جدید صفر خطا
+- commit 7f69809 push شد
+
+Stage Summary:
+- فاکتور متنی/تصویری/PNG/PDF برای هر فروش + فاکتور ترکیبی صورت‌حسابی با شماره سریال سروری atomic کار می‌کند؛ آفلاین = پیش‌نویس شفاف
+- تخفیف در فرم فروش + لحاظ در totalAmount (آمار/سود خودکار درست) + ردیف مرجوعی جدا در فاکتور
+- دو کار باقی برای کاربر: ① ساخت بات تلگرام و دادن توکن (ست روی Pages + redeploy) ② تأیید getUpdates برای chat_id
