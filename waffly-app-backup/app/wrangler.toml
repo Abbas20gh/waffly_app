@@ -1,0 +1,7 @@
+# Cloudflare Pages — Waffly
+name = "waffly"
+compatibility_date = "2025-08-01"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "out"
+
+# متغیرهای محیطی (TURSO_URL و TURSO_TOKEN به‌صورت secret با wrangler ست می‌شوند — اینجا قرار نگیرد چون در git است)

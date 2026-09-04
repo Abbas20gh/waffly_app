@@ -519,3 +519,29 @@ Stage Summary:
 - ارسال فاکتور تلگرام کاملاً عملیاتی شد: متنی/PNG/PDF به تاپیک «فاکتور» گروه «نان بستنی آرتا نان»
 - هر دو کار باقی‌مانده Task 22 (توکن بات + chat_id) بسته شد
 - نکته نگهداری: گروه فرومی است؛ اگر تاپیک «فاکتور» حذف/جابه‌جا شود فقط کافی است TELEGRAM_THREAD_ID روی Pages آپدیت شود؛ حذف کامل متغیر = ارسال به General
+
+---
+Task ID: 24
+Agent: Main Agent (Super Z)
+Task: ساخت سایت فروشگاهی «نان بستنی آرتا» طبق سند Arta-Website-Prompt.pdf + پاسخ ۱۰ سؤال شفاف‌سازی کاربر
+
+Work Log:
+- سند ۹ صفحه‌ای خوانده شد؛ ۱۰ سؤال از کاربر پرسیده شد (AskUserQuestion). پاسخ‌ها: تخفیف عمده هر نوع جداگانه · اسانس پرتقال روی هر ۴ نوع · جدول حمل را AI می‌سازد · درباره ما کوتاه · افکت سه‌بعدی واقعی (Three.js) · بدون درگاه پرداخت فعلاً (لایه انتزاعی) · خرید مهمان بدون حساب · عکس محصولات AI. دو سؤال بی‌پاسخ با پیش‌فرض: مبدأ=تهران، دامنه=پیشنهاد در پیام پایانی
+- Waffly از سندباکس به GitHub امن شد (commit b47e162 روی main) + بکاپ محلی criticals در waffly-app-backup/ (keystore امضای APK، .env تورسو، db) — کل اپ در waffly-app-backup/app
+- init-fullstack.sh اجرا شد (قالب تازه Next 16.1 + Tailwind 4 + shadcn + Prisma/SQLite) — dev server پورت 3000
+- وابستگی‌های سه‌بعدی: three + @react-three/fiber + @react-three/drei + @types/three
+- پالت برند در globals.css: کرم #FFF9F1 پایه، شکلاتی #6B4226 primary، نارنجی #F4A259، پسته‌ای #7FB069، گرادیان پاستلی + وزیرمتن سلف‌هاست (woff2 از بکاپ Waffly — هماهنگی برند طبق سند)
+- Prisma: Product (pricePerUnit/unitsPerBox=200/essenceEnabled)، Essence، Province (۳۱ استان با هزینه از تهران)، Order (serial اتمیک ۱۰۰۱+، items JSON با نام‌های همخوان Waffly یعنی boxCount)، OrderCounter، Setting — seed اسکریپت scripts/seed-arta.ts
+- موتور قیمت‌گذاری مشترک src/lib/arta/pricing.ts: جعبه‌فروشی خالص (حداقل ۱ جعبه)، عمده از ۱۰ جعبه هر نوع (هر عدد ۲۰۰− تومان = هر جعبه ۴۰٬۰۰۰−)، سرور هرگز به قیمت کلاینت اعتماد نمی‌کند
+- API: products، provinces (+settings عمومی شامل شماره کارت)، orders POST (اعتبارسنجی کامل + محاسبه سرور + سریال اتمیک)، orders/track (سریال+موبایل)، admin/session (HMAC کوکی، رمز از env ADMIN_PASSWORD=arta1404)، admin/orders (فیلتر/جستجو/صفحه‌بندی/تغییر وضعیت)، admin/products، admin/provinces (PUT دسته‌ای)، admin/settings
+- صفحات: / (هیرو سه‌بعدی + مزایا + محصولات + بنر عمده + درباره کوتاه)، /products، /cart (نوار پیشرفت عمده + ارسال رایگان)، /checkout (پرداخت در محل/کارت‌به‌کارت)، /track (تایم‌لاین وضعیت)، /about، /admin (۴ تب)
+- هیرو سه‌بعدی: مدل پروسیجرال ساندویچ بستنی (RoundedBox بیسکویت‌ها + بستنی sheen + خرده پسته/شکلات + ContactShadows)، چرخش مستقیم وابسته به اسکرول (progress ref + lerp در useFrame — طبق سند نه انیمیشن خودکار)، دوربین واکنش‌گرا (z=13/9/6.4 بر اساس عرض)، تصویر AI زیر بوم به‌عنوان fallback وب‌جی‌ال
+- ۵ عکس AI (۴ محصول یکدست پس‌زمینه کرم + هیرو 1344x768 — نکته: سایز باید مضرب ۳۲ باشد، 720 رد شد)
+- E2E واقعی agent-browser: چرخش با اسکرول تأیید (۲ اسکرین‌شات زاویه متفاوت)؛ سبد ۱۲ جعبه کوچک اسانس‌دار + ۳ متوسط → ۸٬۶۴۰٬۰۰۰+۲٬۴۰۰٬۰۰۰=۱۱٬۰۴۰٬۰۰۰ و صرفه‌جویی ۴۸۰٬۰۰۰ و ارسال رایگان ✓؛ سفارش واقعی ۱۰۰۱ ثبت شد؛ پیگیری با سریال+موبایل ✓؛ ادمین ورود+تغییر وضعیت به PROCESSING و تأیید API ✓؛ موبایل 390px و دسکتاپ 1440px اسکرین‌شات سالم؛ کنسول پاک
+- باگ‌های رفع‌شده: ① import غلط WHOLESALE_MIN_BOXES از pricing (انتقال به constants) ② checkout بدون fetch محصولات → سبد خالی و دکمه disable ③ آیتم سفارش با فیلد boxes ذخیره می‌شد ولی DTO انتظار boxCount (نام Waffly) داشت → مپ در API + faNumber مقاوم + جداکننده فارسی ٬ ④ CameraFit بدون import ⑤ لینت: مستثناکردن waffly-app-backup از ESLint + خاموشی set-state-in-effect و immutability موضعی R3F
+- گیت: برنچ جدید arta-site (commit 091bc83) push شد — main دست‌نخورده برای Waffly؛ بازگشت به Waffly = فایل‌ها در waffly-app-backup/app + برنچ main
+
+Stage Summary:
+- فروشگاه کامل و E2E-تأییدشده روی سندباکس: کاتالوگ جعبه‌ای، عمده خودکار هر نوع، سبد، تسویه مهمان، پیگیری، پنل ادمین
+- باقی برای کاربر: انتخاب دامنه .ir و ثبت، تأیید شهر مبدأ (فعلاً تهران)، پر کردن شماره کارت در پنل، بعداً درگاه (زرین‌پال شخصی) و OTP پیامکی، هاست ایرانی (آروان/لیارا) طبق سند
+- رمز ادمین فعلی: arta1404 (env ADMIN_PASSWORD — باید عوض شود)
