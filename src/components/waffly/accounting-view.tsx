@@ -5,7 +5,7 @@ import { useMemo, useRef, useState } from 'react'
 import { toast } from '@/hooks/use-toast'
 import {
   Calculator, ChevronRight, ChevronLeft, FileSpreadsheet, FileText, Printer,
-  TrendingUp, TrendingDown, Wallet, Scale, Plus, Trash2, PiggyBank, Pencil,
+  TrendingUp, TrendingDown, Wallet, Scale, Plus, Trash2, PiggyBank, Pencil, Landmark, ChevronDown,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -13,34 +13,37 @@ import { Input } from '@/components/ui/input'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import { PageHeader, StatCard, EmptyState, Money, Num, FormRow } from './bits'
+import { PageHeader, StatCard, EmptyState, Money, Num, FormRow, TabsBar, useConfirm, confirmRemove } from './bits'
 import { JalaliDateInput } from './jalali-date'
 import { InlinePicker } from './inline-picker'
 import { useDataBundle } from '@/lib/hooks'
 import { periodOf, shiftPeriod, faDigits, faMoney, prettyJalali, todayJalali } from '@/lib/jalali'
-import { periodReport, otherFundsTotals, type ProfitMode } from '@/lib/calc'
-import { putRecord, removeRecord, uid, getActiveUser } from '@/lib/localdb'
-import type { OtherFund } from '@/lib/types'
+import { periodReport, otherFundsTotals, active, effectivePaymentDate, type ProfitMode } from '@/lib/calc'
+import { putRecord, removeRecord, uid, getActiveUser, useTable } from '@/lib/localdb'
+import type { OtherFund, Account, Sale, Purchase, Expense, Customer, Material, Good } from '@/lib/types'
 import { exportRowsToExcel, exportElementToPdf } from '@/lib/export'
 import { cn } from '@/lib/utils'
 
 export function AccountingView() {
   const d = useDataBundle()
+  const [sec, setSec] = useState<'report' | 'accounts'>('report')
+  const accounts = useTable<Account>('accounts')
+  const { confirm, element: confirmDialog } = useConfirm()
   const [offset, setOffset] = useState(0)
   const reportRef = useRef<HTMLDivElement>(null)
   const [mode, setMode] = useState<ProfitMode>('net')
   const [fundOpen, setFundOpen] = useState(false)
   const [editingFund, setEditingFund] = useState<OtherFund | null>(null)
-  const [fundForm, setFundForm] = useState({ date: todayJalali(), type: 'IN' as OtherFund['type'], amount: '', description: '' })
+  const [fundForm, setFundForm] = useState({ date: todayJalali(), type: 'IN' as OtherFund['type'], amount: '', description: '', accountId: '' })
 
   const openNewFund = () => {
     setEditingFund(null)
-    setFundForm({ date: todayJalali(), type: 'IN', amount: '', description: '' })
+    setFundForm({ date: todayJalali(), type: 'IN', amount: '', description: '', accountId: '' })
     setFundOpen(true)
   }
   const openEditFund = (f: OtherFund) => {
     setEditingFund(f)
-    setFundForm({ date: f.date, type: f.type, amount: f.amount ? String(f.amount) : '', description: f.description || '' })
+    setFundForm({ date: f.date, type: f.type, amount: f.amount ? String(f.amount) : '', description: f.description || '', accountId: f.accountId || '' })
     setFundOpen(true)
   }
 
@@ -62,6 +65,7 @@ export function AccountingView() {
       type: fundForm.type,
       amount,
       description: fundForm.description.trim(),
+      accountId: fundForm.accountId || null,
       deleted: 0,
     })
     setFundForm(f => ({ ...f, amount: '', description: '' }))
@@ -143,6 +147,20 @@ export function AccountingView() {
           </div>
         }
       />
+
+      <TabsBar<'report' | 'accounts'>
+        value={sec}
+        onChange={setSec}
+        tabs={[
+          { key: 'report', label: 'گزارش دوره' },
+          { key: 'accounts', label: 'حساب‌ها (بانک و صندوق)' },
+        ]}
+      />
+
+      {sec === 'accounts' ? (
+        <AccountsTab />
+      ) : (
+      <>
 
       {/* دکمه‌های خروجی */}
       <div className="flex flex-wrap gap-2 mb-4 no-print">
@@ -227,7 +245,7 @@ export function AccountingView() {
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-muted-foreground hover:text-red-600 no-print" aria-label="حذف"
-                      onClick={() => void removeRecord('otherFunds', f.id)}>
+                      onClick={() => void confirmRemove(confirm, 'otherFunds', f.id, 'حذف سایر وجه', `آیا از حذف «${f.description}» (${faMoney(f.amount)} تومان) مطمئن هستید؟`)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
@@ -410,6 +428,14 @@ export function AccountingView() {
             <FormRow label="تاریخ">
               <JalaliDateInput value={fundForm.date} onChange={v => setFundForm(f => ({ ...f, date: v }))} />
             </FormRow>
+            <FormRow label="حساب" hint={fundForm.type === 'IN' ? 'پول به این حساب اضافه می‌شود' : 'پول از این حساب کم می‌شود'}>
+              <InlinePicker
+                value={fundForm.accountId}
+                options={[{ value: '', label: 'بدون حساب' }, ...accounts.filter(a => !a.deleted).map(a => ({ value: a.id, label: a.name, hint: a.kind === 'BANK' ? 'حساب بانکی' : 'صندوق نقدی' }))]}
+                onChange={v => setFundForm(f => ({ ...f, accountId: v }))}
+                placeholder="انتخاب حساب (اختیاری)"
+              />
+            </FormRow>
             <FormRow label="توضیح منشأ/مقصد (الزامی)" hint="مثلاً: فروش جنس قدیم انبار، موجودی اولیه صندوق">
               <Input value={fundForm.description} onChange={e => setFundForm(f => ({ ...f, description: e.target.value }))} className="h-11" />
             </FormRow>
@@ -420,6 +446,239 @@ export function AccountingView() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </>
+      )}
+      {confirmDialog}
+    </div>
+  )
+}
+
+// ================= حساب‌ها (بانک و صندوق) — v2.7 =================
+// موجودی هر حساب = موجودی اولیه + واریزی فروش‌ها + سایر وجوه ورود − پرداخت خریدها − هزینه‌ها − سایر وجوه خروج
+interface LedgerRow { key: string; date: string; dir: 'IN' | 'OUT'; amount: number; desc: string; src: string }
+
+function AccountsTab() {
+  const accounts = useTable<Account>('accounts')
+  const sales = useTable<Sale>('sales')
+  const purchases = useTable<Purchase>('purchases')
+  const expenses = useTable<Expense>('expenses')
+  const otherFunds = useTable<OtherFund>('otherFunds')
+  const customers = useTable<Customer>('customers')
+  const materials = useTable<Material>('materials')
+  const goods = useTable<Good>('goods')
+  const { confirm, element: confirmDialog } = useConfirm()
+
+  const [dlgOpen, setDlgOpen] = useState(false)
+  const [editing, setEditing] = useState<Account | null>(null)
+  const [form, setForm] = useState({ name: '', kind: 'BANK' as Account['kind'], initialBalance: '', note: '' })
+  const [expanded, setExpanded] = useState<string | null>(null)
+
+  const openNew = () => { setEditing(null); setForm({ name: '', kind: 'BANK', initialBalance: '', note: '' }); setDlgOpen(true) }
+  const openEdit = (a: Account) => {
+    setEditing(a)
+    setForm({ name: a.name, kind: a.kind, initialBalance: a.initialBalance ? String(a.initialBalance) : '', note: a.note || '' })
+    setDlgOpen(true)
+  }
+
+  const save = async () => {
+    if (!form.name.trim()) { toast({ title: 'نام حساب را وارد کنید', variant: 'destructive' }); return }
+    await putRecord<Account>('accounts', {
+      ...(editing || {}),
+      id: editing ? editing.id : uid(),
+      updatedAt: editing ? editing.updatedAt : 0,
+      name: form.name.trim(),
+      kind: form.kind,
+      initialBalance: parseFloat(form.initialBalance || '0') || 0,
+      note: form.note || null,
+      active: 1,
+      deleted: 0,
+    })
+    toast({ title: editing ? 'حساب ویرایش شد' : 'حساب اضافه شد', description: form.name.trim() })
+    setDlgOpen(false)
+    setEditing(null)
+  }
+
+  const itemName = (p: Purchase) =>
+    p.itemKind === 'GOOD'
+      ? (goods.find(g => g.id === p.materialId)?.name || 'کالا')
+      : (materials.find(m => m.id === p.materialId)?.name || 'ماده')
+
+  /** دفتر گردش حساب — از رکوردهای سینک‌شده مشتق می‌شود (بدون جدول موازی) */
+  const ledgerOf = (accId: string): LedgerRow[] => {
+    const rows: LedgerRow[] = []
+    for (const s of active(sales)) {
+      if (s.accountId !== accId || (s.paidAmount || 0) <= 0) continue
+      rows.push({
+        key: `s-${s.id}`, date: effectivePaymentDate(s) || s.date, dir: 'IN', amount: s.paidAmount,
+        desc: `فروش — ${customers.find(c => c.id === s.customerId)?.name || 'نامشخص'}`,
+        src: 'فروش',
+      })
+    }
+    for (const p of active(purchases)) {
+      if (p.accountId !== accId || (p.paidAmount || 0) <= 0) continue
+      rows.push({
+        key: `p-${p.id}`, date: p.date, dir: 'OUT', amount: p.paidAmount,
+        desc: `خرید — ${itemName(p)}`, src: 'خرید',
+      })
+    }
+    for (const e of active(expenses)) {
+      if (e.accountId !== accId || (e.amount || 0) <= 0) continue
+      rows.push({ key: `e-${e.id}`, date: e.date, dir: 'OUT', amount: e.amount, desc: e.description || 'هزینه', src: 'هزینه' })
+    }
+    for (const f of active(otherFunds)) {
+      if (f.accountId !== accId || (f.amount || 0) <= 0) continue
+      rows.push({ key: `f-${f.id}`, date: f.date, dir: f.type === 'IN' ? 'IN' : 'OUT', amount: f.amount, desc: f.description, src: 'سایر وجه' })
+    }
+    return rows.sort((a, b) => (b.date + b.key).localeCompare(a.date + a.key))
+  }
+
+  const statsOf = (accId: string, initial: number) => {
+    const rows = ledgerOf(accId)
+    const inc = rows.filter(r => r.dir === 'IN').reduce((a, r) => a + r.amount, 0)
+    const out = rows.filter(r => r.dir === 'OUT').reduce((a, r) => a + r.amount, 0)
+    return { rows, inc, out, balance: initial + inc - out }
+  }
+
+  const list = active(accounts).sort((a, b) => a.name.localeCompare(b.name, 'fa'))
+  const totalBalance = list.reduce((a, acc) => a + statsOf(acc.id, acc.initialBalance || 0).balance, 0)
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground leading-5 max-w-xl">
+          حساب‌های بانکی و صندوق نقدی‌تان را وارد کنید؛ در فرم فروش «واریز به حساب» و در فرم خرید «پرداخت از حساب» را انتخاب کنید
+          تا گردش پول و موجودی همین‌جا خودکار محاسبه شود.
+        </p>
+        <Button onClick={openNew} className="h-11 shrink-0"><Plus className="ml-1 h-4 w-4" /> حساب جدید</Button>
+      </div>
+
+      {list.length > 0 && (
+        <Card className="waffly-card">
+          <CardContent className="p-4 flex items-center justify-between gap-2">
+            <div>
+              <p className="text-xs text-muted-foreground">مجموع موجودی همه حساب‌ها</p>
+              <p className={cn('text-xl font-bold waffly-num mt-0.5', totalBalance < 0 ? 'text-red-600' : 'text-green-700')}>{faMoney(totalBalance)} <span className="text-[11px] font-normal text-muted-foreground">تومان</span></p>
+            </div>
+            <Wallet className="h-8 w-8 text-muted-foreground/40" />
+          </CardContent>
+        </Card>
+      )}
+
+      {list.length === 0 ? (
+        <Card className="waffly-card">
+          <CardContent>
+            <EmptyState
+              title="حسابی ثبت نشده"
+              desc="مثلاً «بانک ملت» یا «صندوق نقدی» بسازید و موجودی اولیه‌اش را وارد کنید."
+              icon={<Landmark className="h-5 w-5" />}
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid lg:grid-cols-2 gap-4">
+          {list.map(acc => {
+            const st = statsOf(acc.id, acc.initialBalance || 0)
+            const isOpen = expanded === acc.id
+            return (
+              <Card key={acc.id} className="waffly-card">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <span className={cn('h-9 w-9 rounded-xl flex items-center justify-center shrink-0',
+                      acc.kind === 'BANK' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-amber-50 text-amber-700 border border-amber-200')}>
+                      {acc.kind === 'BANK' ? <Landmark className="h-4.5 w-4.5" /> : <Wallet className="h-4.5 w-4.5" />}
+                    </span>
+                    <span className="font-bold">{acc.name}</span>
+                    <span className="text-[10px] rounded bg-muted px-1.5 py-0.5 text-muted-foreground">{acc.kind === 'BANK' ? 'حساب بانکی' : 'صندوق نقدی'}</span>
+                    <div className="flex-1" />
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" aria-label="ویرایش حساب" onClick={() => openEdit(acc)}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-red-600" aria-label="حذف حساب"
+                      onClick={() => void confirmRemove(confirm, 'accounts', acc.id, 'حذف حساب', `آیا از حذف حساب «${acc.name}» مطمئن هستید؟ فروش‌ها و خریدهای قبلی حفظ می‌شوند ولی دیگر به این حساب وصل نیستند.`)}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2.5">
+                  <div className="flex items-end justify-between gap-2">
+                    <div>
+                      <p className="text-[11px] text-muted-foreground">موجودی فعلی</p>
+                      <p className={cn('text-xl font-bold waffly-num', st.balance < 0 ? 'text-red-600' : 'text-green-700')}>
+                        {faMoney(st.balance)} <span className="text-[11px] font-normal text-muted-foreground">تومان</span>
+                      </p>
+                    </div>
+                    <div className="text-left text-[11px] waffly-num space-y-0.5">
+                      <p className="text-green-700">ورود: +{faMoney(st.inc)}</p>
+                      <p className="text-red-700">خروج: −{faMoney(st.out)}</p>
+                      {acc.initialBalance > 0 && <p className="text-muted-foreground">موجودی اولیه: {faMoney(acc.initialBalance)}</p>}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 border-t pt-2">
+                    <p className="text-[10px] text-muted-foreground">{faDigits(st.rows.length)} گردش ثبت‌شده</p>
+                    <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => setExpanded(isOpen ? null : acc.id)}>
+                      گردش‌ها <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', isOpen && 'rotate-180')} />
+                    </Button>
+                  </div>
+                  {isOpen && (
+                    <div className="space-y-1 max-h-64 overflow-y-auto thin-scroll border-t pt-2">
+                      {st.rows.length === 0 ? (
+                        <p className="text-xs text-muted-foreground text-center py-3">گردشی ثبت نشده — در فرم فروش/خرید این حساب را انتخاب کنید.</p>
+                      ) : st.rows.map(r => (
+                        <div key={r.key} className="flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs">
+                          <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-bold shrink-0',
+                            r.dir === 'IN' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700')}>
+                            {r.dir === 'IN' ? 'واریز' : 'برداشت'}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate">{r.desc}</p>
+                            <p className="text-[10px] text-muted-foreground waffly-num">{prettyJalali(r.date)} • {r.src}</p>
+                          </div>
+                          <span className={cn('font-bold waffly-num shrink-0', r.dir === 'IN' ? 'text-green-700' : 'text-red-700')}>
+                            {r.dir === 'IN' ? '+' : '−'}{faMoney(r.amount)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      )}
+
+      {/* دیالوگ ساخت/ویرایش حساب */}
+      <Dialog open={dlgOpen} onOpenChange={setDlgOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editing ? `ویرایش حساب: ${editing.name}` : 'حساب جدید'}</DialogTitle>
+            <DialogDescription>حساب بانکی یا صندوق نقدی — گردش پول و موجودی خودکار محاسبه می‌شود.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <FormRow label="نام حساب" hint="مثلاً: بانک ملت، کارت به کارت، صندوق نقدی">
+              <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="h-11" />
+            </FormRow>
+            <FormRow label="نوع حساب">
+              <InlinePicker
+                value={form.kind}
+                options={[{ value: 'BANK', label: 'حساب بانکی' }, { value: 'CASH', label: 'صندوق نقدی' }]}
+                onChange={v => setForm(f => ({ ...f, kind: v as Account['kind'] }))}
+              />
+            </FormRow>
+            <FormRow label="موجودی اولیه (تومان)" hint="مبلغی که همین حالا در این حساب دارید">
+              <Input inputMode="decimal" className="waffly-num-input h-11" value={form.initialBalance} onChange={e => setForm(f => ({ ...f, initialBalance: e.target.value }))} />
+            </FormRow>
+            <FormRow label="یادداشت (اختیاری)">
+              <Input value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} className="h-11" />
+            </FormRow>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDlgOpen(false)}>انصراف</Button>
+            <Button onClick={save}>{editing ? 'ذخیره تغییرات' : 'افزودن حساب'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {confirmDialog}
     </div>
   )
 }

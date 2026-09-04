@@ -109,6 +109,7 @@ model Sale {
   paymentDate    String? // تاریخ وصول واقعی
   note           String?
   createdBy      String?
+  accountId      String? // v2.7 — حساب واریز مبلغ پرداختی
   updatedAt      Float
   deleted        Int     @default(0)
   @@index([date])
@@ -137,6 +138,7 @@ model Purchase {
   boxesCount    Float   @default(0) // منسوخ (v2.5) — برای کالا = quantity
   note          String?
   createdBy     String?
+  accountId     String? // v2.7 — حساب برداشت مبلغ پرداختی
   updatedAt     Float
   deleted       Int     @default(0)
   @@index([date])
@@ -182,6 +184,7 @@ model Expense {
   amount      Float   @default(0)
   description String?
   createdBy   String?
+  accountId   String? // v2.7 — حساب پرداخت
   updatedAt   Float
   deleted     Int     @default(0)
   @@index([date])
@@ -193,9 +196,22 @@ model OtherFund {
   type        String @default("IN") // IN ورود | OUT خروج — خارج از حساب سود
   amount      Float  @default(0)
   description String // اجباری — توضیح منشأ/مقصد پول
+  accountId   String? // v2.7 — حساب مربوطه
   updatedAt   Float
   deleted     Int    @default(0)
   @@index([date])
+}
+
+// حساب بانکی/صندوق نقدی (v2.7)
+model Account {
+  id             String @id
+  name           String
+  kind           String @default("CASH") // BANK حساب بانکی | CASH صندوق نقدی
+  initialBalance Float  @default(0)
+  note           String?
+  active         Int    @default(1)
+  updatedAt      Float
+  deleted        Int    @default(0)
 }
 
 model Setting {

@@ -11,7 +11,7 @@ import { Switch } from '@/components/ui/switch'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import { PageHeader, FormRow, TabsBar, EmptyState, Num } from './bits'
+import { PageHeader, FormRow, TabsBar, EmptyState, Num, useConfirm, confirmRemove } from './bits'
 import { JalaliDateInput } from './jalali-date'
 import { InlinePicker } from './inline-picker'
 import { useTable, useDexie, dexie, putRecord, putMany, removeRecord, uid, getActiveUser } from '@/lib/localdb'
@@ -51,6 +51,7 @@ function DailyTab() {
   const breadTypes = useTable<BreadType>('breadTypes')
   const productions = useTable<Production>('productions')
   const boxes = useTable<Box>('boxes')
+  const { confirm, element: confirmDialog } = useConfirm()
   const [open, setOpen] = useState(false)
   const [expandedProd, setExpandedProd] = useState<string | null>(null)
   const [editBox, setEditBox] = useState<Box | null>(null)
@@ -290,7 +291,7 @@ function DailyTab() {
                     <Button
                       variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600 shrink-0"
                       aria-label="حذف"
-                      onClick={() => { void removeRecord('productions', p.id); toast({ title: 'حذف شد' }) }}
+                      onClick={() => void confirmRemove(confirm, 'productions', p.id, 'حذف تولید', `آیا از حذف این تولید (${prettyJalali(p.date)}) مطمئن هستید؟ جعبه‌های آن هم حذف می‌شوند و آمار به‌روز می‌شود.`)}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -314,7 +315,7 @@ function DailyTab() {
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
                           <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-muted-foreground hover:text-red-600" aria-label="حذف جعبه"
-                            onClick={() => { void removeRecord('boxes', b.id); toast({ title: 'جعبه حذف شد', description: 'حذف به‌صورت منطقی ثبت و سینک می‌شود.' }) }}>
+                            onClick={() => void confirmRemove(confirm, 'boxes', b.id, 'حذف جعبه', `آیا از حذف جعبه با کد «${b.code}» مطمئن هستید؟ کد چاپی روی جعبه دیگر معتبر نخواهد بود.`)}>
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         </div>
@@ -415,6 +416,7 @@ function DailyTab() {
         </DialogContent>
       </Dialog>
       <BoxEditDialog box={editBox} breadTypes={breadTypes} onClose={() => setEditBox(null)} />
+      {confirmDialog}
     </div>
   )
 }
@@ -423,6 +425,7 @@ function DailyTab() {
 function BoxesTab() {
   const boxes = useTable<Box>('boxes')
   const breadTypes = useTable<BreadType>('breadTypes')
+  const { confirm, element: confirmDialog } = useConfirm()
   const [filterDate, setFilterDate] = useState('')
   const [editBox, setEditBox] = useState<Box | null>(null)
 
@@ -469,7 +472,7 @@ function BoxesTab() {
                   <Pencil className="h-3.5 w-3.5" />
                 </Button>
                 <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-muted-foreground hover:text-red-600" aria-label="حذف جعبه"
-                  onClick={() => { void removeRecord('boxes', b.id) }}>
+                  onClick={() => void confirmRemove(confirm, 'boxes', b.id, 'حذف جعبه', `آیا از حذف جعبه با کد «${b.code}» مطمئن هستید؟ کد چاپی روی جعبه دیگر معتبر نخواهد بود.`)}>
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               </div>
@@ -478,6 +481,7 @@ function BoxesTab() {
         )}
       </CardContent>
       <BoxEditDialog box={editBox} breadTypes={breadTypes} onClose={() => setEditBox(null)} />
+      {confirmDialog}
     </Card>
   )
 }
@@ -486,6 +490,7 @@ function BoxesTab() {
 function ConsumptionTab() {
   const materials = useTable<Material>('materials')
   const consumptions = useTable<Consumption>('consumptions')
+  const { confirm, element: confirmDialog } = useConfirm()
   const [editing, setEditing] = useState<Consumption | null>(null)
   const [form, setForm] = useState({ date: todayJalali(), materialId: '', quantity: '', note: '' })
   const mat = materials.find(m => m.id === form.materialId)
@@ -567,7 +572,7 @@ function ConsumptionTab() {
                       <Pencil className="h-4 w-4" />
                     </Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" aria-label="حذف"
-                      onClick={() => { void removeRecord('consumptions', c.id) }}>
+                      onClick={() => void confirmRemove(confirm, 'consumptions', c.id, 'حذف مصرف', `آیا از حذف این مصرف (${m?.name || 'نامشخص'} — ${faDigits(c.quantity)} ${m?.unit || ''}) مطمئن هستید؟ موجودی انبار به‌روز می‌شود.`)}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
@@ -577,6 +582,7 @@ function ConsumptionTab() {
           )}
         </CardContent>
       </Card>
+      {confirmDialog}
     </div>
   )
 }
@@ -584,6 +590,7 @@ function ConsumptionTab() {
 // ================= انواع نان =================
 function TypesTab() {
   const breadTypes = useTable<BreadType>('breadTypes')
+  const { confirm, element: confirmDialog } = useConfirm()
   const [editing, setEditing] = useState<BreadType | null>(null)
   const [form, setForm] = useState({ name: '' })
 
@@ -639,7 +646,7 @@ function TypesTab() {
                   {b.active ? 'غیرفعال' : 'فعال'}
                 </Button>
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" aria-label="حذف"
-                  onClick={() => void removeRecord('breadTypes', b.id)}>
+                  onClick={() => void confirmRemove(confirm, 'breadTypes', b.id, 'حذف نوع نان', `آیا از حذف «${b.name}» مطمئن هستید؟ تولیدها و فروش‌های قبلی این نوع حفظ می‌شوند ولی دیگر قابل انتخاب نیست.`)}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
@@ -647,6 +654,7 @@ function TypesTab() {
           </div>
         </CardContent>
       </Card>
+      {confirmDialog}
     </div>
   )
 }

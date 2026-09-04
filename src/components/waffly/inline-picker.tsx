@@ -1,10 +1,13 @@
 'use client'
 
-// پیکر آفلاین‌پسند بدون Portal — جایگزین مطمئن <Select> داخل <Dialog> در WebView اندروید
-// ریشه باگ: SelectContent با Portal به document.body رندر می‌شود و داخل Dialog کپاسیتور
-// stacking/pointer-events می‌شکند. این کامپوننت هیچ Portal و focus-trap ندارد؛
-// لیست با position:fixed بر اساس مستطیل دکمه باز می‌شود و از overflow دیالوگ فرار می‌کند.
-import { useEffect, useRef, useState } from 'react'
+// پیکر آفلاین‌پسند — جایگزین مطمئن <Select> داخل <Dialog> در WebView اندروید
+// v2.7 — ریشهٔ باگ «لیست بالای صفحه باز می‌شود»:
+//   DialogContent هم transform (translate-50%) دارد و هم overflow-y-auto؛ عنصر position:fixed
+//   داخل یک والد transform دار، نسبت به همان والد موقعیت‌دهی می‌شود (containing block) نه viewport
+//   → منو جابه‌جا/بریده می‌شد. راه‌حل: رندر منو با Portal در document.body (بدون transform)
+//   + جای‌گذاری مجدد هنگام scroll (منو دنبال دکمه می‌رود و دیگر با هر اسکرول بسته نمی‌شود).
+import { useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Check, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -44,28 +47,27 @@ export function InlinePicker({
     })
   }
 
-  useEffect(() => {
+  // اسکرول = جای‌گذاری مجدد (نه بستن) — منو دقیقاً زیر/بالای دکمه می‌ماند
+  useLayoutEffect(() => {
     if (!open) return
+    place()
     const close = (e: PointerEvent) => {
       const t = e.target as Node
       if (btnRef.current?.contains(t) || menuRef.current?.contains(t)) return
       setOpen(false)
     }
-    // ⚠️ فقط اسکرولِ «بیرون» از منو ببندد — اسکرول خودِ لیست (تلاش کاربر برای بالا/پایین کردن)
-    // نباید منو را ببندد. capture:true رویداد خودِ منو را هم می‌گیرد؛ پس target را چک می‌کنیم.
-    const onScroll = (e: Event) => {
-      const t = e.target as Node | null
-      if (t && (t === menuRef.current || (menuRef.current?.contains(t) ?? false))) return
-      setOpen(false)
-    }
+    const onScroll = () => place()
     const onResize = () => setOpen(false)
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
     document.addEventListener('pointerdown', close, true)
     window.addEventListener('scroll', onScroll, true)
     window.addEventListener('resize', onResize)
+    window.addEventListener('keydown', onKey)
     return () => {
       document.removeEventListener('pointerdown', close, true)
       window.removeEventListener('scroll', onScroll, true)
       window.removeEventListener('resize', onResize)
+      window.removeEventListener('keydown', onKey)
     }
   }, [open])
 
@@ -93,7 +95,8 @@ export function InlinePicker({
         <ChevronDown className={cn('h-4 w-4 shrink-0 opacity-50 transition-transform', open && 'rotate-180')} />
       </button>
 
-      {open && rect && (
+      {/* open فقط از کلیک (سمت کلاینت) true می‌شود → document همیشه موجود است */}
+      {open && rect && createPortal(
         <div
           ref={menuRef}
           style={{
@@ -128,7 +131,8 @@ export function InlinePicker({
               {o.value === value && <Check className="h-4 w-4 shrink-0" />}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

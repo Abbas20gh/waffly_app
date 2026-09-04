@@ -21,6 +21,7 @@ export const MODELS: Record<SyncTbl, string> = {
   expenses: 'expense',
   otherFunds: 'otherFund',
   settings: 'setting',
+  accounts: 'account',
 }
 
 export const FIELDS: Record<SyncTbl, Record<string, FieldType>> = {
@@ -31,15 +32,16 @@ export const FIELDS: Record<SyncTbl, Record<string, FieldType>> = {
   goods: { name: 'str', piecesPerBox: 'num', minStock: 'num', active: 'int' },
   consumptions: { date: 'str', materialId: 'str', quantity: 'num', note: 'strNull', createdBy: 'strNull' },
   customers: { name: 'str', phone: 'strNull', address: 'strNull', cooperationType: 'strNull' },
-  sales: { date: 'str', customerId: 'str', items: 'str', totalAmount: 'num', settledStatus: 'str', paidAmount: 'num', paymentMethod: 'str', checkDueDate: 'strNull', checkNumber: 'strNull', checkBank: 'strNull', paymentDate: 'strNull', note: 'strNull', createdBy: 'strNull' },
+  sales: { date: 'str', customerId: 'str', items: 'str', totalAmount: 'num', settledStatus: 'str', paidAmount: 'num', paymentMethod: 'str', checkDueDate: 'strNull', checkNumber: 'strNull', checkBank: 'strNull', paymentDate: 'strNull', note: 'strNull', createdBy: 'strNull', accountId: 'strNull' },
   suppliers: { name: 'str', phone: 'strNull', address: 'strNull' },
-  purchases: { date: 'str', materialId: 'str', quantity: 'num', cost: 'num', supplierId: 'strNull', settledStatus: 'str', paidAmount: 'num', itemKind: 'str', boxesCount: 'num', note: 'strNull', createdBy: 'strNull' },
+  purchases: { date: 'str', materialId: 'str', quantity: 'num', cost: 'num', supplierId: 'strNull', settledStatus: 'str', paidAmount: 'num', itemKind: 'str', boxesCount: 'num', note: 'strNull', createdBy: 'strNull', accountId: 'strNull' },
   machines: { name: 'str', kind: 'str', startDate: 'str', status: 'str', note: 'strNull' },
   machineCosts: { machineId: 'str', kind: 'str', name: 'str', quantity: 'num', date: 'str', cost: 'num', note: 'strNull' },
   expenseCategories: { name: 'str', includeInProfit: 'int' },
-  expenses: { date: 'str', categoryId: 'str', amount: 'num', description: 'strNull', createdBy: 'strNull' },
-  otherFunds: { date: 'str', type: 'str', amount: 'num', description: 'str' },
+  expenses: { date: 'str', categoryId: 'str', amount: 'num', description: 'strNull', createdBy: 'strNull', accountId: 'strNull' },
+  otherFunds: { date: 'str', type: 'str', amount: 'num', description: 'str', accountId: 'strNull' },
   settings: { businessName: 'str', monthStartDay: 'int', badDebtDays: 'int', checkAlertDays: 'int' },
+  accounts: { name: 'str', kind: 'str', initialBalance: 'num', note: 'strNull', active: 'int' },
 }
 
 const s = (v: unknown, dflt = '') => (typeof v === 'string' ? v : v == null ? dflt : String(v))

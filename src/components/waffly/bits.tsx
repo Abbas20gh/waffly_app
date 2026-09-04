@@ -1,9 +1,16 @@
 'use client'
 
 // اجزای مشترک کوچک
-import { ReactNode } from 'react'
+import { ReactNode, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { AlertTriangle } from 'lucide-react'
 import { faDigits, faMoney } from '@/lib/jalali'
+import { removeRecord } from '@/lib/localdb'
+import type { SyncTbl } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 export function PageHeader({ title, subtitle, icon, actions }: {
@@ -135,4 +142,64 @@ export function TabsBar<T extends string>({ tabs, value, onChange }: {
       ))}
     </div>
   )
+}
+
+// ===== تأیید حذف (v2.7) — هیچ رکوردی بدون پرسش «آیا مطمئن هستید؟» حذف نمی‌شود =====
+
+interface ConfirmState {
+  open: boolean
+  title: string
+  desc: string
+  confirmLabel: string
+  resolve: ((v: boolean) => void) | null
+}
+
+/** دیالوگ تأیید عمومی — عنصر برگشتی را جایی در JSX رندر کنید */
+export function useConfirm() {
+  const [st, setSt] = useState<ConfirmState>({ open: false, title: '', desc: '', confirmLabel: 'حذف', resolve: null })
+
+  const confirm = (title: string, desc?: string, confirmLabel = 'حذف'): Promise<boolean> =>
+    new Promise<boolean>(resolve => {
+      setSt({ open: true, title, desc: desc || 'آیا از انجام این عملیات مطمئن هستید؟ این عملیات قابل بازگشت نیست.', confirmLabel, resolve })
+    })
+
+  const settle = (v: boolean) => {
+    st.resolve?.(v)
+    setSt(s => ({ ...s, open: false, resolve: null }))
+  }
+
+  const element = (
+    <Dialog open={st.open} onOpenChange={v => { if (!v) settle(false) }}>
+      <DialogContent className="max-w-sm" dir="rtl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-red-600">
+            <span className="h-9 w-9 rounded-xl bg-red-50 border border-red-200 flex items-center justify-center shrink-0">
+              <AlertTriangle className="h-4.5 w-4.5" />
+            </span>
+            {st.title}
+          </DialogTitle>
+          <DialogDescription className="pt-1 leading-6">{st.desc}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="flex-row-reverse gap-2">
+          <Button variant="destructive" className="flex-1" onClick={() => settle(true)}>{st.confirmLabel}</Button>
+          <Button variant="outline" className="flex-1" onClick={() => settle(false)}>انصراف</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+
+  return { confirm, element }
+}
+
+/** حذف رکورد بعد از تأیید کاربر — با پیام «آیا مطمئن هستید؟» */
+export async function confirmRemove(
+  confirm: (title: string, desc?: string, confirmLabel?: string) => Promise<boolean>,
+  tbl: SyncTbl,
+  id: string,
+  title: string,
+  desc?: string,
+) {
+  const ok = await confirm(title, desc ?? 'آیا از حذف این مورد مطمئن هستید؟ این عملیات قابل بازگشت نیست.')
+  if (ok) await removeRecord(tbl, id)
+  return ok
 }

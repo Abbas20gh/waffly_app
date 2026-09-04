@@ -4,7 +4,7 @@
 import { useMemo, useState } from 'react'
 import { toast } from '@/hooks/use-toast'
 import {
-  ShoppingCart, Plus, Trash2, Users, Landmark, AlertOctagon, Check, Wallet, Phone, Pencil,
+  ShoppingCart, Plus, Trash2, Users, Landmark, AlertOctagon, Check, Wallet, Phone, Pencil, Boxes,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -12,11 +12,11 @@ import { Input } from '@/components/ui/input'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import { PageHeader, FormRow, TabsBar, EmptyState, SettleBadge, Money, Num } from './bits'
+import { PageHeader, FormRow, TabsBar, EmptyState, SettleBadge, Money, Num, useConfirm, confirmRemove } from './bits'
 import { JalaliDateInput } from './jalali-date'
 import { InlinePicker } from './inline-picker'
 import { useTable, useSetting, putRecord, removeRecord, uid, getActiveUser } from '@/lib/localdb'
-import type { Sale, Customer, BreadType, Good, SaleItem } from '@/lib/types'
+import type { Sale, Customer, BreadType, Good, SaleItem, Box, Account } from '@/lib/types'
 import { todayJalali, faDigits, faMoney, prettyJalali } from '@/lib/jalali'
 import { active, saleDue, effectiveSettled, isBadDebt, daysSince, effectivePaymentDate } from '@/lib/calc'
 import { cn } from '@/lib/utils'
@@ -59,6 +59,9 @@ function SalesTab() {
   const customers = useTable<Customer>('customers')
   const breadTypes = useTable<BreadType>('breadTypes')
   const goods = useTable<Good>('goods')
+  const boxes = useTable<Box>('boxes')
+  const accounts = useTable<Account>('accounts')
+  const { confirm, element: confirmDialog } = useConfirm()
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Sale | null>(null)
   const [filter, setFilter] = useState<'all' | 'unpaid' | 'checks'>('all')
@@ -76,7 +79,24 @@ function SalesTab() {
     checkBank: '',
     paymentDate: '',
     note: '',
+    accountId: '',
   })
+
+  // فروشِ هر جعبه (خالص تحویل − برگشتی) برای نمایش «مانده» در انتخاب‌گر کد جعبه
+  const soldByBox = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const s of sales) {
+      if (s.deleted || s.id === editing?.id) continue
+      let items: SaleItem[] = []
+      try { items = JSON.parse(s.items || '[]') as SaleItem[] } catch { continue }
+      for (const it of items) {
+        if (!it.boxId) continue
+        const net = (it.delivered ?? it.qty ?? 0) - (it.returned ?? 0)
+        m.set(it.boxId, (m.get(it.boxId) || 0) + net)
+      }
+    }
+    return m
+  }, [sales, editing])
 
   const itemsTotal = form.items.reduce((a, it) => a + (it.qty || 0) * (it.unitPrice || 0), 0)
   const returnTotal = form.items.reduce((a, it) => a + (it.returnCost || 0), 0)
@@ -96,6 +116,7 @@ function SalesTab() {
       checkBank: '',
       paymentDate: '',
       note: '',
+      accountId: '',
     })
     setOpen(true)
   }
@@ -116,6 +137,7 @@ function SalesTab() {
       checkBank: s.checkBank || '',
       paymentDate: s.paymentDate || '',
       note: s.note || '',
+      accountId: s.accountId || '',
     })
     setOpen(true)
   }
@@ -151,6 +173,7 @@ function SalesTab() {
       checkBank: form.paymentMethod === 'CHECK' ? (form.checkBank || null) : null,
       paymentDate: status === 'PAID' ? (form.paymentDate || null) : (form.paymentDate || null),
       note: form.note || null,
+      accountId: form.accountId || null,
       createdBy: editing?.createdBy ?? (getActiveUser() || null),
       deleted: 0,
     })
@@ -170,6 +193,7 @@ function SalesTab() {
     .sort((a, b) => (b.date + b.updatedAt).localeCompare(a.date + a.updatedAt))
     .slice(0, 60)
   const cName = (id: string) => customers.find(c => c.id === id)?.name || 'نامشخص'
+  const accName = (id: string | null | undefined) => accounts.find(a => a.id === id && !a.deleted)?.name
   const btLabel = (id: string) => {
     const g = goods.find(x => x.id === id)
     if (g) return g.name
@@ -222,16 +246,24 @@ function SalesTab() {
                         <Pencil className="h-4 w-4" />
                       </Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" aria-label="حذف"
-                        onClick={() => void removeRecord('sales', s.id)}>
+                        onClick={() => void confirmRemove(confirm, 'sales', s.id, 'حذف فروش', `آیا از حذف فروش «${cName(s.customerId)}» به مبلغ ${faMoney(s.totalAmount)} تومان مطمئن هستید؟ این عملیات قابل بازگشت نیست.`)}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
-                    <p className="text-[11px] text-muted-foreground waffly-num">
+                    <p className="text-[11px] text-muted-foreground waffly-num flex flex-wrap items-center gap-x-1">
                       {items.map((it, i) => {
                         const isGoodRow = it.kind === 'GOOD' || goods.some(g => g.id === it.breadTypeId)
-                        return `${btLabel(it.breadTypeId)} × ${faDigits(it.delivered || it.qty)}${isGoodRow ? ' جعبه' : ''}`
-                      }).join(' • ')}
+                        return (
+                          <span key={i} className="inline-flex items-center gap-1">
+                            {btLabel(it.breadTypeId)} × {faDigits(it.delivered || it.qty)}{isGoodRow ? ' جعبه' : ''}
+                            {it.boxCode && (
+                              <code className="rounded bg-primary/5 border border-primary/20 px-1 py-px text-[10px] font-bold" dir="ltr">{it.boxCode}</code>
+                            )}
+                          </span>
+                        )
+                      })}
                       {s.paymentDate && ` • وصول: ${prettyJalali(s.paymentDate)}`}
+                      {accName(s.accountId) && ` • حساب: ${accName(s.accountId)}`}
                       {s.createdBy && ` • ${s.createdBy}`}
                     </p>
                     {st !== 'PAID' && (
@@ -255,6 +287,7 @@ function SalesTab() {
         isEdit={!!editing}
         form={form} setForm={setForm}
         customers={active(customers)} breadTypes={active(breadTypes)} goods={active(goods).filter(g => g.active !== 0)}
+        boxes={boxes.filter(b => !b.deleted)} accounts={accounts.filter(a => !a.deleted)} soldByBox={soldByBox}
         itemsTotal={itemsTotal} returnTotal={returnTotal} grandTotal={grandTotal}
         onSave={save}
         onQuickAddCustomer={async (name) => {
@@ -264,11 +297,12 @@ function SalesTab() {
           toast({ title: 'مشتری اضافه شد', description: name })
         }}
       />
+      {confirmDialog}
     </div>
   )
 }
 
-function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, breadTypes, goods, itemsTotal, returnTotal, grandTotal, onSave, onQuickAddCustomer }: {
+function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, breadTypes, goods, boxes, accounts, soldByBox, itemsTotal, returnTotal, grandTotal, onSave, onQuickAddCustomer }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   isEdit?: boolean
@@ -276,17 +310,20 @@ function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, 
     date: string; customerId: string; items: SaleItem[]
     settledStatus: Sale['settledStatus']; paidAmount: string
     paymentMethod: Sale['paymentMethod']; checkDueDate: string; checkNumber: string; checkBank: string
-    paymentDate: string; note: string
+    paymentDate: string; note: string; accountId: string
   }
   setForm: React.Dispatch<React.SetStateAction<{
     date: string; customerId: string; items: SaleItem[]
     settledStatus: Sale['settledStatus']; paidAmount: string
     paymentMethod: Sale['paymentMethod']; checkDueDate: string; checkNumber: string; checkBank: string
-    paymentDate: string; note: string
+    paymentDate: string; note: string; accountId: string
   }>>
   customers: Customer[]
   breadTypes: BreadType[]
   goods: Good[]
+  boxes: Box[]
+  accounts: Account[]
+  soldByBox: Map<string, number>
   itemsTotal: number
   returnTotal: number
   grandTotal: number
@@ -302,6 +339,28 @@ function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, 
     ...breadTypes.map(b => ({ value: b.id, label: b.name })),
     ...goods.map(g => ({ value: g.id, label: g.name, hint: 'جعبه‌ای' })),
   ]
+  const btName = (id: string) => breadTypes.find(b => b.id === id)?.name || goods.find(g => g.id === id)?.name || ''
+  // گزینه‌های انتخاب جعبه با کد — جدیدترین اول + ماندهٔ هر جعبه
+  const boxOptions = [
+    { value: '', label: 'بدون کد جعبه', hint: 'انتخاب آزاد نوع و تعداد' },
+    ...[...boxes]
+      .sort((a, b) => (b.date + b.code).localeCompare(a.date + a.code))
+      .slice(0, 80)
+      .map(b => {
+        const remaining = (b.count || 0) - (soldByBox.get(b.id) || 0)
+        return {
+          value: b.id,
+          label: b.code,
+          hint: `${btName(b.breadTypeId)} • ${faDigits(b.count)} عدد${remaining !== b.count ? ` • مانده: ${faDigits(Math.max(0, remaining))}` : ''}${b.hasEssence ? ' • اسانس‌دار' : ''}`,
+        }
+      }),
+  ]
+  const pickBox = (idx: number, boxId: string) => {
+    if (!boxId) { updateItem(idx, { boxId: undefined, boxCode: undefined }); return }
+    const b = boxes.find(x => x.id === boxId)
+    if (!b) return
+    updateItem(idx, { boxId: b.id, boxCode: b.code, breadTypeId: b.breadTypeId, kind: 'BREAD', qty: b.count, delivered: b.count, returned: 0 })
+  }
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[92dvh] overflow-y-auto">
@@ -344,6 +403,9 @@ function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, 
             <p className="text-sm font-medium">اقلام فروش</p>
             {form.items.map((it, idx) => {
               const isGood = isGoodItem(it)
+              const boxRemaining = it.boxId ? boxes.find(b => b.id === it.boxId) : undefined
+              const rem = boxRemaining ? (boxRemaining.count || 0) - (soldByBox.get(boxRemaining.id) || 0) : null
+              const overSold = rem != null && (it.delivered || it.qty || 0) > rem
               return (
               <div key={idx} className="rounded-xl border p-3 space-y-2">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -380,6 +442,25 @@ function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, 
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
+                {!isGood && (
+                  <div className="grid grid-cols-[auto_1fr] items-center gap-2">
+                    <span className="text-[10px] text-muted-foreground flex items-center gap-1 whitespace-nowrap"><Boxes className="h-3 w-3" /> کد جعبه:</span>
+                    <InlinePicker
+                      value={it.boxId || ''}
+                      options={boxOptions}
+                      onChange={v => pickBox(idx, v)}
+                      placeholder="انتخاب جعبه با کد (اختیاری)"
+                      buttonClassName="h-9 text-xs"
+                    />
+                  </div>
+                )}
+                {it.boxId && it.boxCode && (
+                  <p className={cn('text-[10px]', overSold ? 'text-red-600' : 'text-muted-foreground')}>
+                    فروش از جعبهٔ <code className="waffly-num font-bold" dir="ltr">{it.boxCode}</code> — نوع و تعداد از جعبه پر شد
+                    {rem != null && ` • ماندهٔ جعبه: ${faDigits(Math.max(0, rem))} عدد`}
+                    {overSold && ' — تعداد بیشتر از ماندهٔ این جعبه است!'}
+                  </p>
+                )}
                 {isGood && (
                   <p className="text-[10px] text-muted-foreground">این کالا با واحد «جعبه» ثبت می‌شود — تحویل و برگشتی هم جعبه‌ای است.</p>
                 )}
@@ -457,6 +538,14 @@ function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, 
               <JalaliDateInput value={form.paymentDate} onChange={v => setForm(f => ({ ...f, paymentDate: v }))} />
             </FormRow>
           </div>
+          <FormRow label="واریز به حساب" hint="مبلغ پرداختی این فروش به این حساب اضافه می‌شود (در بخش حسابداری ← حساب‌ها)">
+            <InlinePicker
+              value={form.accountId}
+              options={[{ value: '', label: 'بدون حساب (فقط ثبت فروش)' }, ...accounts.map(a => ({ value: a.id, label: a.name, hint: a.kind === 'BANK' ? 'حساب بانکی' : 'صندوق نقدی' }))]}
+              onChange={v => setForm(f => ({ ...f, accountId: v }))}
+              placeholder="انتخاب حساب (اختیاری)"
+            />
+          </FormRow>
           {form.paymentMethod === 'CHECK' && (
             <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-3 grid sm:grid-cols-3 gap-3">
               <FormRow label="سررسید چک">
@@ -487,6 +576,7 @@ function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, 
 function CustomersTab() {
   const customers = useTable<Customer>('customers')
   const sales = useTable<Sale>('sales')
+  const { confirm, element: confirmDialog } = useConfirm()
   const [editing, setEditing] = useState<Customer | null>(null)
   const [form, setForm] = useState({ name: '', phone: '', address: '', cooperationType: '' })
 
@@ -583,7 +673,7 @@ function CustomersTab() {
                       <Pencil className="h-4 w-4" />
                     </Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" aria-label="حذف"
-                      onClick={() => void removeRecord('customers', c.id)}>
+                      onClick={() => void confirmRemove(confirm, 'customers', c.id, 'حذف مشتری', `آیا از حذف «${c.name}» مطمئن هستید؟ فروش‌های قبلی او حفظ می‌شوند ولی نامش «نامشخص» نمایش داده می‌شود.`)}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
@@ -593,6 +683,7 @@ function CustomersTab() {
           )}
         </CardContent>
       </Card>
+      {confirmDialog}
     </div>
   )
 }
@@ -663,6 +754,7 @@ function ChecksTab() {
 function DebtsTab() {
   const sales = useTable<Sale>('sales')
   const customers = useTable<Customer>('customers')
+  const { confirm, element: confirmDialog } = useConfirm()
   const setting = useSetting()
   const badDays = setting.badDebtDays || 30
   const debts = active(sales)
@@ -696,7 +788,7 @@ function DebtsTab() {
                 </div>
                 <span className="text-sm font-bold text-red-700 waffly-num">{faMoney(saleDue(s))}</span>
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" aria-label="حذف"
-                  onClick={() => void removeRecord('sales', s.id)}>
+                  onClick={() => void confirmRemove(confirm, 'sales', s.id, 'حذف فروش', `آیا از حذف فروش «${c?.name || 'نامشخص'}» مطمئن هستید؟ این عملیات قابل بازگشت نیست.`)}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
@@ -704,6 +796,7 @@ function DebtsTab() {
           </div>
         )}
       </CardContent>
+      {confirmDialog}
     </Card>
   )
 }

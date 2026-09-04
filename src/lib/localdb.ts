@@ -39,6 +39,7 @@ class WafflyDB extends Dexie {
   expenses!: Table<BaseRow, string>
   otherFunds!: Table<BaseRow, string>
   settings!: Table<BaseRow, string>
+  accounts!: Table<BaseRow, string>
   outbox!: Table<OutboxItem, number>
   meta!: Table<{ key: string; value: unknown }, string>
 
@@ -69,6 +70,10 @@ class WafflyDB extends Dexie {
     // v3: کالاهای بازرگانی (خرید و فروش بدون تولید — مثل نان مشعلی)
     this.version(3).stores({
       goods: 'id, updatedAt, name',
+    })
+    // v4: حساب‌های بانکی/صندوق نقدی (v2.7) — فیلدهای accountId روی رکوردهای دیگر غیرایندکسی‌اند
+    this.version(4).stores({
+      accounts: 'id, updatedAt, name',
     })
   }
 }

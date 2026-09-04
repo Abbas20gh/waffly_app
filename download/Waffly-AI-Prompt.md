@@ -15,7 +15,7 @@
 | آدرس production | https://waffly.pages.dev |
 | دیتابیس مرکزی | Turso: `libsql://waffly-db-abbas20gh.aws-eu-west-1.turso.io` |
 | ریپو گیت‌هاب | https://github.com/Abbas20gh/waffly_app (برنچ `main`) |
-| نسخه فعلی | **v2.6.0** (versionCode 11) — APK امضاشده: `download/Waffly-v2.6.0.apk` (نسخه‌های قبلی هم نگه‌داری شده‌اند) |
+| نسخه فعلی | **v2.7.0** (versionCode 12) — APK امضاشده: `download/Waffly-v2.7.0.apk` (نسخه‌های قبلی هم نگه‌داری شده‌اند) |
 | وضعیت | **زنده و در حال استفاده واقعی** — داده واقعی روی Turso و گوشی کاربر است؛ از دست رفتن داده فاجعه است |
 
 ## ۲) استک فناوری (با نسخه‌های دقیق)
@@ -103,16 +103,17 @@
 | 4 | materials | name, unit (کیلوگرم/گرم/…), minStock, active (0/1 — غیرفعال فقط از انتخاب‌گرها حذف می‌شود، رکوردهای تاریخی می‌مانند) |
 | 5 | consumptions | date, materialId, quantity, note?, createdBy? — ایندکس date |
 | 6 | customers | name, phone?, address?, cooperationType? |
-| 7 | sales | date, customerId, **items (رشته JSON آرایه SaleItem: {breadTypeId, qty, unitPrice, delivered, returned, returnCost})**, totalAmount, settledStatus (PAID/PARTIAL/UNPAID), paidAmount, paymentMethod (CASH/CARD/TRANSFER/CHECK), checkDueDate?, checkNumber?, checkBank?, paymentDate? (تاریخ وصول واقعی), note?, createdBy? — ایندکس date/customerId |
+| 7 | sales | date, customerId, items (رشته JSON آرایه SaleItem: {breadTypeId, qty, unitPrice, delivered, returned, returnCost, kind?, boxId?, boxCode? از v2.7}), totalAmount, settledStatus (PAID/PARTIAL/UNPAID), paidAmount, paymentMethod (CASH/CARD/TRANSFER/CHECK), checkDueDate?, checkNumber?, checkBank?, paymentDate? (تاریخ وصول واقعی), note?, createdBy?, accountId? (v2.7) — ایندکس date/customerId |
 | 8 | suppliers | name, phone?, address? |
-| 9 | purchases | date, materialId, quantity, cost, supplierId?, settledStatus, paidAmount, note?, createdBy? — ایندکس date |
+| 9 | purchases | date, materialId, quantity, cost, supplierId?, settledStatus, paidAmount, note?, createdBy?, accountId? (v2.7 — حساب برداشت) — ایندکس date |
 | 10 | machines | name, kind (BAKING=تجهیزات نانوایی / BUSINESS=دستگاه‌سازی تجاری), startDate, status (IN_PROGRESS/DONE/PAUSED), note? |
 | 11 | machineCosts | machineId, kind (CONSUMABLE مصرفی / CAPITAL سرمایه‌ای), name, quantity, date, cost, note? — ایندکس machineId |
 | 12 | expenseCategories | name, includeInProfit (0/1 — آیا در محاسبه سود دوره بیاید) |
-| 13 | expenses | date, categoryId, amount, description?, createdBy? — ایندکس date |
-| 14 | otherFunds | date, type (IN ورود / OUT خروج), amount, **description (الزامی — منشأ پول)** — ⚠️ **هرگز در فرمول‌های سود calc.ts استفاده نشود**؛ فقط کارت جدا «سایر وجوه» در dashboard/accounting — ایندکس date |
-| 15 | settings | businessName (پیش‌فرض Waffly), monthStartDay (روز شروع دوره حسابداری، پیش‌فرض ۱), badDebtDays (آستانه بدحسابی، پیش‌فرض ۳۰), checkAlertDays (هشدار سررسید چک، پیش‌فرض ۷) — رکورد واحد با id=`main` |
-| 16 | SyncLog | seq (autoincrement)، tbl، rid، ts — ثبت هر تغییر برای pull افزایشی؛ tbl با **نام منطقی camelCase** ذخیره می‌شود |
+| 13 | expenses | date, categoryId, amount, description?, createdBy?, accountId? (v2.7) — ایندکس date |
+| 14 | otherFunds | date, type (IN ورود / OUT خروج), amount, **description (الزامی — منشأ پول)**, accountId? (v2.7) — ⚠️ **هرگز در فرمول‌های سود calc.ts استفاده نشود**؛ فقط کارت جدا «سایر وجوه» در dashboard/accounting — ایندکس date |
+| 15 | accounts (جدول v2.7) | name, kind (BANK حساب بانکی / CASH صندوق نقدی), initialBalance (موجودی اولیه), note?, active — موجودی فعلی = initialBalance + Σورود − Σخروج (مشتق از sales.paidAmount/purchases.paidAmount/expenses.amount/otherFunds با accountId؛ هیچ جدول تراکنش موازی وجود ندارد) |
+| 16 | settings | businessName (پیش‌فرض Waffly), monthStartDay (روز شروع دوره حسابداری، پیش‌فرض ۱), badDebtDays (آستانه بدحسابی، پیش‌فرض ۳۰), checkAlertDays (هشدار سررسید چک، پیش‌فرض ۷) — رکورد واحد با id=`main` |
+| 17 | SyncLog | seq (autoincrement)، tbl، rid، ts — ثبت هر تغییر برای pull افزایشی؛ tbl با **نام منطقی camelCase** ذخیره می‌شود |
 
 **Seed اولیه (ensureSeed — فقط وقتی DB خالی است، گارد وجود `seed-bt-01`):** Setting `main` + ۵ نوع نان + ۱۰ ماده اولیه (آرد، شکر، مایه خمیر **active=0**، نمک، روغن مایع، کارتن بسته‌بندی، لسیتین گرم، وانیل گرم، آرد سبوس‌دار) + ۴ سرفصل هزینه. اسکریپت مهاجرت داده‌های موجود: `scripts/migrate-v2.mjs` (idempotent — ستون‌ها + جدول + seed + ثبت SyncLog).
 
@@ -166,12 +167,20 @@
 | **sales** | فروش **چندقلمی** (آیتم‌ها: نوع نان/تعداد/قیمت واحد/تحویلی/مرجوعی/هزینه مرجوع)، تسویه کامل و **جزئی** (`paidAmount`)، روش پرداخت نقد/کارت/کارت‌به‌کارت/**چک** (سررسید، شماره، بانک)، تاریخ وصول واقعی، مدیریت بدحسابی، مشتری‌ها با نوع همکاری |
 | **purchases** | خرید مواد با قیمت و تامین‌کننده، موجودی انبار = خرید−مصرف با **حد بحرانی** (minStock) و میانگین قیمت، تسویه خریدها، تامین‌کننده‌ها، **مدیریت اقلام با فعال/غیرفعال** (غیرفعال از انتخاب‌گرهای خرید/مصرف حذف می‌شود ولی در لیست اقلام با نشان دیده می‌شود) |
 | **machines** | دو نوع پروژه: تجهیزات نانوایی (BAKING) / دستگاه‌سازی تجاری (BUSINESS)؛ هزینه‌های مصرفی (CONSUMABLE) و سرمایه‌ای (CAPITAL)؛ سرمایه‌ای در سود دوره از مبنا جدا می‌شود |
-| **accounting** | دوره حسابداری با **روز شروع دلخواه** (`monthStartDay`)، سود با **۳ مبنا**، تفکیک هزینه‌های `includeInProfit`، **بخش «سایر وجوه (خارج از حساب سود)» — ثبت/حذف IN/OUT با توضیح الزامی + خلاصه ورود/خروج/خالص که در هیچ فرمول سود وارد نمی‌شود**، خروجی **اکسل/PDF/چاپ** (xlsx + jspdf + html2canvas-pro) |
+| **accounting** | دوره حسابداری با **روز شروع دلخواه** (`monthStartDay`)، سود با **۳ مبنا**، تفکیک هزینه‌های `includeInProfit`، **بخش «سایر وجوه (خارج از حساب سود)» — ثبت/حذف IN/OUT با توضیح الزامی + خلاصه ورود/خروج/خالص که در هیچ فرمول سود وارد نمی‌شود**، **تب «حساب‌ها (بانک و صندوق)» از v2.7 (مدیریت حساب + موجودی + گردش)**، خروجی **اکسل/PDF/چاپ** (xlsx + jspdf + html2canvas-pro) |
 | **settings** | نام کسب‌وکار، monthStartDay، badDebtDays، checkAlertDays، انتخاب کاربر فعال، بکاپ/دانلود دیتابیس (با API_BASE)، **تعمیر سینک** (repairSync)، نصب PWA (بنر + راهنمای iOS)، `storage.persist`، سرفصل هزینه‌ها (افزودن/تغییرنام/مشمول سود/حذف) |
+
+**تأیید حذف (v2.7.0)**: هیچ دکمهٔ حذفی (🗑) مستقیم حذف نمی‌کند — همهٔ ~۱۶ نقطهٔ حذف (فروش، مشتری، بدحساب، تولید، جعبه، مصرف، نوع نان، خرید، کالا، تامین‌کننده، ماده، دستگاه، هزینهٔ دستگاه، سرفصل، سایر وجوه) دیالوگ «آیا مطمئن هستید؟» با دکمه‌های «حذف (قرمز) / انصراف» نشان می‌دهند — هوک مشترک `useConfirm` + `confirmRemove` در `bits.tsx` (هر کامپوننت خودش instance دارد و `{element}` را در JSX رندر می‌کند).
+
+**فروش از جعبه با کد (v2.7.0)**: در هر قلم فروش (نان) یک انتخاب‌گر «کد جعبه» هست — کدهای معنادار ۵ رقمی با hint «نوع • تعداد عدد • مانده» — با انتخاب، نوع/تعداد/تحویل خودکار از جعبه پر می‌شود (قیمت دستی می‌ماند) و `boxId/boxCode` در JSON قلم ذخیره می‌شود؛ «مانده» = count − Σ(تحویل−برگشتی) همهٔ فروش‌های دیگر (memo `soldByBox`، فاکتور در حال ویرایش مستثنی)؛ فروش بیشتر از مانده هشدار قرمز می‌دهد؛ در لیست فروش‌ها کد جعبه چип می‌شود. انتخاب «بدون کد جعبه» = ثبت آزاد مثل قبل.
+
+**حساب‌های بانکی/صندوق (v2.7.0)**: تب «حساب‌ها (بانک و صندوق)» در حسابداری — ساخت/ویرایش/حذف حساب (نام، BANK/CASH، موجودی اولیه، یادداشت)؛ موجودی هر حساب = موجودی اولیه + Σ paidAmount فروش‌هایی که «واریز به حساب» آن حساب‌اند + سایر وجوه ورود − Σ paidAmount خریدهای «پرداخت از حساب» − هزینه‌ها − سایر وجوه خروج (کاملاً مشتق — بدون جدول تراکنش؛ حذف فروش/خرید خودکار موجودی را اصلاح می‌کند)؛ «گردش‌ها»ی هر حساب = ادغام رکوردها با تاریخ و +/- رنگی؛ کارت «مجموع موجودی همه حساب‌ها». انتخاب‌گر حساب در فرم‌های فروش («واریز به حساب»)/خرید («پرداخت از حساب»)/سایر وجوه («حساب») — همه اختیاری.
+
+**رفع باگ موقعیت منوها + باگ سینک دسته‌ای (v2.7.0)**: ① InlinePicker قبلاً position:fixed داخل DialogContent (والد transform دار) می‌داد → منو نسبت به دیالوگ موقعیت می‌گرفت و جابه‌جا/بریده می‌شد («لیست بالای صفحه باز می‌شود») + با هر اسکرول بسته می‌شد — الان منو با createPortal در body رندر می‌شود (دقیقاً ۴px زیر دکمه، فرار از overflow) و روی scroll جای‌گذاری مجدد می‌شود (دنبال دکمه می‌آید، بسته نمی‌شود). ② در `functions/api/_sync.ts` هر رکورد pull = ۱ SELECT و هر op push = SELECT+batch جدا بود → بیش از ~۲۵-۴۵ رکورد در یک درخواست، سقف ۵۰ subrequest کارگران ابری را می‌شکست (500) — حالا pull با یک SELECT گروهی `IN (...)` برای هر جدول و push با یک SELECT گروهی LWW + یک batch برای هر جدول کار می‌کند (~≤۳۵ subrequest در بدترین حالت).
 
 **ویرایش همه‌جا (v2.6.0)**: هر رکورد ثبت‌شده دکمهٔ ویرایش (✏️ Pencil) دارد — تولید (تغییر تعداد جعبه: افزایش = جعبهٔ جدید با کد ادامه‌دار از `planProductionBoxes`، کاهش = حذف از آخر بر اساس کد؛ کدهای چاپی هرگز بازیافت/بازنویسی نمی‌شوند؛ تغییر نوع/تاریخ به جعبه‌های موجود cascade می‌شود و previewCodes فقط کدهای جدید را نشان می‌دهد)، فاکتور فروش (همهٔ اقلام JSON + تسویه + چک با بازمحاسبهٔ totalAmount)، خرید (همهٔ فیلدها؛ برای کالا اگر تعداد/قیمت دست‌نخورده باشد هزینهٔ اصلی حفظ می‌شود)، مصرف، مشتری، تامین‌کننده، کالا و ماده (نام/واحد/حد بحرانی)، نوع نان (نام)، دستگاه (نام/بخش/وضعیت/تاریخ/یادداشت)، هزینهٔ دستگاه، سرفصل هزینه (نام)، سایر وجوه. الگوی یکسان: state `editing` + پیش‌پرکردن همان فرم/دیالوگ + `putRecord` با همان id (createdBy حفظ، updatedAt جدید) → سینک LWW خودکار؛ همهٔ آمارها (موجودی، میانگین بها، سود دوره) زنده محاسبه می‌شوند و با ادیت خودشان اصلاح می‌شوند.
 
-اجزای مشترک: `app-shell` (هدر سبز تیره `#13201A` با لوگو + سایدبار دسکتاپ + منوی کشویی موبایل + منوی کاربر فعال + `SyncBadge` + تاریخ شمسی امروز با کلاس `waffly-num`، هدر با `env(safe-area-inset-top)`)، `jalali-date` (پیکر شمسی با **نرمال‌سازی ارقام فارسی در onChange**)، **`inline-picker` (پیکر بدون Portal با position:fixed — جایگزین اجباری `<Select>` داخل `<Dialog>` چون در WebView اندروید Radix Select داخل Dialog باز نمی‌شود)**، `bits` (قطعات کوچک UI)، `sw-register` (ثبت SW با گارد `window.Capacitor`).
+اجزای مشترک: `app-shell` (هدر سبز تیره `#13201A` با لوگو + سایدبار دسکتاپ + منوی کشویی موبایل + منوی کاربر فعال + `SyncBadge` + تاریخ شمسی امروز با کلاس `waffly-num`، هدر با `env(safe-area-inset-top)`)، `jalali-date` (پیکر شمسی با **نرمال‌سازی ارقام فارسی در onChange**)، **`inline-picker` (از v2.7: منو با createPortal در body + position:fixed با مختصات getBoundingClientRect — دقیقاً زیر دکمه، جای‌گذاری مجدد روی scroll؛ جایگزین اجباری `<Select>` داخل `<Dialog>` چون در WebView اندروید Radix Select داخل Dialog باز نمی‌شود)**، `bits` (قطعات کوچک UI)، `sw-register` (ثبت SW با گارد `window.Capacitor`).
 
 ## ۹) منطق کسب‌وکار (`calc.ts`، `boxcode.ts`، `jalali.ts`)
 

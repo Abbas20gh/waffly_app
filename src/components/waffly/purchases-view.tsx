@@ -10,11 +10,11 @@ import { Input } from '@/components/ui/input'
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import { PageHeader, FormRow, TabsBar, EmptyState, SettleBadge, Money, Num } from './bits'
+import { PageHeader, FormRow, TabsBar, EmptyState, SettleBadge, Money, Num, useConfirm, confirmRemove } from './bits'
 import { JalaliDateInput } from './jalali-date'
 import { InlinePicker } from './inline-picker'
 import { useTable, useSetting, putRecord, removeRecord, uid, getActiveUser } from '@/lib/localdb'
-import type { Purchase, Supplier, Material, Consumption, Good, Sale } from '@/lib/types'
+import type { Purchase, Supplier, Material, Consumption, Good, Sale, Account } from '@/lib/types'
 import { todayJalali, faDigits, faMoney, prettyJalali } from '@/lib/jalali'
 import { active, materialStocks, goodsStocks, effectiveSettled } from '@/lib/calc'
 import { cn } from '@/lib/utils'
@@ -56,12 +56,15 @@ function PurchasesTab() {
   const materials = useTable<Material>('materials')
   const goods = useTable<Good>('goods')
   const suppliers = useTable<Supplier>('suppliers')
+  const accounts = useTable<Account>('accounts')
+  const { confirm, element: confirmDialog } = useConfirm()
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Purchase | null>(null)
   const blankForm = {
     date: todayJalali(), itemKind: 'MATERIAL' as 'MATERIAL' | 'GOOD', materialId: '',
     quantity: '', cost: '', pricePerBox: '',
     supplierId: '', settledStatus: 'PAID' as Purchase['settledStatus'], paidAmount: '', note: '',
+    accountId: '',
   }
   const [form, setForm] = useState(blankForm)
 
@@ -76,6 +79,7 @@ function PurchasesTab() {
       supplierId: p.supplierId || '', settledStatus: p.settledStatus,
       paidAmount: p.settledStatus === 'PARTIAL' ? trimNum(p.paidAmount || 0) : '',
       note: p.note || '',
+      accountId: p.accountId || '',
     })
     setOpen(true)
   }
@@ -111,6 +115,7 @@ function PurchasesTab() {
       itemKind: form.itemKind,
       boxesCount: isGood ? qtyNum : 0,
       note: form.note || null,
+      accountId: form.accountId || null,
       createdBy: editing?.createdBy ?? (getActiveUser() || null),
       deleted: 0,
     })
@@ -162,7 +167,7 @@ function PurchasesTab() {
                       <Pencil className="h-4 w-4" />
                     </Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" aria-label="حذف"
-                      onClick={() => void removeRecord('purchases', p.id)}>
+                      onClick={() => void confirmRemove(confirm, 'purchases', p.id, 'حذف خرید', `آیا از حذف این خرید (${item?.name || 'نامشخص'} — ${faMoney(p.cost)} تومان) مطمئن هستید؟ موجودی انبار و آمار به‌روز می‌شود.`)}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
@@ -248,6 +253,14 @@ function PurchasesTab() {
                 <Input inputMode="decimal" className="waffly-num-input h-11" value={form.paidAmount} onChange={e => setForm(f => ({ ...f, paidAmount: e.target.value }))} />
               </FormRow>
             )}
+            <FormRow label="پرداخت از حساب" hint="مبلغ پرداختی از موجودی این حساب کم می‌شود (در بخش حسابداری ← حساب‌ها)">
+              <InlinePicker
+                value={form.accountId}
+                options={[{ value: '', label: 'بدون حساب' }, ...accounts.filter(a => !a.deleted).map(a => ({ value: a.id, label: a.name, hint: a.kind === 'BANK' ? 'حساب بانکی' : 'صندوق نقدی' }))]}
+                onChange={v => setForm(f => ({ ...f, accountId: v }))}
+                placeholder="انتخاب حساب (اختیاری)"
+              />
+            </FormRow>
             <FormRow label="یادداشت">
               <Input value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} className="h-11" />
             </FormRow>
@@ -258,6 +271,7 @@ function PurchasesTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {confirmDialog}
     </div>
   )
 }
@@ -392,6 +406,7 @@ function StockTab() {
 
 function GoodsTab() {
   const goods = useTable<Good>('goods')
+  const { confirm, element: confirmDialog } = useConfirm()
   const [editing, setEditing] = useState<Good | null>(null)
   const [form, setForm] = useState({ name: '', minStock: '' })
 
@@ -458,7 +473,7 @@ function GoodsTab() {
                     {g.active === 0 ? 'فعال‌سازی' : 'غیرفعال'}
                   </Button>
                   <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-red-600" aria-label="حذف"
-                    onClick={() => void removeRecord('goods', g.id)}>
+                    onClick={() => void confirmRemove(confirm, 'goods', g.id, 'حذف کالا', `آیا از حذف «${g.name}» مطمئن هستید؟ خریدها و فروش‌های قبلی این کالا حفظ می‌شوند.`)}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -474,6 +489,7 @@ function GoodsTab() {
 function SuppliersTab() {
   const suppliers = useTable<Supplier>('suppliers')
   const purchases = useTable<Purchase>('purchases')
+  const { confirm, element: confirmDialog } = useConfirm()
   const [editing, setEditing] = useState<Supplier | null>(null)
   const [form, setForm] = useState({ name: '', phone: '', address: '' })
 
@@ -549,7 +565,7 @@ function SuppliersTab() {
                       <Pencil className="h-4 w-4" />
                     </Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" aria-label="حذف"
-                      onClick={() => void removeRecord('suppliers', s.id)}>
+                      onClick={() => void confirmRemove(confirm, 'suppliers', s.id, 'حذف تامین‌کننده', `آیا از حذف «${s.name}» مطمئن هستید؟ خریدهای قبلی او حفظ می‌شوند.`)}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
@@ -559,12 +575,14 @@ function SuppliersTab() {
           )}
         </CardContent>
       </Card>
+      {confirmDialog}
     </div>
   )
 }
 
 function ItemsTab() {
   const materials = useTable<Material>('materials')
+  const { confirm, element: confirmDialog } = useConfirm()
   const [editing, setEditing] = useState<Material | null>(null)
   const [form, setForm] = useState({ name: '', unit: UNITS[0], minStock: '' })
 
@@ -627,7 +645,7 @@ function ItemsTab() {
                   {m.active === 0 ? 'فعال‌سازی' : 'غیرفعال'}
                 </Button>
                 <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-red-600" aria-label="حذف"
-                  onClick={() => void removeRecord('materials', m.id)}>
+                  onClick={() => void confirmRemove(confirm, 'materials', m.id, 'حذف قلم', `آیا از حذف «${m.name}» مطمئن هستید؟ خریدها و مصرف‌های قبلی این قلم حفظ می‌شوند.`)}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
@@ -635,6 +653,7 @@ function ItemsTab() {
           </div>
         </CardContent>
       </Card>
+      {confirmDialog}
     </div>
   )
 }

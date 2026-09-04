@@ -5,7 +5,7 @@ import type { Client } from '@libsql/client'
 export const TABLES = [
   'breadTypes', 'productions', 'boxes', 'materials', 'goods', 'consumptions',
   'customers', 'sales', 'suppliers', 'purchases',
-  'machines', 'machineCosts', 'expenseCategories', 'expenses', 'otherFunds', 'settings',
+  'machines', 'machineCosts', 'expenseCategories', 'expenses', 'otherFunds', 'settings', 'accounts',
 ] as const
 export type SyncTbl = (typeof TABLES)[number]
 
@@ -16,6 +16,7 @@ export const PHYS: Record<SyncTbl, string> = {
   sales: 'Sale', suppliers: 'Supplier', purchases: 'Purchase',
   machines: 'Machine', machineCosts: 'MachineCost',
   expenseCategories: 'ExpenseCategory', expenses: 'Expense', otherFunds: 'OtherFund', settings: 'Setting',
+  accounts: 'Account',
 }
 
 type FieldType = 'str' | 'num' | 'int' | 'strNull'
@@ -28,15 +29,16 @@ export const FIELDS: Record<SyncTbl, Record<string, FieldType>> = {
   goods: { name: 'str', piecesPerBox: 'num', minStock: 'num', active: 'int' },
   consumptions: { date: 'str', materialId: 'str', quantity: 'num', note: 'strNull', createdBy: 'strNull' },
   customers: { name: 'str', phone: 'strNull', address: 'strNull', cooperationType: 'strNull' },
-  sales: { date: 'str', customerId: 'str', items: 'str', totalAmount: 'num', settledStatus: 'str', paidAmount: 'num', paymentMethod: 'str', checkDueDate: 'strNull', checkNumber: 'strNull', checkBank: 'strNull', paymentDate: 'strNull', note: 'strNull', createdBy: 'strNull' },
+  sales: { date: 'str', customerId: 'str', items: 'str', totalAmount: 'num', settledStatus: 'str', paidAmount: 'num', paymentMethod: 'str', checkDueDate: 'strNull', checkNumber: 'strNull', checkBank: 'strNull', paymentDate: 'strNull', note: 'strNull', createdBy: 'strNull', accountId: 'strNull' },
   suppliers: { name: 'str', phone: 'strNull', address: 'strNull' },
-  purchases: { date: 'str', materialId: 'str', quantity: 'num', cost: 'num', supplierId: 'strNull', settledStatus: 'str', paidAmount: 'num', itemKind: 'str', boxesCount: 'num', note: 'strNull', createdBy: 'strNull' },
+  purchases: { date: 'str', materialId: 'str', quantity: 'num', cost: 'num', supplierId: 'strNull', settledStatus: 'str', paidAmount: 'num', itemKind: 'str', boxesCount: 'num', note: 'strNull', createdBy: 'strNull', accountId: 'strNull' },
   machines: { name: 'str', kind: 'str', startDate: 'str', status: 'str', note: 'strNull' },
   machineCosts: { machineId: 'str', kind: 'str', name: 'str', quantity: 'num', date: 'str', cost: 'num', note: 'strNull' },
   expenseCategories: { name: 'str', includeInProfit: 'int' },
-  expenses: { date: 'str', categoryId: 'str', amount: 'num', description: 'strNull', createdBy: 'strNull' },
-  otherFunds: { date: 'str', type: 'str', amount: 'num', description: 'str' },
+  expenses: { date: 'str', categoryId: 'str', amount: 'num', description: 'strNull', createdBy: 'strNull', accountId: 'strNull' },
+  otherFunds: { date: 'str', type: 'str', amount: 'num', description: 'str', accountId: 'strNull' },
   settings: { businessName: 'str', monthStartDay: 'int', badDebtDays: 'int', checkAlertDays: 'int' },
+  accounts: { name: 'str', kind: 'str', initialBalance: 'num', note: 'strNull', active: 'int' },
 }
 
 const s = (v: unknown, dflt = ''): string => (typeof v === 'string' ? v : v == null ? dflt : String(v))
@@ -71,6 +73,27 @@ export async function ensureSchema(db: Client): Promise<void> {
   }
   if (!names.has('boxesCount')) {
     await db.execute(`ALTER TABLE "Purchase" ADD COLUMN "boxesCount" REAL NOT NULL DEFAULT 0`)
+  }
+  // ۳) مهاجرت v2.7 — جدول حساب‌ها + ستون accountId روی جداول پولی
+  const acc = await db.execute(`
+    CREATE TABLE IF NOT EXISTS "Account" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "name" TEXT NOT NULL DEFAULT '',
+      "kind" TEXT NOT NULL DEFAULT 'CASH',
+      "initialBalance" REAL NOT NULL DEFAULT 0,
+      "note" TEXT,
+      "active" INTEGER NOT NULL DEFAULT 1,
+      "updatedAt" REAL NOT NULL DEFAULT 0,
+      "deleted" INTEGER NOT NULL DEFAULT 0
+    )
+  `)
+  void acc
+  for (const phys of ['Sale', 'Purchase', 'Expense', 'OtherFund']) {
+    const c = await db.execute({ sql: `PRAGMA table_info("${phys}")`, args: [] })
+    const colNames = new Set(c.rows.map((r) => String(r['name'])))
+    if (!colNames.has('accountId')) {
+      await db.execute(`ALTER TABLE "${phys}" ADD COLUMN "accountId" TEXT`)
+    }
   }
   // ۳) seed مشعلی برای دیتابیس‌های موجود (دیتابیس خالی در ensureSeed گرفته می‌شود) — واحد از v2.5 جعبه است
   const g = await db.execute({ sql: `SELECT id FROM "Good" WHERE id = ?`, args: ['seed-gd-01'] })
@@ -238,35 +261,54 @@ export async function ensureSeed(db: Client): Promise<boolean> {
   return true
 }
 
-/** ثبت تغییرات کلاینت‌ها با حل تعارض Last-Write-Wins — پرت از sync/push/route.ts */
+/** ثبت تغییرات کلاینت‌ها با حل تعارض Last-Write-Wins — پرت از sync/push/route.ts
+ *  v2.7: SELECT گروهی برای چک LWW + یک batch برای هر جدول — پایدار زیر سقف subrequest کارگران ابری */
 export async function pushOps(db: Client, ops: unknown): Promise<{ accepted: number; skipped: number }> {
   let accepted = 0
   let skipped = 0
   const list = Array.isArray(ops) ? ops : []
+
+  const byTbl = new Map<SyncTbl, Record<string, unknown>[]>()
   for (const op of list.slice(0, 2000)) {
     const tbl = String((op as { tbl?: unknown })?.tbl || '') as SyncTbl
     if (!TABLES.includes(tbl)) continue
     const row = sanitizeRow(tbl, ((op as { row?: unknown })?.row || {}) as Record<string, unknown>)
     if (!row) continue
+    const arr = byTbl.get(tbl) || []
+    arr.push(row)
+    byTbl.set(tbl, arr)
+  }
+
+  for (const [tbl, rows] of byTbl) {
     const phys = PHYS[tbl]
-    const ex = await db.execute({ sql: `SELECT updatedAt FROM "${phys}" WHERE id = ?`, args: [row.id as string] })
-    const exUpd = ex.rows.length > 0 ? Number(ex.rows[0]['updatedAt'] ?? 0) : null
-    if (exUpd !== null && exUpd >= (row.updatedAt as number)) {
-      skipped++
-      continue
-    }
+    // ۱) چک LWW همه رکوردهای این جدول با یک SELECT
+    const ids = rows.map(r => r.id as string)
+    const ph = ids.map(() => '?').join(',')
+    const ex = await db.execute({ sql: `SELECT id, updatedAt FROM "${phys}" WHERE id IN (${ph})`, args: ids })
+    const existing = new Map<string, number>()
+    for (const r of ex.rows) existing.set(String(r['id']), Number(r['updatedAt'] ?? 0))
+
+    // ۲) رکوردهای پذیرفته‌شده در یک batch (INSERT + SyncLog)
+    const toWrite = rows.filter(row => {
+      const exUpd = existing.get(row.id as string)
+      if (exUpd !== undefined && exUpd >= (row.updatedAt as number)) { skipped++; return false }
+      accepted++
+      return true
+    })
+    if (toWrite.length === 0) continue
     const cols = colsOf(tbl)
-    await db.batch([
-      {
-        sql: `INSERT OR REPLACE INTO "${phys}" (${cols.map((c) => `"${c}"`).join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`,
-        args: cols.map((c) => row[c]),
-      },
-      { sql: 'INSERT INTO SyncLog (tbl, rid, ts) VALUES (?, ?, ?)', args: [tbl, row.id, row.updatedAt as number] },
-    ], 'write')
-    accepted++
+    const stmts = toWrite.map(row => ({
+      sql: `INSERT OR REPLACE INTO "${phys}" (${cols.map(c => `"${c}"`).join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`,
+      args: cols.map(c => row[c]),
+    })).concat(toWrite.map(row => ({
+      sql: 'INSERT INTO SyncLog (tbl, rid, ts) VALUES (?, ?, ?)',
+      args: [tbl, row.id, row.updatedAt as number],
+    })))
+    await db.batch(stmts as unknown as Parameters<Client['batch']>[0], 'write')
   }
   return { accepted, skipped }
 }
+
 
 /** دریافت تغییرات افزایشی بر اساس cursor — پرت از sync/pull/route.ts */
 export async function pullRows(db: Client, since: number, limit: number) {
@@ -281,10 +323,20 @@ export async function pullRows(db: Client, since: number, limit: number) {
     latest.set(`${String(l.tbl)}:${String(l.rid)}`, { tbl: String(l.tbl) as SyncTbl, rid: String(l.rid), seq: Number(l.seq) })
   }
 
-  const rows: { tbl: SyncTbl; row: Record<string, unknown> }[] = []
+  // ⚠️ به‌جای یک SELECT برای هر رکورد (شکست subrequest-limit کارگران ابری در دسته‌های بزرگ)،
+  // یک SELECT گروهی برای هر جدول اجرا می‌شود — حداکثر ~۱۷ subrequest در هر pull
+  const byTbl = new Map<SyncTbl, string[]>()
   for (const { tbl, rid } of latest.values()) {
-    const r = await db.execute({ sql: `SELECT * FROM "${PHYS[tbl]}" WHERE id = ?`, args: [rid] })
-    if (r.rows.length > 0) rows.push({ tbl, row: rowToObj(r, r.rows[0]) })
+    const arr = byTbl.get(tbl) || []
+    arr.push(rid)
+    byTbl.set(tbl, arr)
+  }
+
+  const rows: { tbl: SyncTbl; row: Record<string, unknown> }[] = []
+  for (const [tbl, ids] of byTbl) {
+    const placeholders = ids.map(() => '?').join(',')
+    const r = await db.execute({ sql: `SELECT * FROM "${PHYS[tbl]}" WHERE id IN (${placeholders})`, args: ids })
+    for (const row of r.rows) rows.push({ tbl, row: rowToObj(r, row) })
   }
 
   const cursor = logs.rows.length > 0 ? Number(logs.rows[logs.rows.length - 1].seq) : since

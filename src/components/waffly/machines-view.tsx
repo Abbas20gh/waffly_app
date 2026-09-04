@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import { PageHeader, FormRow, EmptyState, Money, Num } from './bits'
+import { PageHeader, FormRow, EmptyState, Money, Num, useConfirm, confirmRemove } from './bits'
 import { JalaliDateInput } from './jalali-date'
 import { InlinePicker } from './inline-picker'
 import { useTable, putRecord, removeRecord, uid, getActiveUser } from '@/lib/localdb'
@@ -26,6 +26,7 @@ export function MachinesView() {
 }
 
 function MachinesBody({ machines, machineCosts }: { machines: Machine[]; machineCosts: MachineCost[] }) {
+  const { confirm, element: confirmDialog } = useConfirm()
   const [section, setSection] = useState<'BAKING' | 'BUSINESS'>('BAKING')
   const [machineDlg, setMachineDlg] = useState(false)
   const [editingMachine, setEditingMachine] = useState<Machine | null>(null)
@@ -191,7 +192,7 @@ function MachinesBody({ machines, machineCosts }: { machines: Machine[]; machine
                             <Pencil className="h-3 w-3" />
                           </Button>
                           <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-red-600" aria-label="حذف هزینه"
-                            onClick={() => void removeRecord('machineCosts', c.id)}>
+                            onClick={() => void confirmRemove(confirm, 'machineCosts', c.id, 'حذف هزینهٔ دستگاه', `آیا از حذف «${c.name}» (${faMoney(c.cost)} تومان) مطمئن هستید؟`)}>
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         </div>
@@ -218,7 +219,7 @@ function MachinesBody({ machines, machineCosts }: { machines: Machine[]; machine
                       <Pencil className="h-4 w-4" />
                     </Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" aria-label="حذف دستگاه"
-                      onClick={() => void removeRecord('machines', m.id)}>
+                      onClick={() => void confirmRemove(confirm, 'machines', m.id, 'حذف دستگاه', `آیا از حذف «${m.name}» مطمئن هستید؟ هزینه‌های ثبت‌شدهٔ آن هم حذف می‌شوند.`)}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
@@ -308,6 +309,7 @@ function MachinesBody({ machines, machineCosts }: { machines: Machine[]; machine
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {confirmDialog}
     </div>
   )
 }

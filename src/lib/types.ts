@@ -2,7 +2,7 @@
 export const TABLES = [
   'breadTypes', 'productions', 'boxes', 'materials', 'goods', 'consumptions',
   'customers', 'sales', 'suppliers', 'purchases',
-  'machines', 'machineCosts', 'expenseCategories', 'expenses', 'otherFunds', 'settings',
+  'machines', 'machineCosts', 'expenseCategories', 'expenses', 'otherFunds', 'settings', 'accounts',
 ] as const
 
 export type SyncTbl = (typeof TABLES)[number]
@@ -48,6 +48,9 @@ export interface SaleItem {
   breadTypeId: string; qty: number; unitPrice: number
   delivered: number; returned: number; returnCost: number
   kind?: 'BREAD' | 'GOOD'
+  /** از v2.7 — اگر این قلم با انتخاب کد جعبه ثبت شده باشد */
+  boxId?: string
+  boxCode?: string
 }
 export interface Sale extends BaseRow {
   date: string; customerId: string; items: string // JSON SaleItem[]
@@ -55,6 +58,8 @@ export interface Sale extends BaseRow {
   paidAmount: number; paymentMethod: 'CASH' | 'CARD' | 'TRANSFER' | 'CHECK'
   checkDueDate?: string | null; checkNumber?: string | null; checkBank?: string | null
   paymentDate?: string | null; note?: string | null; createdBy?: string | null
+  /** از v2.7 — مبلغ پرداختی به این حساب واریز می‌شود (اختیاری) */
+  accountId?: string | null
 }
 export interface Supplier extends BaseRow { name: string; phone?: string | null; address?: string | null }
 /**
@@ -67,6 +72,8 @@ export interface Purchase extends BaseRow {
   itemKind?: 'MATERIAL' | 'GOOD'
   boxesCount?: number // منسوخ (v2.5) — برای سازگاری سینک، همیشه = quantity برای کالا
   note?: string | null; createdBy?: string | null
+  /** از v2.7 — مبلغ پرداختی از این حساب برداشت می‌شود (اختیاری) */
+  accountId?: string | null
 }
 export interface Machine extends BaseRow {
   name: string; kind: 'BAKING' | 'BUSINESS'; startDate: string
@@ -80,12 +87,25 @@ export interface MachineCost extends BaseRow {
 export interface ExpenseCategory extends BaseRow { name: string; includeInProfit?: number }
 export interface Expense extends BaseRow {
   date: string; categoryId: string; amount: number; description?: string | null; createdBy?: string | null
+  /** از v2.7 — پرداخت از این حساب (اختیاری) */
+  accountId?: string | null
 }
 export interface OtherFund extends BaseRow {
   date: string
   type: 'IN' | 'OUT' // ورود/خروج — خارج از حساب سود
   amount: number
   description: string // اجباری — منشأ/مقصد پول
+  /** از v2.7 — حرکت پول از/به این حساب (اختیاری) */
+  accountId?: string | null
+}
+
+/** حساب بانکی/صندوق نقدی — از v2.7 */
+export interface Account extends BaseRow {
+  name: string
+  kind: 'BANK' | 'CASH' // BANK حساب بانکی | CASH صندوق نقدی
+  initialBalance: number // موجودی اولیه هنگام ساخت حساب
+  note?: string | null
+  active?: number
 }
 
 export interface Setting extends BaseRow {

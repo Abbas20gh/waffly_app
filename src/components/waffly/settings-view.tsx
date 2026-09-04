@@ -10,7 +10,7 @@ import {
 import {
   useSetting, useTable, putRecord, removeRecord, exportAllToJson, importAllFromJson, uid,
 } from '@/lib/localdb'
-import { PageHeader, FormRow } from './bits'
+import { PageHeader, FormRow, useConfirm, confirmRemove } from './bits'
 import { PwaGuideContent, getPlatform, isStandalone } from './pwa-install'
 import { faDigits, faMoney } from '@/lib/jalali'
 import { forceSyncNow, useSyncStore, repairSync, forceFullResync } from '@/lib/sync-engine'
@@ -30,6 +30,7 @@ export function SettingsView() {
   const setting = useSetting()
   const { pendingCount, online, lastSyncAt, error, syncing } = useSyncStore()
   const expenseCategories = useTable<ExpenseCategory>('expenseCategories')
+  const { confirm, element: confirmDialog } = useConfirm()
 
   const [businessName, setBusinessName] = useState('')
   const [accountingDay, setAccountingDay] = useState('5')
@@ -127,7 +128,7 @@ export function SettingsView() {
   return (
     <div className="space-y-5">
       {/* APP_VERSION — با هر آپدیت APK/وب به‌روز شود */}
-      <PageHeader title="تنظیمات" subtitle="دوره حسابداری، هشدارها، سینک، پشتیبان‌گیری و نصب اپ — نسخه ۲.۶.۰" icon={<SettingsIcon className="h-5 w-5" />} />
+      <PageHeader title="تنظیمات" subtitle="دوره حسابداری، هشدارها، سینک، پشتیبان‌گیری و نصب اپ — نسخه ۲.۷.۰" icon={<SettingsIcon className="h-5 w-5" />} />
 
       <div className="grid lg:grid-cols-2 gap-4 items-start">
         <Card className="waffly-card">
@@ -173,7 +174,7 @@ export function SettingsView() {
                       {c.includeInProfit ? 'مشمول سود ✓' : 'غیرمشمول'}
                     </Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-red-600" aria-label="حذف"
-                      onClick={() => void removeRecord('expenseCategories', c.id)}>
+                      onClick={() => void confirmRemove(confirm, 'expenseCategories', c.id, 'حذف سرفصل هزینه', `آیا از حذف سرفصل «${c.name}» مطمئن هستید؟ هزینه‌های قبلی این سرفصل حفظ می‌شوند.`)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
@@ -347,6 +348,7 @@ export function SettingsView() {
           کامل کار می‌کند و داده‌ها روی دستگاه ذخیره می‌شوند. برای نصب روی اندروید: منوی کروم ← «افزودن به صفحه اصلی».
         </CardContent>
       </Card>
+      {confirmDialog}
     </div>
   )
 }
