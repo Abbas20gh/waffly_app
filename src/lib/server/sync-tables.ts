@@ -2,7 +2,7 @@
 import { db } from '@/lib/db'
 import { TABLES, type SyncTbl } from '@/lib/types'
 
-type FieldType = 'str' | 'num' | 'int' | 'strNull'
+type FieldType = 'str' | 'num' | 'int' | 'strNull' | 'numNull'
 
 export const MODELS: Record<SyncTbl, string> = {
   breadTypes: 'breadType',
@@ -22,6 +22,7 @@ export const MODELS: Record<SyncTbl, string> = {
   otherFunds: 'otherFund',
   settings: 'setting',
   accounts: 'account',
+  combinedInvoices: 'combinedInvoice',
 }
 
 export const FIELDS: Record<SyncTbl, Record<string, FieldType>> = {
@@ -32,7 +33,7 @@ export const FIELDS: Record<SyncTbl, Record<string, FieldType>> = {
   goods: { name: 'str', piecesPerBox: 'num', minStock: 'num', active: 'int' },
   consumptions: { date: 'str', materialId: 'str', quantity: 'num', note: 'strNull', createdBy: 'strNull' },
   customers: { name: 'str', phone: 'strNull', address: 'strNull', cooperationType: 'strNull' },
-  sales: { date: 'str', customerId: 'str', items: 'str', totalAmount: 'num', settledStatus: 'str', paidAmount: 'num', paymentMethod: 'str', checkDueDate: 'strNull', checkNumber: 'strNull', checkBank: 'strNull', paymentDate: 'strNull', note: 'strNull', createdBy: 'strNull', accountId: 'strNull' },
+  sales: { date: 'str', customerId: 'str', items: 'str', totalAmount: 'num', settledStatus: 'str', paidAmount: 'num', paymentMethod: 'str', checkDueDate: 'strNull', checkNumber: 'strNull', checkBank: 'strNull', paymentDate: 'strNull', note: 'strNull', createdBy: 'strNull', accountId: 'strNull', discountType: 'str', discountValue: 'num', invoiceNumber: 'numNull' },
   suppliers: { name: 'str', phone: 'strNull', address: 'strNull' },
   purchases: { date: 'str', materialId: 'str', quantity: 'num', cost: 'num', supplierId: 'strNull', settledStatus: 'str', paidAmount: 'num', itemKind: 'str', boxesCount: 'num', note: 'strNull', createdBy: 'strNull', accountId: 'strNull' },
   machines: { name: 'str', kind: 'str', startDate: 'str', status: 'str', note: 'strNull' },
@@ -40,8 +41,9 @@ export const FIELDS: Record<SyncTbl, Record<string, FieldType>> = {
   expenseCategories: { name: 'str', includeInProfit: 'int' },
   expenses: { date: 'str', categoryId: 'str', amount: 'num', description: 'strNull', createdBy: 'strNull', accountId: 'strNull' },
   otherFunds: { date: 'str', type: 'str', amount: 'num', description: 'str', accountId: 'strNull' },
-  settings: { businessName: 'str', monthStartDay: 'int', badDebtDays: 'int', checkAlertDays: 'int' },
+  settings: { businessName: 'str', monthStartDay: 'int', badDebtDays: 'int', checkAlertDays: 'int', bankAccountName: 'str', bankCardNumber: 'str', bankSheba: 'str', bankName: 'str', shopPhones: 'str' },
   accounts: { name: 'str', kind: 'str', initialBalance: 'num', note: 'strNull', active: 'int' },
+  combinedInvoices: { invoiceNumber: 'num', customerId: 'str', saleIds: 'str', date: 'str', totalAmount: 'num', paidAmount: 'num', remaining: 'num', note: 'strNull', createdBy: 'strNull' },
 }
 
 const s = (v: unknown, dflt = '') => (typeof v === 'string' ? v : v == null ? dflt : String(v))
@@ -73,6 +75,7 @@ export function sanitizeRow(tbl: SyncTbl, row: Record<string, unknown>) {
     if (t === 'str') out[k] = DATE_FIELDS.has(k) ? toEnDigits(s(v)) : s(v)
     else if (t === 'num') out[k] = n(v)
     else if (t === 'int') out[k] = i(v)
+    else if (t === 'numNull') out[k] = v == null || v === '' ? null : n(v)
     else out[k] = DATE_FIELDS.has(k) ? (sn(v) === null ? null : toEnDigits(sn(v)!)) : sn(v)
   }
   return out

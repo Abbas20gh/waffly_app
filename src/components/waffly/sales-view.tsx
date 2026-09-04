@@ -1,10 +1,10 @@
 'use client'
 
 // فروش — ثبت فروش چندقلمی، تسویه (کامل/جزئی)، چک، مشتریان، بدحساب‌ها
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { toast } from '@/hooks/use-toast'
 import {
-  ShoppingCart, Plus, Trash2, Users, Landmark, AlertOctagon, Check, Wallet, Phone, Pencil, Boxes,
+  ShoppingCart, Plus, Trash2, Users, Landmark, AlertOctagon, Check, Wallet, Phone, Pencil, Boxes, FileText, ListChecks, Percent,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -15,10 +15,13 @@ import {
 import { PageHeader, FormRow, TabsBar, EmptyState, SettleBadge, Money, Num, useConfirm, confirmRemove } from './bits'
 import { JalaliDateInput } from './jalali-date'
 import { InlinePicker } from './inline-picker'
-import { useTable, useSetting, putRecord, removeRecord, uid, getActiveUser } from '@/lib/localdb'
-import type { Sale, Customer, BreadType, Good, SaleItem, Box, Account } from '@/lib/types'
+import { InvoiceDialog } from './invoice-dialog'
+import { useTable, useSetting, putRecord, removeRecord, uid, getActiveUser, DEFAULT_BANK } from '@/lib/localdb'
+import type { Sale, Customer, BreadType, Good, SaleItem, Box, Account, CombinedInvoice, DiscountType } from '@/lib/types'
 import { todayJalali, faDigits, faMoney, prettyJalali } from '@/lib/jalali'
 import { active, saleDue, effectiveSettled, isBadDebt, daysSince, effectivePaymentDate } from '@/lib/calc'
+import { buildSaleInvoice, buildCombinedInvoice, combinedInvoiceRecord, computeDiscount, type InvoiceCtx, type InvoiceModel } from '@/lib/invoice'
+import { API_BASE } from '@/lib/sync-engine'
 import { cn } from '@/lib/utils'
 
 type Tab = 'sales' | 'customers' | 'checks' | 'debts'
@@ -61,6 +64,7 @@ function SalesTab() {
   const goods = useTable<Good>('goods')
   const boxes = useTable<Box>('boxes')
   const accounts = useTable<Account>('accounts')
+  const setting = useSetting()
   const { confirm, element: confirmDialog } = useConfirm()
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Sale | null>(null)
@@ -80,6 +84,8 @@ function SalesTab() {
     paymentDate: '',
     note: '',
     accountId: '',
+    discountType: 'NONE' as DiscountType,
+    discountValue: '',
   })
 
   // فروشِ هر جعبه (خالص تحویل − برگشتی) برای نمایش «مانده» در انتخاب‌گر کد جعبه
@@ -100,7 +106,9 @@ function SalesTab() {
 
   const itemsTotal = form.items.reduce((a, it) => a + (it.qty || 0) * (it.unitPrice || 0), 0)
   const returnTotal = form.items.reduce((a, it) => a + (it.returnCost || 0), 0)
-  const grandTotal = Math.max(0, itemsTotal - returnTotal)
+  const formSubtotal = Math.max(0, itemsTotal - returnTotal)
+  const discountAmount = computeDiscount(formSubtotal, form.discountType, parseFloat(form.discountValue || '0') || 0)
+  const grandTotal = Math.max(0, formSubtotal - discountAmount)
 
   const openNew = () => {
     setEditing(null)
@@ -117,6 +125,8 @@ function SalesTab() {
       paymentDate: '',
       note: '',
       accountId: '',
+      discountType: 'NONE' as DiscountType,
+      discountValue: '',
     })
     setOpen(true)
   }
@@ -138,6 +148,8 @@ function SalesTab() {
       paymentDate: s.paymentDate || '',
       note: s.note || '',
       accountId: s.accountId || '',
+      discountType: s.discountType || 'NONE',
+      discountValue: s.discountValue ? String(s.discountValue) : '',
     })
     setOpen(true)
   }
@@ -174,6 +186,9 @@ function SalesTab() {
       paymentDate: status === 'PAID' ? (form.paymentDate || null) : (form.paymentDate || null),
       note: form.note || null,
       accountId: form.accountId || null,
+      discountType: form.discountType,
+      discountValue: discountAmount,
+      invoiceNumber: editing?.invoiceNumber ?? null,
       createdBy: editing?.createdBy ?? (getActiveUser() || null),
       deleted: 0,
     })
@@ -192,6 +207,81 @@ function SalesTab() {
     .filter(s => filter === 'all' || (filter === 'unpaid' ? effectiveSettled(s) !== 'PAID' : s.paymentMethod === 'CHECK'))
     .sort((a, b) => (b.date + b.updatedAt).localeCompare(a.date + a.updatedAt))
     .slice(0, 60)
+
+  // ===== فاکتور (v2.8) =====
+  const invoiceCtx = useCallback((): InvoiceCtx => {
+    // سربرگ فاکتور طبق سند: «نان بستنی آرتا» — اگر کاربر در تنظیمات نام دیگری گذاشته باشد همان استفاده می‌شود
+    const title = !setting.businessName || setting.businessName === 'Waffly' ? 'نان بستنی آرتا' : setting.businessName
+    const phones = (setting.shopPhones || DEFAULT_BANK.shopPhones).split(/[،,]/).map(x => x.trim()).filter(Boolean)
+    return {
+      businessName: title,
+      phones,
+      bank: {
+        accountName: setting.bankAccountName || DEFAULT_BANK.bankAccountName,
+        cardNumber: setting.bankCardNumber || DEFAULT_BANK.bankCardNumber,
+        sheba: setting.bankSheba || DEFAULT_BANK.bankSheba,
+        bankName: setting.bankName || DEFAULT_BANK.bankName,
+      },
+      nameOf: (id, kind) => {
+        if (kind === 'GOOD') return goods.find(g => g.id === id)?.name || 'کالا'
+        return breadTypes.find(b => b.id === id)?.name || goods.find(g => g.id === id)?.name || 'قلم فروش'
+      },
+    }
+  }, [setting, breadTypes, goods])
+
+  const [invoiceSale, setInvoiceSale] = useState<Sale | null>(null)
+  const [invoiceSales, setInvoiceSales] = useState<Sale[]>([])
+  const [invoiceModel, setInvoiceModel] = useState<InvoiceModel | null>(null)
+  const [invoiceKey, setInvoiceKey] = useState('')
+  const [invoiceOpen, setInvoiceOpen] = useState(false)
+  const [multiMode, setMultiMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+
+  const fetchNextNumber = async (): Promise<number | null> => {
+    try {
+      const res = await fetch(`${API_BASE}/api/invoice/next-number`, { method: 'POST' })
+      if (!res.ok) return null
+      const data = await res.json() as { number?: number }
+      return data.number && data.number > 0 ? data.number : null
+    } catch { return null }
+  }
+
+  // لحظهٔ صدور — شماره از سرور + ثبت روی رکورد (فروش یا فاکتور ترکیبی) — آفلاین = پیش‌نویس
+  const getNumberForInvoice = async (m: InvoiceModel): Promise<number | null> => {
+    const n = await fetchNextNumber()
+    if (!n) return null
+    if (invoiceSale) {
+      const next = { ...invoiceSale, invoiceNumber: n }
+      await putRecord<Sale>('sales', next)
+      setInvoiceSale(next)
+    } else if (invoiceSales.length > 0) {
+      await putRecord<CombinedInvoice>('combinedInvoices', combinedInvoiceRecord({ ...m, number: n }, invoiceSales, getActiveUser() || null))
+    }
+    return n
+  }
+
+  const issueInvoiceFor = (s: Sale) => {
+    setInvoiceSale(s)
+    setInvoiceSales([])
+    setInvoiceModel(buildSaleInvoice(s, invoiceCtx(), customers.find(c => c.id === s.customerId)))
+    setInvoiceKey(`sale-${s.id}`)
+    setInvoiceOpen(true)
+  }
+
+  const toggleSelect = (id: string) => setSelectedIds(v => (v.includes(id) ? v.filter(x => x !== id) : [...v, id]))
+  const selectedSales = sales.filter(s => !s.deleted && selectedIds.includes(s.id))
+  const selectionValid = selectedSales.length > 0 && new Set(selectedSales.map(s => s.customerId)).size === 1
+
+  const issueCombined = () => {
+    if (!selectionValid) return
+    const sel = selectedSales
+    setInvoiceSale(null)
+    setInvoiceSales(sel)
+    setInvoiceModel(buildCombinedInvoice(sel, invoiceCtx(), customers.find(c => c.id === sel[0].customerId)))
+    setInvoiceKey(`combined-${Date.now()}`)
+    setInvoiceOpen(true)
+  }
+
   const cName = (id: string) => customers.find(c => c.id === id)?.name || 'نامشخص'
   const accName = (id: string | null | undefined) => accounts.find(a => a.id === id && !a.deleted)?.name
   const btLabel = (id: string) => {
@@ -216,8 +306,33 @@ function SalesTab() {
             </button>
           ))}
         </div>
-        <Button onClick={openNew} className="h-11"><Plus className="ml-1 h-4 w-4" /> فروش جدید</Button>
+        <div className="flex gap-2">
+          <Button
+            variant={multiMode ? 'default' : 'outline'}
+            className="h-11"
+            onClick={() => { setMultiMode(v => !v); setSelectedIds([]); if (!multiMode) setFilter('unpaid') }}
+          >
+            <ListChecks className="ml-1 h-4 w-4" /> فاکتور ترکیبی
+          </Button>
+          <Button onClick={openNew} className="h-11"><Plus className="ml-1 h-4 w-4" /> فروش جدید</Button>
+        </div>
       </div>
+
+      {multiMode && (
+        <div className="rounded-xl border bg-primary/5 p-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs waffly-num">{faDigits(selectedIds.length)} فروش انتخاب شد</span>
+          {selectedIds.length > 0 && !selectionValid && (
+            <span className="text-[11px] text-red-600">فروش‌های انتخابی باید همه برای یک مشتری باشند</span>
+          )}
+          <div className="flex-1" />
+          <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => setSelectedIds(list.map(s => s.id))}>
+            انتخاب همهٔ نمایش‌داده‌شده
+          </Button>
+          <Button size="sm" className="h-8 text-[11px]" disabled={!selectionValid} onClick={issueCombined}>
+            <FileText className="h-3.5 w-3.5" /> صدور فاکتور ترکیبی
+          </Button>
+        </div>
+      )}
 
       <Card className="waffly-card">
         <CardContent className="p-3">
@@ -229,18 +344,34 @@ function SalesTab() {
                 const items = (() => { try { return JSON.parse(s.items || '[]') as SaleItem[] } catch { return [] } })()
                 const st = effectiveSettled(s)
                 return (
-                  <div key={s.id} className="rounded-xl border p-3 space-y-2">
+                  <div key={s.id} className={cn('rounded-xl border p-3 space-y-2', multiMode && selectedIds.includes(s.id) && 'border-primary bg-primary/5')}>
                     <div className="flex flex-wrap items-center gap-2">
+                      {multiMode && (
+                        <input
+                          type="checkbox"
+                          aria-label="انتخاب برای فاکتور ترکیبی"
+                          className="h-4 w-4 accent-violet-600 shrink-0"
+                          checked={selectedIds.includes(s.id)}
+                          onChange={() => toggleSelect(s.id)}
+                        />
+                      )}
                       <p className="text-sm font-bold">{cName(s.customerId)}</p>
                       <span className="text-[11px] text-muted-foreground waffly-num">{prettyJalali(s.date)}</span>
                       <span className="text-[10px] rounded bg-muted px-1.5 py-0.5">{PAY_METHODS.find(p => p.key === s.paymentMethod)?.label}</span>
                       {s.paymentMethod === 'CHECK' && s.checkDueDate && (
                         <span className="text-[10px] rounded bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.5 waffly-num">چک: {prettyJalali(s.checkDueDate)}</span>
                       )}
+                      {s.invoiceNumber ? (
+                        <span className="text-[10px] rounded bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 waffly-num">فاکتور {faDigits(s.invoiceNumber)}</span>
+                      ) : null}
                       <div className="flex-1" />
                       <SettleBadge status={st} paid={s.paidAmount} total={s.totalAmount} />
                       <Money value={s.totalAmount} className="font-bold text-sm" />
                       <span className="text-[10px] text-muted-foreground">تومان</span>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" aria-label="فاکتور"
+                        onClick={() => issueInvoiceFor(s)}>
+                        <FileText className="h-4 w-4" />
+                      </Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" aria-label="ویرایش"
                         onClick={() => openEdit(s)}>
                         <Pencil className="h-4 w-4" />
@@ -288,7 +419,7 @@ function SalesTab() {
         form={form} setForm={setForm}
         customers={active(customers)} breadTypes={active(breadTypes)} goods={active(goods).filter(g => g.active !== 0)}
         boxes={boxes.filter(b => !b.deleted)} accounts={accounts.filter(a => !a.deleted)} soldByBox={soldByBox}
-        itemsTotal={itemsTotal} returnTotal={returnTotal} grandTotal={grandTotal}
+        itemsTotal={itemsTotal} returnTotal={returnTotal} discountAmount={discountAmount} grandTotal={grandTotal}
         onSave={save}
         onQuickAddCustomer={async (name) => {
           const id = uid()
@@ -297,12 +428,13 @@ function SalesTab() {
           toast({ title: 'مشتری اضافه شد', description: name })
         }}
       />
+      <InvoiceDialog open={invoiceOpen} onOpenChange={setInvoiceOpen} model={invoiceModel} invoiceKey={invoiceKey} getNumber={getNumberForInvoice} />
       {confirmDialog}
     </div>
   )
 }
 
-function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, breadTypes, goods, boxes, accounts, soldByBox, itemsTotal, returnTotal, grandTotal, onSave, onQuickAddCustomer }: {
+function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, breadTypes, goods, boxes, accounts, soldByBox, itemsTotal, returnTotal, discountAmount, grandTotal, onSave, onQuickAddCustomer }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   isEdit?: boolean
@@ -311,12 +443,14 @@ function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, 
     settledStatus: Sale['settledStatus']; paidAmount: string
     paymentMethod: Sale['paymentMethod']; checkDueDate: string; checkNumber: string; checkBank: string
     paymentDate: string; note: string; accountId: string
+    discountType: DiscountType; discountValue: string
   }
   setForm: React.Dispatch<React.SetStateAction<{
     date: string; customerId: string; items: SaleItem[]
     settledStatus: Sale['settledStatus']; paidAmount: string
     paymentMethod: Sale['paymentMethod']; checkDueDate: string; checkNumber: string; checkBank: string
     paymentDate: string; note: string; accountId: string
+    discountType: DiscountType; discountValue: string
   }>>
   customers: Customer[]
   breadTypes: BreadType[]
@@ -326,6 +460,7 @@ function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, 
   soldByBox: Map<string, number>
   itemsTotal: number
   returnTotal: number
+  discountAmount: number
   grandTotal: number
   onSave: () => void
   onQuickAddCustomer: (name: string) => void
@@ -504,7 +639,33 @@ function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, 
           <div className="rounded-xl bg-muted/60 border p-3 space-y-1 text-xs waffly-num">
             <div className="flex justify-between"><span>جمع اقلام</span><span>{faMoney(itemsTotal)}</span></div>
             {returnTotal > 0 && <div className="flex justify-between text-red-600"><span>هزینه برگشتی</span><span>−{faMoney(returnTotal)}</span></div>}
+            {discountAmount > 0 && <div className="flex justify-between text-emerald-700 font-medium"><span>تخفیف</span><span>−{faMoney(discountAmount)}</span></div>}
             <div className="flex justify-between font-bold text-sm pt-1 border-t"><span>مبلغ نهایی</span><span>{faMoney(grandTotal)} تومان</span></div>
+          </div>
+
+          {/* تخفیف (v2.8) */}
+          <div className="rounded-xl border p-3">
+            <div className="grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_1fr] gap-2 items-center">
+              <span className="text-xs font-medium flex items-center gap-1 whitespace-nowrap"><Percent className="h-3.5 w-3.5" /> تخفیف:</span>
+              <InlinePicker
+                value={form.discountType}
+                options={[
+                  { value: 'NONE', label: 'بدون تخفیف' },
+                  { value: 'AMOUNT', label: 'مبلغ ثابت (تومان)' },
+                  { value: 'PERCENT', label: 'درصد از جمع' },
+                ]}
+                onChange={v => setForm(f => ({ ...f, discountType: v as DiscountType }))}
+                buttonClassName="h-9 text-xs"
+              />
+              {form.discountType !== 'NONE' && (
+                <Input
+                  inputMode="decimal" className="waffly-num-input h-9 text-xs col-span-2 sm:col-span-1"
+                  placeholder={form.discountType === 'PERCENT' ? 'مثلاً ۱۰' : 'مبلغ به تومان'}
+                  value={form.discountValue}
+                  onChange={e => setForm(f => ({ ...f, discountValue: e.target.value }))}
+                />
+              )}
+            </div>
           </div>
 
           {/* تسویه */}

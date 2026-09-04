@@ -3,6 +3,7 @@ export const TABLES = [
   'breadTypes', 'productions', 'boxes', 'materials', 'goods', 'consumptions',
   'customers', 'sales', 'suppliers', 'purchases',
   'machines', 'machineCosts', 'expenseCategories', 'expenses', 'otherFunds', 'settings', 'accounts',
+  'combinedInvoices',
 ] as const
 
 export type SyncTbl = (typeof TABLES)[number]
@@ -52,6 +53,8 @@ export interface SaleItem {
   boxId?: string
   boxCode?: string
 }
+export type DiscountType = 'NONE' | 'AMOUNT' | 'PERCENT'
+
 export interface Sale extends BaseRow {
   date: string; customerId: string; items: string // JSON SaleItem[]
   totalAmount: number; settledStatus: 'PAID' | 'PARTIAL' | 'UNPAID'
@@ -60,6 +63,24 @@ export interface Sale extends BaseRow {
   paymentDate?: string | null; note?: string | null; createdBy?: string | null
   /** از v2.7 — مبلغ پرداختی به این حساب واریز می‌شود (اختیاری) */
   accountId?: string | null
+  /** از v2.8 — تخفیف فاکتور */
+  discountType?: DiscountType
+  discountValue?: number
+  /** از v2.8 — شماره سریال فاکتور (فقط موقع صدور، از سرور؛ null تا وقتی صادر نشده) */
+  invoiceNumber?: number | null
+}
+
+/** فاکتور ترکیبی — صورت‌حساب چند فروشِ یک مشتری — از v2.8 */
+export interface CombinedInvoice extends BaseRow {
+  invoiceNumber: number
+  customerId: string
+  saleIds: string // JSON آرایهٔ شناسه فروش‌ها
+  date: string // تاریخ صدور
+  totalAmount: number // جمع کل فروش‌ها (بعد از تخفیف هر فروش)
+  paidAmount: number // جمع پرداخت‌شده‌ها
+  remaining: number // ماندهٔ باقی‌مانده
+  note?: string | null
+  createdBy?: string | null
 }
 export interface Supplier extends BaseRow { name: string; phone?: string | null; address?: string | null }
 /**
@@ -110,6 +131,10 @@ export interface Account extends BaseRow {
 
 export interface Setting extends BaseRow {
   businessName: string; monthStartDay: number; badDebtDays: number; checkAlertDays: number
+  /** از v2.8 — اطلاعات واریز بانکی روی فاکتور */
+  bankAccountName?: string; bankCardNumber?: string; bankSheba?: string; bankName?: string
+  /** از v2.8 — شماره‌های تماس روی سربرگ فاکتور */
+  shopPhones?: string
 }
 
 // طعم‌های اسانس — لیست قابل‌گسترش (فعلاً پرتقالی؛ بعداً اضافه می‌شود)

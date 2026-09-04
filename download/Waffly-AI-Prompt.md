@@ -15,7 +15,7 @@
 | آدرس production | https://waffly.pages.dev |
 | دیتابیس مرکزی | Turso: `libsql://waffly-db-abbas20gh.aws-eu-west-1.turso.io` |
 | ریپو گیت‌هاب | https://github.com/Abbas20gh/waffly_app (برنچ `main`) |
-| نسخه فعلی | **v2.7.1** (versionCode 13) — APK امضاشده: `download/Waffly-v2.7.1.apk` (نسخه‌های قبلی هم نگه‌داری شده‌اند) |
+| نسخه فعلی | **v2.8.0** (versionCode 14) — APK امضاشده: `download/Waffly-v2.8.0.apk` (نسخه‌های قبلی هم نگه‌داری شده‌اند) |
 | وضعیت | **زنده و در حال استفاده واقعی** — داده واقعی روی Turso و گوشی کاربر است؛ از دست رفتن داده فاجعه است |
 
 ## ۲) استک فناوری (با نسخه‌های دقیق)
@@ -103,7 +103,7 @@
 | 4 | materials | name, unit (کیلوگرم/گرم/…), minStock, active (0/1 — غیرفعال فقط از انتخاب‌گرها حذف می‌شود، رکوردهای تاریخی می‌مانند) |
 | 5 | consumptions | date, materialId, quantity, note?, createdBy? — ایندکس date |
 | 6 | customers | name, phone?, address?, cooperationType? |
-| 7 | sales | date, customerId, items (رشته JSON آرایه SaleItem: {breadTypeId, qty, unitPrice, delivered, returned, returnCost, kind?, boxId?, boxCode? از v2.7}), totalAmount, settledStatus (PAID/PARTIAL/UNPAID), paidAmount, paymentMethod (CASH/CARD/TRANSFER/CHECK), checkDueDate?, checkNumber?, checkBank?, paymentDate? (تاریخ وصول واقعی), note?, createdBy?, accountId? (v2.7) — ایندکس date/customerId |
+| 7 | sales | date, customerId, items (رشته JSON آرایه SaleItem: {breadTypeId, qty, unitPrice, delivered, returned, returnCost, kind?, boxId?, boxCode? از v2.7}), totalAmount, settledStatus (PAID/PARTIAL/UNPAID), paidAmount, paymentMethod (CASH/CARD/TRANSFER/CHECK), checkDueDate?, checkNumber?, checkBank?, paymentDate? (تاریخ وصول واقعی), note?, createdBy?, accountId? (v2.7), discountType? (v2.8: NONE/AMOUNT/PERCENT), discountValue? (v2.8), invoiceNumber? (v2.8 — nullable؛ فقط موقع صدور فاکتور از سرور) — ایندکس date/customerId |
 | 8 | suppliers | name, phone?, address? |
 | 9 | purchases | date, materialId, quantity, cost, supplierId?, settledStatus, paidAmount, note?, createdBy?, accountId? (v2.7 — حساب برداشت) — ایندکس date |
 | 10 | machines | name, kind (BAKING=تجهیزات نانوایی / BUSINESS=دستگاه‌سازی تجاری), startDate, status (IN_PROGRESS/DONE/PAUSED), note? |
@@ -112,7 +112,8 @@
 | 13 | expenses | date, categoryId, amount, description?, createdBy?, accountId? (v2.7) — ایندکس date |
 | 14 | otherFunds | date, type (IN ورود / OUT خروج), amount, **description (الزامی — منشأ پول)**, accountId? (v2.7) — ⚠️ **هرگز در فرمول‌های سود calc.ts استفاده نشود**؛ فقط کارت جدا «سایر وجوه» در dashboard/accounting — ایندکس date |
 | 15 | accounts (جدول v2.7) | name, kind (BANK حساب بانکی / CASH صندوق نقدی), initialBalance (موجودی اولیه), note?, active — موجودی فعلی = initialBalance + Σورود − Σخروج (مشتق از sales.paidAmount/purchases.paidAmount/expenses.amount/otherFunds با accountId؛ هیچ جدول تراکنش موازی وجود ندارد) |
-| 16 | settings | businessName (پیش‌فرض Waffly), monthStartDay (روز شروع دوره حسابداری، پیش‌فرض ۱), badDebtDays (آستانه بدحسابی، پیش‌فرض ۳۰), checkAlertDays (هشدار سررسید چک، پیش‌فرض ۷) — رکورد واحد با id=`main` |
+| 16 | combinedInvoices (جدول v2.8) | invoiceNumber (شماره سریال از همان شمارندهٔ سراسری), customerId, saleIds (JSON آرایه), date (تاریخ صدور), totalAmount, paidAmount, remaining, note?, createdBy? — سوابق فاکتورهای ترکیبی؛ ایندکس date/customerId |
+| 17 | settings | businessName (پیش‌فرض Waffly), monthStartDay (روز شروع دوره حسابداری، پیش‌فرض ۱), badDebtDays (آستانه بدحسابی، پیش‌فرض ۳۰), checkAlertDays (هشدار سررسید چک، پیش‌فرض ۷) — رکورد واحد با id=`main`, bankAccountName?/bankCardNumber?/bankSheba?/bankName?/shopPhones? (v2.8 — اطلاعات فاکتور) |
 | 17 | SyncLog | seq (autoincrement)، tbl، rid، ts — ثبت هر تغییر برای pull افزایشی؛ tbl با **نام منطقی camelCase** ذخیره می‌شود |
 
 **Seed اولیه (ensureSeed — فقط وقتی DB خالی است، گارد وجود `seed-bt-01`):** Setting `main` + ۵ نوع نان + ۱۰ ماده اولیه (آرد، شکر، مایه خمیر **active=0**، نمک، روغن مایع، کارتن بسته‌بندی، لسیتین گرم، وانیل گرم، آرد سبوس‌دار) + ۴ سرفصل هزینه. اسکریپت مهاجرت داده‌های موجود: `scripts/migrate-v2.mjs` (idempotent — ستون‌ها + جدول + seed + ثبت SyncLog).

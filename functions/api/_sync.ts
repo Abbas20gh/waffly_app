@@ -6,6 +6,7 @@ export const TABLES = [
   'breadTypes', 'productions', 'boxes', 'materials', 'goods', 'consumptions',
   'customers', 'sales', 'suppliers', 'purchases',
   'machines', 'machineCosts', 'expenseCategories', 'expenses', 'otherFunds', 'settings', 'accounts',
+  'combinedInvoices',
 ] as const
 export type SyncTbl = (typeof TABLES)[number]
 
@@ -17,9 +18,10 @@ export const PHYS: Record<SyncTbl, string> = {
   machines: 'Machine', machineCosts: 'MachineCost',
   expenseCategories: 'ExpenseCategory', expenses: 'Expense', otherFunds: 'OtherFund', settings: 'Setting',
   accounts: 'Account',
+  combinedInvoices: 'CombinedInvoice',
 }
 
-type FieldType = 'str' | 'num' | 'int' | 'strNull'
+type FieldType = 'str' | 'num' | 'int' | 'strNull' | 'numNull'
 
 export const FIELDS: Record<SyncTbl, Record<string, FieldType>> = {
   breadTypes: { name: 'str', code: 'str', active: 'int' },
@@ -29,7 +31,7 @@ export const FIELDS: Record<SyncTbl, Record<string, FieldType>> = {
   goods: { name: 'str', piecesPerBox: 'num', minStock: 'num', active: 'int' },
   consumptions: { date: 'str', materialId: 'str', quantity: 'num', note: 'strNull', createdBy: 'strNull' },
   customers: { name: 'str', phone: 'strNull', address: 'strNull', cooperationType: 'strNull' },
-  sales: { date: 'str', customerId: 'str', items: 'str', totalAmount: 'num', settledStatus: 'str', paidAmount: 'num', paymentMethod: 'str', checkDueDate: 'strNull', checkNumber: 'strNull', checkBank: 'strNull', paymentDate: 'strNull', note: 'strNull', createdBy: 'strNull', accountId: 'strNull' },
+  sales: { date: 'str', customerId: 'str', items: 'str', totalAmount: 'num', settledStatus: 'str', paidAmount: 'num', paymentMethod: 'str', checkDueDate: 'strNull', checkNumber: 'strNull', checkBank: 'strNull', paymentDate: 'strNull', note: 'strNull', createdBy: 'strNull', accountId: 'strNull', discountType: 'str', discountValue: 'num', invoiceNumber: 'numNull' },
   suppliers: { name: 'str', phone: 'strNull', address: 'strNull' },
   purchases: { date: 'str', materialId: 'str', quantity: 'num', cost: 'num', supplierId: 'strNull', settledStatus: 'str', paidAmount: 'num', itemKind: 'str', boxesCount: 'num', note: 'strNull', createdBy: 'strNull', accountId: 'strNull' },
   machines: { name: 'str', kind: 'str', startDate: 'str', status: 'str', note: 'strNull' },
@@ -37,8 +39,9 @@ export const FIELDS: Record<SyncTbl, Record<string, FieldType>> = {
   expenseCategories: { name: 'str', includeInProfit: 'int' },
   expenses: { date: 'str', categoryId: 'str', amount: 'num', description: 'strNull', createdBy: 'strNull', accountId: 'strNull' },
   otherFunds: { date: 'str', type: 'str', amount: 'num', description: 'str', accountId: 'strNull' },
-  settings: { businessName: 'str', monthStartDay: 'int', badDebtDays: 'int', checkAlertDays: 'int' },
+  settings: { businessName: 'str', monthStartDay: 'int', badDebtDays: 'int', checkAlertDays: 'int', bankAccountName: 'str', bankCardNumber: 'str', bankSheba: 'str', bankName: 'str', shopPhones: 'str' },
   accounts: { name: 'str', kind: 'str', initialBalance: 'num', note: 'strNull', active: 'int' },
+  combinedInvoices: { invoiceNumber: 'num', customerId: 'str', saleIds: 'str', date: 'str', totalAmount: 'num', paidAmount: 'num', remaining: 'num', note: 'strNull', createdBy: 'strNull' },
 }
 
 const s = (v: unknown, dflt = ''): string => (typeof v === 'string' ? v : v == null ? dflt : String(v))
@@ -94,6 +97,43 @@ export async function ensureSchema(db: Client): Promise<void> {
     if (!colNames.has('accountId')) {
       await db.execute(`ALTER TABLE "${phys}" ADD COLUMN "accountId" TEXT`)
     }
+  }
+  // ۴) مهاجرت v2.8 — فاکتور: ستون‌های تخفیف/شماره سریال روی فروش + تنظیمات بانکی + جدول فاکتور ترکیبی
+  //    + شمارندهٔ سراسری شماره فاکتور (فقط سرور — سینک نمی‌شود)
+  const s2 = await db.execute({ sql: `PRAGMA table_info("Sale")`, args: [] })
+  const saleCols = new Set(s2.rows.map((r) => String(r['name'])))
+  if (!saleCols.has('discountType')) await db.execute(`ALTER TABLE "Sale" ADD COLUMN "discountType" TEXT NOT NULL DEFAULT 'NONE'`)
+  if (!saleCols.has('discountValue')) await db.execute(`ALTER TABLE "Sale" ADD COLUMN "discountValue" REAL NOT NULL DEFAULT 0`)
+  if (!saleCols.has('invoiceNumber')) await db.execute(`ALTER TABLE "Sale" ADD COLUMN "invoiceNumber" INTEGER`)
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS "CombinedInvoice" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "invoiceNumber" INTEGER NOT NULL DEFAULT 0,
+      "customerId" TEXT NOT NULL DEFAULT '',
+      "saleIds" TEXT NOT NULL DEFAULT '[]',
+      "date" TEXT NOT NULL DEFAULT '',
+      "totalAmount" REAL NOT NULL DEFAULT 0,
+      "paidAmount" REAL NOT NULL DEFAULT 0,
+      "remaining" REAL NOT NULL DEFAULT 0,
+      "note" TEXT,
+      "createdBy" TEXT,
+      "updatedAt" REAL NOT NULL DEFAULT 0,
+      "deleted" INTEGER NOT NULL DEFAULT 0
+    )
+  `)
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS "InvoiceCounter" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "lastNumber" INTEGER NOT NULL DEFAULT 1000,
+      "updatedAt" REAL NOT NULL DEFAULT 0
+    )
+  `)
+  // شروع شمارنده از ۱۰۰۰ (اولین فاکتور = ۱۰۰۱) — مقدار قابل تغییر قبل از اولین صدور
+  await db.execute({ sql: `INSERT OR IGNORE INTO "InvoiceCounter" ("id","lastNumber","updatedAt") VALUES ('main', 1000, ?)`, args: [Date.now()] })
+  const st3 = await db.execute({ sql: `PRAGMA table_info("Setting")`, args: [] })
+  const settingCols = new Set(st3.rows.map((r) => String(r['name'])))
+  for (const [col, dflt] of [['bankAccountName', "'علی سبيلی'"], ['bankCardNumber', "'6063-7312-5558-2299'"], ['bankSheba', "'IR730600000000300326236111'"], ['bankName', "'بانک ایران زمین'"], ['shopPhones', "'۰۹۱۰۴۳۶۱۲۳۳ ,۰۹۳۹۱۵۳۱۶۶۴'"]] as const) {
+    if (!settingCols.has(col)) await db.execute(`ALTER TABLE "Setting" ADD COLUMN "${col}" TEXT NOT NULL DEFAULT ${dflt}`)
   }
   // ۳) seed مشعلی برای دیتابیس‌های موجود (دیتابیس خالی در ensureSeed گرفته می‌شود) — واحد از v2.5 جعبه است
   const g = await db.execute({ sql: `SELECT id FROM "Good" WHERE id = ?`, args: ['seed-gd-01'] })
@@ -199,6 +239,7 @@ export function sanitizeRow(tbl: SyncTbl, row: Record<string, unknown>): Record<
     if (t === 'str') out[k] = DATE_FIELDS.has(k) ? toEnDigits(s(v)) : s(v)
     else if (t === 'num') out[k] = n(v)
     else if (t === 'int') out[k] = i(v)
+    else if (t === 'numNull') out[k] = v == null || v === '' ? null : n(v)
     else out[k] = DATE_FIELDS.has(k) ? (sn(v) === null ? null : toEnDigits(sn(v)!)) : sn(v)
   }
   return out

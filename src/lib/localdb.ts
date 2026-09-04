@@ -10,12 +10,21 @@ import { planGoodsToBoxes } from './goods-units'
 export { TABLES }
 export type { SyncTbl }
 
+export const DEFAULT_BANK = {
+  bankAccountName: 'علی سبيلی',
+  bankCardNumber: '6063-7312-5558-2299',
+  bankSheba: 'IR730600000000300326236111',
+  bankName: 'بانک ایران زمین',
+  shopPhones: '۰۹۱۰۴۳۶۱۲۳۳ ,۰۹۳۹۱۵۳۱۶۶۴',
+}
+
 export const DEFAULT_SETTING: Setting = {
   id: 'main',
   businessName: 'Waffly',
   monthStartDay: 1,
   badDebtDays: 30,
   checkAlertDays: 7,
+  ...DEFAULT_BANK,
   updatedAt: 0,
   deleted: 0,
 }
@@ -40,6 +49,7 @@ class WafflyDB extends Dexie {
   otherFunds!: Table<BaseRow, string>
   settings!: Table<BaseRow, string>
   accounts!: Table<BaseRow, string>
+  combinedInvoices!: Table<BaseRow, string>
   outbox!: Table<OutboxItem, number>
   meta!: Table<{ key: string; value: unknown }, string>
 
@@ -74,6 +84,10 @@ class WafflyDB extends Dexie {
     // v4: حساب‌های بانکی/صندوق نقدی (v2.7) — فیلدهای accountId روی رکوردهای دیگر غیرایندکسی‌اند
     this.version(4).stores({
       accounts: 'id, updatedAt, name',
+    })
+    // v5: فاکتورهای ترکیبی (v2.8) — فیلدهای discount/invoiceNumber فروش غیرایندکسی‌اند
+    this.version(5).stores({
+      combinedInvoices: 'id, updatedAt, date, customerId',
     })
   }
 }

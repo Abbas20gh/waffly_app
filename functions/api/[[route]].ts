@@ -18,6 +18,9 @@ const CORS: Record<string, string> = {
 interface Env {
   TURSO_URL: string
   TURSO_TOKEN?: string
+  /** v2.8 — فاکتور: ارسال به تلگرام (هرگز در کد هاردکد نمی‌شود) */
+  TELEGRAM_BOT_TOKEN?: string
+  TELEGRAM_CHAT_ID?: string
 }
 
 interface Ctx {
@@ -110,6 +113,70 @@ export async function onRequest(ctx: Ctx): Promise<Response> {
         return json({ error: 'serverless', message: 'در حالت هاست ابری، بکاپ‌گیری به‌صورت خودکار توسط پلتفرم انجام می‌شود.' }, 501)
       }
       return json({ error: 'not found' }, 404)
+    }
+
+    // ===== v2.8 فاکتور =====
+
+    // شمارهٔ سریال بعدی فاکتور — atomic روی سرور (هر دو GET/POST)
+    if (path === 'invoice/next-number' && (ctx.request.method === 'POST' || ctx.request.method === 'GET')) {
+      await ensureSchema(db)
+      const res = await db.execute({
+        sql: `UPDATE "InvoiceCounter" SET "lastNumber" = "lastNumber" + 1, "updatedAt" = ? WHERE "id" = 'main' RETURNING "lastNumber"`,
+        args: [Date.now()],
+      })
+      const num = res.rows.length > 0 ? Number(res.rows[0]['lastNumber']) : 0
+      if (!num) {
+        // ردیف نبود (نباید رخ دهد — ensureSchema می‌سازد) — بساز و از ۱۰۰۱ شروع کن
+        const r2 = await db.execute({
+          sql: `INSERT INTO "InvoiceCounter" ("id","lastNumber","updatedAt") VALUES ('main', 1001, ?) ON CONFLICT("id") DO UPDATE SET "lastNumber" = "InvoiceCounter"."lastNumber" + 1 RETURNING "lastNumber"`,
+          args: [Date.now()],
+        })
+        return json({ number: Number(r2.rows[0]?.['lastNumber'] || 1001) })
+      }
+      return json({ number: num })
+    }
+
+    // ارسال فاکتور به تلگرام — متن با sendMessage، فایل با sendDocument/sendPhoto
+    if (path === 'invoice/send-telegram' && ctx.request.method === 'POST') {
+      const token = ctx.env.TELEGRAM_BOT_TOKEN
+      const chatId = ctx.env.TELEGRAM_CHAT_ID
+      if (!token || !chatId) {
+        return json({ ok: false, error: 'TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID روی سرور تنظیم نشده است' }, 500)
+      }
+      const body = await ctx.request.json().catch(() => null) as {
+        format?: string; text?: string; base64?: string; filename?: string; caption?: string
+      } | null
+      if (!body) return json({ ok: false, error: 'bad request' }, 400)
+      const api = (method: string) => `https://api.telegram.org/bot${token}/${method}`
+      try {
+        let tg: Response
+        if (body.format === 'text') {
+          if (!body.text?.trim()) return json({ ok: false, error: 'متن فاکتور خالی است' }, 400)
+          tg = await fetch(api('sendMessage'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: chatId, text: body.text }),
+          })
+        } else {
+          if (!body.base64) return json({ ok: false, error: 'فایل فاکتور دریافت نشد' }, 400)
+          const bin = atob(body.base64)
+          const bytes = new Uint8Array(bin.length)
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+          const isImage = body.format === 'image'
+          const mime = isImage ? 'image/png' : 'application/pdf'
+          const filename = body.filename || (isImage ? 'invoice.png' : 'invoice.pdf')
+          const fd = new FormData()
+          fd.append('chat_id', chatId)
+          if (body.caption) fd.append('caption', body.caption)
+          fd.append(isImage ? 'photo' : 'document', new Blob([bytes], { type: mime }), filename)
+          tg = await fetch(api(isImage ? 'sendPhoto' : 'sendDocument'), { method: 'POST', body: fd })
+        }
+        const out = await tg.json().catch(() => ({ ok: false, description: 'bad telegram response' })) as { ok?: boolean; description?: string }
+        if (!tg.ok || !out.ok) return json({ ok: false, error: out.description || `telegram ${tg.status}` }, 502)
+        return json({ ok: true })
+      } catch (e) {
+        return json({ ok: false, error: e instanceof Error ? e.message : 'telegram send failed' }, 502)
+      }
     }
 
     return json({ error: 'not found' }, 404)

@@ -5,10 +5,10 @@ import { useEffect, useState } from 'react'
 import { toast } from '@/hooks/use-toast'
 import {
   Settings as SettingsIcon, Save, DatabaseBackup, Download, Upload,
-  CalendarDays, ShieldAlert, RefreshCw, HardDriveDownload, Smartphone, Plus, Trash2, Pencil,
+  CalendarDays, ShieldAlert, RefreshCw, HardDriveDownload, Smartphone, Plus, Trash2, Pencil, CreditCard,
 } from 'lucide-react'
 import {
-  useSetting, useTable, putRecord, removeRecord, exportAllToJson, importAllFromJson, uid,
+  useSetting, useTable, putRecord, removeRecord, exportAllToJson, importAllFromJson, uid, DEFAULT_BANK,
 } from '@/lib/localdb'
 import { PageHeader, FormRow, useConfirm, confirmRemove } from './bits'
 import { PwaGuideContent, getPlatform, isStandalone } from './pwa-install'
@@ -41,6 +41,12 @@ export function SettingsView() {
   const [pwaState, setPwaState] = useState<{ platform: string; standalone: boolean }>({ platform: '', standalone: false })
   const [newCat, setNewCat] = useState('')
   const [editingCat, setEditingCat] = useState<ExpenseCategory | null>(null)
+  // v2.8 — اطلاعات بانکی/تماس روی فاکتور
+  const [bankAccountName, setBankAccountName] = useState('')
+  const [bankCardNumber, setBankCardNumber] = useState('')
+  const [bankSheba, setBankSheba] = useState('')
+  const [bankName, setBankName] = useState('')
+  const [shopPhones, setShopPhones] = useState('')
 
   useEffect(() => {
     const id = requestAnimationFrame(() => {
@@ -56,6 +62,11 @@ export function SettingsView() {
     setAccountingDay(String(setting.monthStartDay))
     setBadDebtDays(String(setting.badDebtDays))
     setCheckAlertDays(String(setting.checkAlertDays))
+    setBankAccountName(setting.bankAccountName || DEFAULT_BANK.bankAccountName)
+    setBankCardNumber(setting.bankCardNumber || DEFAULT_BANK.bankCardNumber)
+    setBankSheba(setting.bankSheba || DEFAULT_BANK.bankSheba)
+    setBankName(setting.bankName || DEFAULT_BANK.bankName)
+    setShopPhones(setting.shopPhones || DEFAULT_BANK.shopPhones)
     setInitialized(true)
   }
 
@@ -80,6 +91,11 @@ export function SettingsView() {
       monthStartDay: Math.min(Math.max(parseInt(accountingDay || '1', 10) || 1, 1), 29),
       badDebtDays: Math.max(parseInt(badDebtDays || '30', 10) || 30, 1),
       checkAlertDays: Math.max(parseInt(checkAlertDays || '7', 10) || 7, 1),
+      bankAccountName: bankAccountName.trim() || DEFAULT_BANK.bankAccountName,
+      bankCardNumber: bankCardNumber.trim() || DEFAULT_BANK.bankCardNumber,
+      bankSheba: bankSheba.trim() || DEFAULT_BANK.bankSheba,
+      bankName: bankName.trim() || DEFAULT_BANK.bankName,
+      shopPhones: shopPhones.trim() || DEFAULT_BANK.shopPhones,
     })
     toast({ title: 'تنظیمات ذخیره شد', description: 'روی همه دستگاه‌ها سینک می‌شود.' })
   }
@@ -128,7 +144,7 @@ export function SettingsView() {
   return (
     <div className="space-y-5">
       {/* APP_VERSION — با هر آپدیت APK/وب به‌روز شود */}
-      <PageHeader title="تنظیمات" subtitle="دوره حسابداری، هشدارها، سینک، پشتیبان‌گیری و نصب اپ — نسخه ۲.۷.۱" icon={<SettingsIcon className="h-5 w-5" />} />
+      <PageHeader title="تنظیمات" subtitle="دوره حسابداری، هشدارها، سینک، پشتیبان‌گیری و نصب اپ — نسخه ۲.۸.۰" icon={<SettingsIcon className="h-5 w-5" />} />
 
       <div className="grid lg:grid-cols-2 gap-4 items-start">
         <Card className="waffly-card">
@@ -154,6 +170,30 @@ export function SettingsView() {
               مشتریانی که بیش از {faDigits(badDebtDays)} روز از فروش‌شان بگذرد و تسویه نکرده باشند «بدحساب» علامت می‌خورند.
             </p>
             <Button onClick={save} className="h-11 min-w-32"><Save className="ml-2 h-4 w-4" /> ذخیره تنظیمات</Button>
+
+            {/* v2.8 — اطلاعات فاکتور (بانک + تماس) */}
+            <div className="border-t pt-4 space-y-3">
+              <p className="text-sm font-medium flex items-center gap-1.5"><CreditCard className="h-4 w-4" /> اطلاعات فاکتور (واریز بانکی و تماس)</p>
+              <p className="text-[11px] text-muted-foreground">این اطلاعات پایین همهٔ فاکتورها و سربرگ آن‌ها چاپ می‌شود.</p>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <FormRow label="به نام (صاحب حساب)">
+                  <Input value={bankAccountName} onChange={e => setBankAccountName(e.target.value)} className="h-10" />
+                </FormRow>
+                <FormRow label="نام بانک">
+                  <Input value={bankName} onChange={e => setBankName(e.target.value)} className="h-10" />
+                </FormRow>
+                <FormRow label="شماره کارت">
+                  <Input value={bankCardNumber} onChange={e => setBankCardNumber(e.target.value)} className="h-10 waffly-num" dir="ltr" />
+                </FormRow>
+                <FormRow label="شماره شبا">
+                  <Input value={bankSheba} onChange={e => setBankSheba(e.target.value)} className="h-10 waffly-num" dir="ltr" />
+                </FormRow>
+                <FormRow label="شماره‌های تماس فاکتور" hint="با ویرگول جدا کنید">
+                  <Input value={shopPhones} onChange={e => setShopPhones(e.target.value)} className="h-10 waffly-num" />
+                </FormRow>
+              </div>
+              <Button onClick={save} className="h-11 min-w-32"><Save className="ml-2 h-4 w-4" /> ذخیره</Button>
+            </div>
 
             {/* سرفصل هزینه‌ها */}
             <div className="border-t pt-4 space-y-2">

@@ -110,6 +110,9 @@ model Sale {
   note           String?
   createdBy      String?
   accountId      String? // v2.7 — حساب واریز مبلغ پرداختی
+  discountType   String  @default("NONE") // v2.8 — NONE | AMOUNT | PERCENT
+  discountValue  Float   @default(0) // v2.8 — مبلغ (تومان) یا درصد
+  invoiceNumber  Int? // v2.8 — شماره سریال فاکتور (فقط موقع صدور از سرور)
   updatedAt      Float
   deleted        Int     @default(0)
   @@index([date])
@@ -214,14 +217,44 @@ model Account {
   deleted        Int    @default(0)
 }
 
+// فاکتور ترکیبی — صورت‌حساب چند فروش یک مشتری (v2.8)
+model CombinedInvoice {
+  id            String @id
+  invoiceNumber Int // شماره سریال مستقل از همان شمارندهٔ سراسری
+  customerId    String
+  saleIds       String @default("[]") // JSON آرایه شناسه فروش‌ها
+  date          String
+  totalAmount   Float  @default(0)
+  paidAmount    Float  @default(0)
+  remaining     Float  @default(0)
+  note          String?
+  createdBy     String?
+  updatedAt     Float
+  deleted       Int    @default(0)
+  @@index([date])
+  @@index([customerId])
+}
+
+// شمارندهٔ سراسری شماره فاکتور (v2.8) — فقط سرور؛ سینک نمی‌شود
+model InvoiceCounter {
+  id         String @id
+  lastNumber Int    @default(1000)
+  updatedAt  Float  @default(0)
+}
+
 model Setting {
-  id             String @id
-  businessName   String @default("Waffly")
-  monthStartDay  Int    @default(1) // روز شروع دوره حسابداری
-  badDebtDays    Int    @default(30) // آستانه بدحسابی
-  checkAlertDays Int    @default(7) // هشدار سررسید چک
-  updatedAt      Float
-  deleted        Int    @default(0)
+  id              String @id
+  businessName    String @default("Waffly")
+  monthStartDay   Int    @default(1) // روز شروع دوره حسابداری
+  badDebtDays     Int    @default(30) // آستانه بدحسابی
+  checkAlertDays  Int    @default(7) // هشدار سررسید چک
+  bankAccountName String @default("علی سبيلی") // v2.8 — فاکتور
+  bankCardNumber  String @default("6063-7312-5558-2299") // v2.8
+  bankSheba       String @default("IR730600000000300326236111") // v2.8
+  bankName        String @default("بانک ایران زمین") // v2.8
+  shopPhones      String @default("۰۹۱۰۴۳۶۱۲۳۳ ,۰۹۳۹۱۵۳۱۶۶۴") // v2.8 — سربرگ فاکتور
+  updatedAt       Float
+  deleted         Int    @default(0)
 }
 
 model SyncLog {
