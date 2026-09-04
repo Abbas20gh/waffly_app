@@ -15,7 +15,7 @@
 | آدرس production | https://waffly.pages.dev |
 | دیتابیس مرکزی | Turso: `libsql://waffly-db-abbas20gh.aws-eu-west-1.turso.io` |
 | ریپو گیت‌هاب | https://github.com/Abbas20gh/waffly_app (برنچ `main`) |
-| نسخه فعلی | **v2.7.0** (versionCode 12) — APK امضاشده: `download/Waffly-v2.7.0.apk` (نسخه‌های قبلی هم نگه‌داری شده‌اند) |
+| نسخه فعلی | **v2.7.1** (versionCode 13) — APK امضاشده: `download/Waffly-v2.7.1.apk` (نسخه‌های قبلی هم نگه‌داری شده‌اند) |
 | وضعیت | **زنده و در حال استفاده واقعی** — داده واقعی روی Turso و گوشی کاربر است؛ از دست رفتن داده فاجعه است |
 
 ## ۲) استک فناوری (با نسخه‌های دقیق)

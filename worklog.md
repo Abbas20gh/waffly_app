@@ -445,3 +445,26 @@ Stage Summary:
 - v2.7.0 روی waffly.pages.dev زنده است؛ APK امضاشده با همان گواهی در download/Waffly-v2.7.0.apk (نصب روی نسخه قبلی بدون حذف)
 - هیچ رکوردی دیگر بدون تأیید حذف نمی‌شود؛ موجودی حساب‌ها همیشه از خود رکوردها مشتق می‌شود (سازگار با ادیت/حذف)
 - سینک ابری حالا برای دسته‌های بزرگ (فروش چندجعبه‌ای، بوت‌استرپ، آنباز شدن طولانی) پایدار است
+
+---
+Task ID: 21
+Agent: Main Agent (Super Z)
+Task: v2.7.1 — رفع باگ «کد جعبه در بخش فروش انتخاب نمی‌شود»
+
+Work Log:
+- گزارش کاربر: «وقتی می‌خوام کد جعبه رو در قسمت فروش انتخاب کنم نمی‌تونم انتخابش کنم» — روی گوشی واقعی (APK v2.7.0) انتخاب‌گر کد جعبه گزینه نمی‌پذیرفت
+- ریشه‌یابی در سورس node_modules: دیالوگ مودال Radix با disableOutsidePointerEvents روی body استایل inline pointer-events:none می‌گذارد (@radix-ui/react-dismissable-layer line 73) و react-remove-scroll هم wheel/touchmove بیرون از shards را preventDefault می‌کند — منوی InlinePicker که از v2.7 با createPortal در body رندر می‌شود این ارث را می‌گرفت: کلیک واقعی از روی منو رد می‌شد → یا هیچ انتخاب نمی‌شد یا لمس به اورلی می‌رسید و کل دیالوگ بسته می‌شد
+- علت عبور E2E قبلی: eval(el.click()) از روی hit-testing رد می‌شود (کلیک مستقیم روی المنت بدون pointer-events) — باگ فقط با ورودی واقعی دیدنی بود
+- بازتولید با agent-browser و mouse move/down/up واقعی: bodyInlinePE:"none"، menuPE:"none"، کلیک روی گزینه 06132 → منو بسته شد بدون انتخاب (dialogStillOpen:true, boxPickerLabel هنوز «بدون کد جعبه»)
+- رفع دو فایله: ① inline-picker.tsx: pointerEvents:'auto' صریح روی منو + data-waffly-menu + unlockScroll (stopPropagation در capture پنجره برای touchmove/wheel داخل منو → دور زدن فیلتر react-remove-scroll) + Escape فقط منو را ببندد (stopPropagation در capture) ② ui/dialog.tsx: گارد onPointerDownOutside/onFocusOutside — preventDefault اگر target داخل [data-waffly-menu] باشد (لمس منو دیالوگ را dismiss نمی‌کند؛ dismiss اورلی دست‌نخورده ماند)
+- E2E پس از رفع همه با ورودی واقعی: menuPE:"auto"؛ کلیک 06132 → انتخاب شد + نوع «نان بزرگ» و تعداد ۵۰ خودکار پر شد + دیالوگ باز ماند؛ مشتری «فروشگاه امیر» هم با کلیک واقعی انتخاب شد؛ قیمت ۱۰۰۰ fill → ثبت فروش → رکورد با کد 06132 در لیست ذخیره شد؛ Escape با منوی باز = فقط منو بسته شد (دیالوگ ماند)؛ کلیک اورلی بالای دیالوگ = دیالوگ بسته شد؛ دیالوگ تأیید حذف («آیا از حذف...») با کلیک واقعی روی «حذف» = حذف تومب‌استون سالم
+- tsc/eslint: در دو فایل تغییر صفر خطا (خطاهای قدیمی dashboard-view/capacitor.config/scripts مربوط به این تغییر نیست)
+- نسخه: versionCode 13 / versionName 2.7.1 + settings «نسخه ۲.۷.۱» + سایدبار v2.7.1 + Waffly-AI-Prompt.md (بلاک v2.7.1 + هشدار «E2E فقط با کلیک واقعی»)
+- وب: build-pages بدون API_BASE (کش mtmnwgiv) → wrangler deploy → مارکر data-waffly-menu در چانک‌های زنده 4f584a87/1fecbe63 (⚡ دقت: مسیر زنده _next/static/chunks است؛ مسیر static/chunks در HTML ریشه گمراه‌کننده بود)
+- APK v2.7.1: build-pages با API_BASE (کش apk-mtmo28f0) → cap sync → gradle assembleRelease → aapt versionCode=13 versionName=2.7.1 + گواهی یکسان a31b9080…cda = download/Waffly-v2.7.1.apk (8.3MB) — نصب روی v2.7.0 بدون حذف
+- commit 7bfd95e push شد به origin/main
+
+Stage Summary:
+- از این نسخه انتخاب هر چیزی در دیالوگ‌ها (کد جعبه، مشتری، واریز به حساب، کالا، ...) با لمس واقعی روی گوشی کار می‌کند — رفع در سطح ui/dialog.tsx سراسری است و همهٔ دیالوگ‌ها را پوشش می‌دهد
+- اسکرول لیست بلند منوها (۸۰ جعبه) با لمس هم برگشت
+- درس ماندگار: تست دیالوگ/Portal فقط با ورودی واقعی؛ eval click باگ pointer-events را پنهان می‌کند
