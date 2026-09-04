@@ -12,6 +12,8 @@ export async function OPTIONS() {
 export async function POST(req: NextRequest) {
   const token = process.env.TELEGRAM_BOT_TOKEN
   const chatId = process.env.TELEGRAM_CHAT_ID
+  // v2.8.1 — تاپیک مقصد در گروه‌های فرومی (مثل تاپیک «فاکتور») — اختیاری
+  const threadId = process.env.TELEGRAM_THREAD_ID ? Number(process.env.TELEGRAM_THREAD_ID) : undefined
   if (!token || !chatId) {
     return jsonWithCors({ ok: false, error: 'TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID روی سرور تنظیم نشده است' }, { status: 500 })
   }
@@ -28,7 +30,7 @@ export async function POST(req: NextRequest) {
       tg = await fetch(api('sendMessage'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, text: body.text }),
+        body: JSON.stringify({ chat_id: chatId, text: body.text, ...(threadId ? { message_thread_id: threadId } : {}) }),
       })
     } else {
       if (!body.base64) return jsonWithCors({ ok: false, error: 'فایل فاکتور دریافت نشد' }, { status: 400 })
@@ -38,6 +40,7 @@ export async function POST(req: NextRequest) {
       const filename = body.filename || (isImage ? 'invoice.png' : 'invoice.pdf')
       const fd = new FormData()
       fd.append('chat_id', chatId)
+      if (threadId) fd.append('message_thread_id', String(threadId))
       if (body.caption) fd.append('caption', body.caption)
       fd.append(isImage ? 'photo' : 'document', new Blob([new Uint8Array(buf)], { type: mime }), filename)
       tg = await fetch(api(isImage ? 'sendPhoto' : 'sendDocument'), { method: 'POST', body: fd })

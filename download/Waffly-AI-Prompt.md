@@ -121,7 +121,7 @@
 ## ۶) API سینک — دو پیاده‌سازی موازی با پاریتی اجباری
 
 ⚠️ **دو بک‌اند وجود دارد و باید همیشه یکسان باشند:**
-1. **production (Cloudflare):** `functions/api/[[route]].ts` + `functions/api/_sync.ts` — SQL خام روی Turso با `@libsql/client`، secrets پروژه Pages: `TURSO_URL` + `TURSO_TOKEN`
+1. **production (Cloudflare):** `functions/api/[[route]].ts` + `functions/api/_sync.ts` — SQL خام روی Turso با `@libsql/client`، secrets پروژه Pages: `TURSO_URL` + `TURSO_TOKEN` + `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` + `TELEGRAM_THREAD_ID`
 2. **Node (dev/standalone):** `src/app/api/sync/{push,pull,full}/route.ts` + `src/lib/server/sync-tables.ts` — با Prisma
 
 ### Endpointها (هر دو بک‌اند)
@@ -211,7 +211,8 @@ CF_EXPORT=1 node scripts/build-pages.mjs
 # دیپلوی (نیازمند env: CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID)
 npx wrangler pages deploy out --branch main
 ```
-- secrets روی پروژه Pages: `TURSO_URL` + `TURSO_TOKEN` (با `wrangler pages secret put`)
+- secrets روی پروژه Pages: `TURSO_URL` + `TURSO_TOKEN` + `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` + `TELEGRAM_THREAD_ID` (با `wrangler pages secret put`)
+- **تلگرام (v2.8.1):** بات «Waffly Invoice Bot» (@Waffly_Invoice_Bot) عضو گروه فرومی «نان بستنی آرتا نان» است؛ فاکتورها به تاپیک «فاکتور» (thread 96) ارسال می‌شوند — `POST /api/invoice/send-telegram`: text→sendMessage، PNG→sendPhoto، PDF→sendDocument؛ پاریتی کامل در هر دو بک‌اند؛ تست زنده با `curl -X POST https://waffly.pages.dev/api/invoice/send-telegram -H "Content-Type: application/json" -d '{"format":"text","text":"test"}'` → `{"ok":true}`
 - `next.config.ts`: با `CF_EXPORT=1` → `output:export` + images unoptimized؛ وگرنه `standalone`
 - تست API سینک لوکال: `node scripts/test-cf-api.mjs` (۱۹ تست)
 

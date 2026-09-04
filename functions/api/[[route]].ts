@@ -21,6 +21,8 @@ interface Env {
   /** v2.8 — فاکتور: ارسال به تلگرام (هرگز در کد هاردکد نمی‌شود) */
   TELEGRAM_BOT_TOKEN?: string
   TELEGRAM_CHAT_ID?: string
+  /** v2.8.1 — تاپیک مقصد در گروه‌های فرومی (مثل تاپیک «فاکتور») — اختیاری */
+  TELEGRAM_THREAD_ID?: string
 }
 
 interface Ctx {
@@ -140,6 +142,7 @@ export async function onRequest(ctx: Ctx): Promise<Response> {
     if (path === 'invoice/send-telegram' && ctx.request.method === 'POST') {
       const token = ctx.env.TELEGRAM_BOT_TOKEN
       const chatId = ctx.env.TELEGRAM_CHAT_ID
+      const threadId = ctx.env.TELEGRAM_THREAD_ID ? Number(ctx.env.TELEGRAM_THREAD_ID) : undefined
       if (!token || !chatId) {
         return json({ ok: false, error: 'TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID روی سرور تنظیم نشده است' }, 500)
       }
@@ -155,7 +158,7 @@ export async function onRequest(ctx: Ctx): Promise<Response> {
           tg = await fetch(api('sendMessage'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: chatId, text: body.text }),
+            body: JSON.stringify({ chat_id: chatId, text: body.text, ...(threadId ? { message_thread_id: threadId } : {}) }),
           })
         } else {
           if (!body.base64) return json({ ok: false, error: 'فایل فاکتور دریافت نشد' }, 400)
@@ -167,6 +170,7 @@ export async function onRequest(ctx: Ctx): Promise<Response> {
           const filename = body.filename || (isImage ? 'invoice.png' : 'invoice.pdf')
           const fd = new FormData()
           fd.append('chat_id', chatId)
+          if (threadId) fd.append('message_thread_id', String(threadId))
           if (body.caption) fd.append('caption', body.caption)
           fd.append(isImage ? 'photo' : 'document', new Blob([bytes], { type: mime }), filename)
           tg = await fetch(api(isImage ? 'sendPhoto' : 'sendDocument'), { method: 'POST', body: fd })
