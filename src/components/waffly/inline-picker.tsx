@@ -6,6 +6,13 @@
 //   داخل یک والد transform دار، نسبت به همان والد موقعیت‌دهی می‌شود (containing block) نه viewport
 //   → منو جابه‌جا/بریده می‌شد. راه‌حل: رندر منو با Portal در document.body (بدون transform)
 //   + جای‌گذاری مجدد هنگام scroll (منو دنبال دکمه می‌رود و دیگر با هر اسکرول بسته نمی‌شود).
+// v2.7.1 — رفع باگ «نمیتوان کد جعبه را در فروش انتخاب کرد»:
+//   دیالوگ مودال Radix روی body استایل inline «pointer-events: none» می‌گذارد (DismissableLayer
+//   با disableOutsidePointerEvents) و منوی Portal‌شده در body این ارث را می‌گیرد → کلیک واقعی
+//   از روی منو رد می‌شد و به عنصر زیرین (یا اورلی) می‌رسید → انتخاب انجام نمی‌شد/دیالوگ بسته می‌شد.
+//   راه‌حل: «pointerEvents: 'auto'» صریح روی منو + data-waffly-menu برای شناخت‌شدن در گارد
+//   onPointerDownOutside/onFocusOutside دیالوگ (ui/dialog.tsx) + ردکردن touchmove/wheel منو
+//   از فیلتر react-remove-scroll (قفل اسکرول) تا لیست بلند با لمس اسکرول شود.
 import { useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, ChevronDown } from 'lucide-react'
@@ -58,16 +65,28 @@ export function InlinePicker({
     }
     const onScroll = () => place()
     const onResize = () => setOpen(false)
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    // Escape فقط منو را ببندد؛ stopPropagation در فاز capture مانع dismiss شدن کل دیالوگ توسط Radix می‌شود
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setOpen(false); e.stopPropagation() }
+    }
+    // منو بیرون از RemoveScroll دیالوگ است؛ هندلرهای آن روی document (فاز bubble) هستند —
+    // همین‌جا در فاز capture پنجره رویداد را قطع می‌کنیم تا preventDefault نشود و اسکرول لمسی/چرخ ماوس داخل منو کار کند
+    const unlockScroll = (e: Event) => {
+      if (menuRef.current?.contains(e.target as Node)) e.stopPropagation()
+    }
     document.addEventListener('pointerdown', close, true)
     window.addEventListener('scroll', onScroll, true)
+    window.addEventListener('touchmove', unlockScroll, { capture: true, passive: true })
+    window.addEventListener('wheel', unlockScroll, { capture: true })
     window.addEventListener('resize', onResize)
-    window.addEventListener('keydown', onKey)
+    window.addEventListener('keydown', onKey, true)
     return () => {
       document.removeEventListener('pointerdown', close, true)
       window.removeEventListener('scroll', onScroll, true)
+      window.removeEventListener('touchmove', unlockScroll, { capture: true })
+      window.removeEventListener('wheel', unlockScroll, { capture: true })
       window.removeEventListener('resize', onResize)
-      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('keydown', onKey, true)
     }
   }, [open])
 
@@ -99,6 +118,7 @@ export function InlinePicker({
       {open && rect && createPortal(
         <div
           ref={menuRef}
+          data-waffly-menu=""
           style={{
             position: 'fixed',
             top: rect.top,
@@ -106,6 +126,8 @@ export function InlinePicker({
             left: rect.left,
             width: Math.max(rect.width, 180),
             zIndex: 9999,
+            // قفل اشاره‌گر دیالوگ مودال (body: pointer-events:none) را خنثی می‌کند — بدون این، کلیک واقعی به منو نمی‌رسد
+            pointerEvents: 'auto',
           }}
           className="max-h-[17rem] overflow-y-auto overscroll-contain rounded-md border bg-popover p-1 shadow-lg"
           dir="rtl"

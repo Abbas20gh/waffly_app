@@ -63,6 +63,16 @@ function DialogContent({
           "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg",
           className
         )}
+        // v2.7.1 — منوی InlinePicker با Portal در body رندر می‌شود (بیرون از این Content)؛
+        // لمس/کلیک داخل آن نباید دیالوگ را dismiss کند — با data-waffly-menu مشخص می‌شود
+        onPointerDownOutside={(e) => {
+          const t = e.target as HTMLElement | null
+          if (t?.closest?.("[data-waffly-menu]")) e.preventDefault()
+        }}
+        onFocusOutside={(e) => {
+          const t = e.target as HTMLElement | null
+          if (t?.closest?.("[data-waffly-menu]")) e.preventDefault()
+        }}
         {...props}
       >
         {children}

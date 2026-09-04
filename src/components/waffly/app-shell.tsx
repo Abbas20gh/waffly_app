@@ -139,7 +139,7 @@ export function AppShell({ view, onNavigate, children }: {
             ))}
           </nav>
           <div className="p-4 text-[11px] text-muted-foreground border-t">
-            <p className="font-semibold text-foreground/70">Waffly v2.7</p>
+            <p className="font-semibold text-foreground/70">Waffly v2.7.1</p>
             <p className="mt-1 leading-5">آفلاین‌محور • سینک خودکار<br />تقویم شمسی • ۳ کاربر هم‌زمان</p>
           </div>
         </aside>
