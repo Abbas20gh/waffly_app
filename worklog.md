@@ -496,3 +496,26 @@ Stage Summary:
 - فاکتور متنی/تصویری/PNG/PDF برای هر فروش + فاکتور ترکیبی صورت‌حسابی با شماره سریال سروری atomic کار می‌کند؛ آفلاین = پیش‌نویس شفاف
 - تخفیف در فرم فروش + لحاظ در totalAmount (آمار/سود خودکار درست) + ردیف مرجوعی جدا در فاکتور
 - دو کار باقی برای کاربر: ① ساخت بات تلگرام و دادن توکن (ست روی Pages + redeploy) ② تأیید getUpdates برای chat_id
+
+---
+Task ID: 23
+Agent: Main Agent (Super Z)
+Task: اتصال کامل تلگرام فاکتور — دریافت توکن بات از کاربر، افزودن بات به گروه، تشخیص chat_id/thread، ست secrets و دیپلوی + تست زنده
+
+Work Log:
+- getMe با توکن کاربر: بات «Waffly Invoice Bot» (@Waffly_Invoice_Bot) معتبر؛ can_join_groups=true، وبهوک ندارد
+- راهنمای گام‌به‌گام فارسی افزودن بات به گروه داده شد؛ کاربر «اضافه شد» را تأیید کرد
+- getUpdates: گروه فرومی «نان بستنی آرتا نان» → chat_id=-1004377754969 (supergroup, is_forum=true) + تاپیک «فاکتور» ساخته کاربر → message_thread_id=96 (کاربر /start را داخل همان تاپیک فرستاده بود)
+- تست مستقیم sendMessage به تاپیک فاکتور → message_id=99 با message_thread_id=96 ✓ (بات اجازه ارسال دارد)
+- کد (پاریتی دو بک‌اند): TELEGRAM_THREAD_ID اختیاری — sendMessage با spread شرطی در JSON، sendPhoto/sendDocument با fd.append('message_thread_id')؛ Env type در functions/api/[[route]].ts += TELEGRAM_THREAD_ID?: string؛ هر دو فایل: tsc صفر خطا (خطای _sync.ts از قبل موجود، بی‌ربط)
+- secrets پروژه Pages: TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID + TELEGRAM_THREAD_ID هر سه با wrangler pages secret put ست شد (Task 22 قبلاً CHAT_ID را با PATCH گذاشته بود — اکنون یکدست شد)
+- deploy out + functions bundle → https://4de2a83a.waffly.pages.dev (18 files + bundle)
+- تست E2E زنده: POST https://waffly.pages.dev/api/invoice/send-telegram {format:text} → {"ok":true} — پیام تستی در تاپیک «فاکتور» دیده می‌شود
+- AI-Prompt.md: بخش ۶ (secrets) و ۱۱ (دیپلوی) با ۳ متغیر تلگرام + بلوک «تلگرام v2.8.1» به‌روز شد
+- commit 4da9d85 → push origin main (بار اول push ناتمام ماند به‌خاطر upstream؛ پس از set-upstream کامل شد)
+- بدون تغییر کلاینت/UI → بدون bump نسخه و بدون APK جدید (کاملاً سرورمحور؛ APK v2.8.0 موجود همان endpoint را صدا می‌زند)
+
+Stage Summary:
+- ارسال فاکتور تلگرام کاملاً عملیاتی شد: متنی/PNG/PDF به تاپیک «فاکتور» گروه «نان بستنی آرتا نان»
+- هر دو کار باقی‌مانده Task 22 (توکن بات + chat_id) بسته شد
+- نکته نگهداری: گروه فرومی است؛ اگر تاپیک «فاکتور» حذف/جابه‌جا شود فقط کافی است TELEGRAM_THREAD_ID روی Pages آپدیت شود؛ حذف کامل متغیر = ارسال به General
