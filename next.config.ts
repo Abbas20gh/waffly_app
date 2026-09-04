@@ -1,11 +1,8 @@
 import type { NextConfig } from "next";
 
-// CF_EXPORT=1 → بیلد استاتیک برای Cloudflare Pages (API ها در functions/ هستند)
-const isExport = process.env.CF_EXPORT === "1";
-
 const nextConfig: NextConfig = {
-  output: isExport ? "export" : "standalone",
-  ...(isExport ? { images: { unoptimized: true } } : {}),
+  output: "standalone",
+  /* config options here */
   typescript: {
     ignoreBuildErrors: true,
   },

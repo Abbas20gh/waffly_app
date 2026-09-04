@@ -7,260 +7,64 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// جدول‌های سینک‌پذیر — id سمت کلاینت ساخته می‌شود، updatedAt میلی‌ثانیه، deleted تومب‌استون
+// ===== فروشگاه اینترنتی نان بستنی آرتا =====
+// مستقل از Waffly ولی با نام فیلدهای همخوان برای مهاجرت آینده
 
-model BreadType {
-  id        String @id
-  name      String
-  code      String // کد ۲ رقمی برای شماره جعبه
-  active    Int    @default(1)
-  updatedAt Float
-  deleted   Int    @default(0)
-}
-
-model Production {
-  id            String  @id
-  date          String // شمسی YYYY/MM/DD
-  breadTypeId   String
-  totalProduced Float   @default(0)
-  boxesCount    Float   @default(0)
-  perBoxCount   Float   @default(0)
-  waste         Float   @default(0)
-  carriedFrom   String? // تاریخ اصلی در صورت انتقال از روز قبل
-  note          String?
-  createdBy     String?
-  updatedAt     Float
-  deleted       Int     @default(0)
-  @@index([date])
-}
-
-model Box {
-  id           String  @id
-  code         String  // ۱۰ رقمی TTDDMMNNSS
-  productionId String
-  breadTypeId  String
-  count        Float   @default(0)
-  date         String
-  hasEssence   Int     @default(0) // اسانس در سطح هر جعبه
-  essenceType  String? // فقط وقتی hasEssence=1 (مثل پرتقالی)
-  note         String?
-  updatedAt    Float
-  deleted      Int     @default(0)
-  @@index([code])
-  @@index([date])
-  @@index([productionId])
-}
-
-model Material {
-  id        String @id
-  name      String
-  unit      String // کیلوگرم، کیسه، گونی، ...
-  minStock  Float  @default(0)
-  active    Int    @default(1) // 0 = غیرفعال (از انتخاب‌گرها حذف می‌شود؛ رکوردهای تاریخی می‌مانند)
-  updatedAt Float
-  deleted   Int    @default(0)
-}
-
-// کالای بازرگانی — خرید و فروش بدون تولید (مثل نان مشعلی)
-model Good {
-  id          String @id
-  name        String
-  piecesPerBox Float @default(1) // منسوخ (v2.5) — واحد همه‌جا جعبه؛ همیشه ۱
-  minStock    Float  @default(0) // حد بحرانی (جعبه)
-  active      Int    @default(1)
-  updatedAt   Float
-  deleted     Int    @default(0)
-}
-
-model Consumption {
-  id         String  @id
-  date       String
-  materialId String
-  quantity   Float   @default(0)
-  note       String?
-  createdBy  String?
-  updatedAt  Float
-  deleted    Int     @default(0)
-  @@index([date])
-}
-
-model Customer {
-  id              String  @id
-  name            String
-  phone           String?
-  address         String?
-  cooperationType String?
-  updatedAt       Float
-  deleted         Int     @default(0)
-}
-
-model Sale {
+model Product {
   id             String  @id
-  date           String
-  customerId     String
-  items          String  @default("[]") // JSON [{breadTypeId, kind?, qty, unitPrice, delivered, returned, returnCost}]
-  totalAmount    Float   @default(0)
-  settledStatus  String  @default("UNPAID") // PAID | PARTIAL | UNPAID
-  paidAmount     Float   @default(0)
-  paymentMethod  String  @default("CASH") // CASH | CARD | TRANSFER | CHECK
-  checkDueDate   String?
-  checkNumber    String?
-  checkBank      String?
-  paymentDate    String? // تاریخ وصول واقعی
-  note           String?
-  createdBy      String?
-  accountId      String? // v2.7 — حساب واریز مبلغ پرداختی
-  discountType   String  @default("NONE") // v2.8 — NONE | AMOUNT | PERCENT
-  discountValue  Float   @default(0) // v2.8 — مبلغ (تومان) یا درصد
-  invoiceNumber  Int? // v2.8 — شماره سریال فاکتور (فقط موقع صدور از سرور)
-  updatedAt      Float
-  deleted        Int     @default(0)
-  @@index([date])
-  @@index([customerId])
-}
-
-model Supplier {
-  id        String  @id
-  name      String
-  phone     String?
-  address   String?
-  updatedAt Float
-  deleted   Int     @default(0)
-}
-
-model Purchase {
-  id            String  @id
-  date          String
-  materialId    String
-  quantity      Float   @default(0) // ماده: به واحد ماده | کالا: تعداد جعبه (v2.5)
-  cost          Float   @default(0)
-  supplierId    String?
-  settledStatus String  @default("UNPAID")
-  paidAmount    Float   @default(0)
-  itemKind      String  @default("MATERIAL") // MATERIAL | GOOD
-  boxesCount    Float   @default(0) // منسوخ (v2.5) — برای کالا = quantity
-  note          String?
-  createdBy     String?
-  accountId     String? // v2.7 — حساب برداشت مبلغ پرداختی
-  updatedAt     Float
-  deleted       Int     @default(0)
-  @@index([date])
-}
-
-model Machine {
-  id        String  @id
-  name      String
-  kind      String  @default("BAKING") // BAKING = تجهیزات نانوایی | BUSINESS = دستگاه‌سازی تجاری
-  startDate String
-  status    String  @default("IN_PROGRESS") // IN_PROGRESS | DONE | PAUSED
-  note      String?
-  updatedAt Float
-  deleted   Int     @default(0)
-}
-
-model MachineCost {
-  id        String  @id
-  machineId String
-  kind      String  @default("CONSUMABLE") // CONSUMABLE مصرفی | CAPITAL سرمایه‌ای
-  name      String
-  quantity  Float   @default(1)
-  date      String
-  cost      Float   @default(0)
-  note      String?
-  updatedAt Float
-  deleted   Int     @default(0)
-  @@index([machineId])
-}
-
-model ExpenseCategory {
-  id              String @id
-  name            String
-  includeInProfit Int    @default(1)
-  updatedAt       Float
-  deleted         Int    @default(0)
-}
-
-model Expense {
-  id          String  @id
-  date        String
-  categoryId  String
-  amount      Float   @default(0)
-  description String?
-  createdBy   String?
-  accountId   String? // v2.7 — حساب پرداخت
-  updatedAt   Float
-  deleted     Int     @default(0)
-  @@index([date])
-}
-
-model OtherFund {
-  id          String @id
-  date        String
-  type        String @default("IN") // IN ورود | OUT خروج — خارج از حساب سود
-  amount      Float  @default(0)
-  description String // اجباری — توضیح منشأ/مقصد پول
-  accountId   String? // v2.7 — حساب مربوطه
-  updatedAt   Float
-  deleted     Int    @default(0)
-  @@index([date])
-}
-
-// حساب بانکی/صندوق نقدی (v2.7)
-model Account {
-  id             String @id
+  slug           String  @unique
   name           String
-  kind           String @default("CASH") // BANK حساب بانکی | CASH صندوق نقدی
-  initialBalance Float  @default(0)
-  note           String?
-  active         Int    @default(1)
-  updatedAt      Float
-  deleted        Int    @default(0)
+  sizeLabel      String // کوچک / متوسط / بزرگ / کاسه‌ای
+  pricePerUnit   Int // تومان — قیمت خرده هر عدد
+  unitsPerBox    Int     @default(200)
+  essenceEnabled Boolean @default(true)
+  imageUrl       String  @default("")
+  description    String?
+  active         Boolean @default(true)
+  sortOrder      Int     @default(0)
 }
 
-// فاکتور ترکیبی — صورت‌حساب چند فروش یک مشتری (v2.8)
-model CombinedInvoice {
-  id            String @id
-  invoiceNumber Int // شماره سریال مستقل از همان شمارندهٔ سراسری
-  customerId    String
-  saleIds       String @default("[]") // JSON آرایه شناسه فروش‌ها
-  date          String
-  totalAmount   Float  @default(0)
-  paidAmount    Float  @default(0)
-  remaining     Float  @default(0)
+model Essence {
+  id     String  @id
+  name   String // «اسانس پرتقال» — افزودن طعم جدید = فقط یک ردیف جدید
+  active Boolean @default(true)
+}
+
+model Province {
+  id           String @id
+  name         String @unique
+  shippingCost Int // تومان — از مبدأ تولید
+}
+
+model Order {
+  id            String   @id @default(cuid())
+  serial        Int      @unique // شماره سریال فاکتور — ۱۰۰۱ به بعد
+  customerName  String
+  phone         String
+  provinceName  String
+  cityName      String
+  address       String
+  postalCode    String?
   note          String?
-  createdBy     String?
-  updatedAt     Float
-  deleted       Int    @default(0)
-  @@index([date])
-  @@index([customerId])
+  items         String // JSON — OrderItemDTO[]
+  subtotal      Int
+  shippingCost  Int
+  total         Int
+  paymentMethod String   @default("ON_DELIVERY") // ON_DELIVERY | CARD_TRANSFER | (آینده: ONLINE)
+  status        String   @default("PENDING") // PENDING | PROCESSING | SHIPPED | DELIVERED | CANCELED
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([phone])
+  @@index([status])
 }
 
-// شمارندهٔ سراسری شماره فاکتور (v2.8) — فقط سرور؛ سینک نمی‌شود
-model InvoiceCounter {
-  id         String @id
+model OrderCounter {
+  id         String @id @default("main")
   lastNumber Int    @default(1000)
-  updatedAt  Float  @default(0)
 }
 
 model Setting {
-  id              String @id
-  businessName    String @default("Waffly")
-  monthStartDay   Int    @default(1) // روز شروع دوره حسابداری
-  badDebtDays     Int    @default(30) // آستانه بدحسابی
-  checkAlertDays  Int    @default(7) // هشدار سررسید چک
-  bankAccountName String @default("علی سبيلی") // v2.8 — فاکتور
-  bankCardNumber  String @default("6063-7312-5558-2299") // v2.8
-  bankSheba       String @default("IR730600000000300326236111") // v2.8
-  bankName        String @default("بانک ایران زمین") // v2.8
-  shopPhones      String @default("۰۹۱۰۴۳۶۱۲۳۳ ,۰۹۳۹۱۵۳۱۶۶۴") // v2.8 — سربرگ فاکتور
-  updatedAt       Float
-  deleted         Int    @default(0)
-}
-
-model SyncLog {
-  seq Int    @id @default(autoincrement())
-  tbl String
-  rid String
-  ts  Float
-  @@index([seq])
+  key   String @id
+  value String
 }

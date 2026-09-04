@@ -1,7 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* ===== فونت وزیرمتن (محلی — برای کارکرد آفلاین) ===== */
+@custom-variant dark (&:is(.dark *));
+
+/* ===== فونت وزیرمتن (سلف‌هاست — هماهنگ با برند Waffly/آرتا) ===== */
 @font-face {
   font-family: "Vazirmatn";
   src: url("/fonts/Vazirmatn-Regular.woff2") format("woff2");
@@ -31,13 +33,10 @@
   font-display: swap;
 }
 
-@custom-variant dark (&:is(.dark *));
-
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: "Vazirmatn", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Vazirmatn", ui-monospace, monospace;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -55,6 +54,7 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -71,130 +71,136 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  /* پالت برند نان بستنی آرتا */
+  --color-choco: var(--choco);
+  --color-choco-deep: var(--choco-deep);
+  --color-pistachio: var(--pistachio);
+  --color-pistachio-deep: var(--pistachio-deep);
+  --color-orange-brand: var(--orange-brand);
+  --color-orange-deep: var(--orange-deep);
+  --color-vanilla: var(--vanilla);
+  --color-cream: var(--cream);
 }
 
-/* ===== تم سبز Waffly (از لوگو) ===== */
 :root {
-  --radius: 0.75rem;
-  --background: oklch(0.985 0.005 140);
-  --foreground: oklch(0.23 0.025 150);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.23 0.025 150);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.23 0.025 150);
-  --primary: oklch(0.6 0.16 148);
-  --primary-foreground: oklch(0.99 0.005 140);
-  --secondary: oklch(0.955 0.012 145);
-  --secondary-foreground: oklch(0.35 0.05 150);
-  --muted: oklch(0.96 0.008 140);
-  --muted-foreground: oklch(0.5 0.02 150);
-  --accent: oklch(0.94 0.025 145);
-  --accent-foreground: oklch(0.3 0.05 150);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.99 0 0);
-  --border: oklch(0.9 0.012 145);
-  --input: oklch(0.9 0.012 145);
-  --ring: oklch(0.6 0.16 148 / 0.5);
-  --chart-1: oklch(0.6 0.16 148);
-  --chart-2: oklch(0.72 0.13 145);
-  --chart-3: oklch(0.82 0.1 95);
-  --chart-4: oklch(0.68 0.14 50);
-  --chart-5: oklch(0.65 0.18 25);
-  --sidebar: oklch(0.98 0.006 140);
-  --sidebar-foreground: oklch(0.23 0.025 150);
-  --sidebar-primary: oklch(0.6 0.16 148);
-  --sidebar-primary-foreground: oklch(0.99 0.005 140);
-  --sidebar-accent: oklch(0.94 0.025 145);
-  --sidebar-accent-foreground: oklch(0.3 0.05 150);
-  --sidebar-border: oklch(0.9 0.012 145);
-  --sidebar-ring: oklch(0.6 0.16 148 / 0.5);
+  --radius: 1.25rem;
+  /* پایه کرم گرم */
+  --background: #fff9f1;
+  --foreground: #3b2a1e;
+  --card: #fffdf9;
+  --card-foreground: #3b2a1e;
+  --popover: #fffdf9;
+  --popover-foreground: #3b2a1e;
+  /* شکلاتی — رنگ اصلی برند */
+  --primary: #6b4226;
+  --primary-foreground: #fff7ec;
+  /* نارنجی میوه‌ای */
+  --secondary: #f4a259;
+  --secondary-foreground: #4a2c17;
+  --muted: #f2e8d9;
+  --muted-foreground: #8c7360;
+  /* پسته‌ای ملایم */
+  --accent: #e4efda;
+  --accent-foreground: #44562f;
+  --destructive: #d9534f;
+  --destructive-foreground: #fff5f5;
+  --border: #eadfd0;
+  --input: #eadfd0;
+  --ring: #7fb069;
+  --chart-1: #f4a259;
+  --chart-2: #7fb069;
+  --chart-3: #6b4226;
+  --chart-4: #e7a5b8;
+  --chart-5: #d9b48f;
+  --sidebar: #fff9f1;
+  --sidebar-foreground: #3b2a1e;
+  --sidebar-primary: #6b4226;
+  --sidebar-primary-foreground: #fff7ec;
+  --sidebar-accent: #e4efda;
+  --sidebar-accent-foreground: #44562f;
+  --sidebar-border: #eadfd0;
+  --sidebar-ring: #7fb069;
+  /* رنگ‌های برند */
+  --choco: #6b4226;
+  --choco-deep: #4a2c17;
+  --pistachio: #7fb069;
+  --pistachio-deep: #5e8c4a;
+  --orange-brand: #f4a259;
+  --orange-deep: #e76f51;
+  --vanilla: #fff3de;
+  --cream: #fff9f1;
+}
+
+.dark {
+  --background: #241a12;
+  --foreground: #f5ecdf;
+  --card: #2e2117;
+  --card-foreground: #f5ecdf;
+  --popover: #2e2117;
+  --popover-foreground: #f5ecdf;
+  --primary: #f4a259;
+  --primary-foreground: #3b2a1e;
+  --secondary: #7fb069;
+  --secondary-foreground: #1c2a12;
+  --muted: #3a2c1f;
+  --muted-foreground: #c4ab93;
+  --accent: #3a4a2c;
+  --accent-foreground: #e4efda;
+  --destructive: #e05d59;
+  --destructive-foreground: #fff5f5;
+  --border: #43331f;
+  --input: #43331f;
+  --ring: #7fb069;
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    scroll-behavior: smooth;
+  }
   body {
     @apply bg-background text-foreground;
-    font-family: "Vazirmatn", ui-sans-serif, system-ui, sans-serif;
+    font-family: "Vazirmatn", ui-sans-serif, system-ui, -apple-system, sans-serif;
+    font-feature-settings: "ss01";
+  }
+  ::selection {
+    background: #f4a25966;
   }
 }
 
-/* ===== کلاس‌های کمکی Waffly ===== */
-.waffly-num {
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
+/* اسکرول‌بار نرم برای لیست‌های بلند */
+.nice-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #d9b48f transparent;
 }
-.waffly-num-input {
-  text-align: center;
-  font-variant-numeric: tabular-nums;
+.nice-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
-.waffly-card {
-  border-radius: 1rem;
+.nice-scroll::-webkit-scrollbar-thumb {
+  background: #d9b48f;
+  border-radius: 9999px;
 }
-
-/* ===== پیکر تاریخ شمسی ===== */
-.rmdp-wrapper.rmdp-container {
-  width: 100%;
-}
-.rmdp-container input {
-  width: 100%;
-  height: 2.75rem;
-  border: 1px solid var(--input);
-  border-radius: calc(var(--radius) - 4px);
-  padding: 0 0.75rem;
-  font-family: "Vazirmatn", sans-serif;
-  font-size: 0.95rem;
-  background: var(--background);
-  text-align: right;
-}
-.rmdp-container input:focus {
-  outline: 2px solid oklch(0.6 0.16 148 / 0.4);
-  outline-offset: 0;
-  border-color: var(--ring);
-}
-.rmdp-calendar-container-mobile {
-  font-family: "Vazirmatn", sans-serif;
+.nice-scroll::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-/* ===== بهینه‌سازی iOS / PWA ===== */
-html {
-  -webkit-tap-highlight-color: transparent;
-  -webkit-text-size-adjust: 100%;
+/* گرادیان‌های نرم پاستلی برند */
+.bg-brand-hero {
+  background:
+    radial-gradient(60rem 30rem at 85% -10%, #f4a25933, transparent 60%),
+    radial-gradient(50rem 28rem at 8% 12%, #7fb0692e, transparent 60%),
+    radial-gradient(46rem 30rem at 50% 110%, #6b422626, transparent 65%),
+    #fff9f1;
 }
-body {
-  touch-action: manipulation; /* حذف تأخیر دابل‌تپ در iOS */
-  overscroll-behavior-y: none;
-}
-/* حالت نصب‌شده (standalone): حس اپ واقعی */
-@media (display-mode: standalone), (display-mode: fullscreen) {
-  body {
-    -webkit-user-select: none;
-    user-select: none;
-  }
-  input, textarea, [contenteditable="true"] {
-    -webkit-user-select: text;
-    user-select: text;
-  }
-}
-.safe-px {
-  padding-left: env(safe-area-inset-left);
-  padding-right: env(safe-area-inset-right);
+.bg-brand-soft {
+  background: linear-gradient(135deg, #fff3de 0%, #fff9f1 45%, #e4efda 100%);
 }
 
-/* چاپ گزارش */
-@media print {
-  .no-print {
-    display: none !important;
-  }
-}
-
-/* اسکرول‌بار باریک برای لیست‌های بلند */
-.thin-scroll::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-.thin-scroll::-webkit-scrollbar-thumb {
-  background: oklch(0.85 0.02 145);
-  border-radius: 3px;
+/* بافت نقطه‌ای ظریف برای بخش‌ها */
+.bg-dots {
+  background-image: radial-gradient(#6b42261a 1px, transparent 1px);
+  background-size: 22px 22px;
 }
