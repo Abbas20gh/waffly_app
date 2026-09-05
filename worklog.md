@@ -665,3 +665,17 @@ Work Log:
 
 Stage Summary:
 - بعد از این دو اصلاح، کاربر مجاز به Deploy است؛ ریسک باقی‌مانده: نبود package-lock در برنچ (npm install آزاد resolve می‌کند — ریسک کم)
+
+---
+Task ID: 33
+Agent: Super Z (main)
+Task: دیالوگ Add Card در Render + آماده‌سازی پلن C (Netlify)
+
+Work Log:
+- پس از زدن Deploy، Render پنجره Add Card (Stripe، تأیید ۱ دلاری) نشان داد — احراز کارت خارجی برای اکانت‌های جدید؛ کارت ایرانی با Stripe کار نمی‌کند
+- دو احتمال: بازگشت ناخواسته Instance به پلن پولی هنگام ویرایش env (باید دوباره $0 انتخاب شود) یا الزام جدید Render برای کارت
+- آماده‌سازی پیش‌دستانه Netlify در repo: next.config.ts خروجی شرطی (NETLIFY env → بدون standalone) + netlify.toml (build=npm run build، publish=.next، پلاگین رسمی Next) → commit d9fe2e5 push شد
+- راهنمای کاربر: اول Cancel + انتخاب مجدد $0 + Deploy مجدد؛ اگر کارت دوباره خواست → Netlify (بدون کارت، گیت‌هاب، همان ۴ env، برنچ arta-site)
+
+Stage Summary:
+- برنچ arta-site حالا هم برای Render و هم Netlify آماده است؛ منتظر نتیجه تلاش دوم کاربر
