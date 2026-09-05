@@ -653,3 +653,15 @@ Work Log:
 
 Stage Summary:
 - منتظر Deploy Live و ارسال آدرس onrender.com برای تست نهایی
+
+---
+Task ID: 32
+Agent: Super Z (main)
+Task: اصلاح env ها و Start Command فرم Render کاربر
+
+Work Log:
+- کاربر URL دیتابیس را در TURSO_AUTH_TOKEN گذاشته بود → اصلاح شد: توکن eyJ... در AUTH_TOKEN، URL فقط در DATABASE_URL
+- اسکرین‌شات دوم: Instance=$0 ✓، Language=Node با npm commands — ولی اسکریپت start داخل package.json از bun استفاده می‌کند → Start Command فرم باید شود: NODE_ENV=production node .next/standalone/server.js
+
+Stage Summary:
+- بعد از این دو اصلاح، کاربر مجاز به Deploy است؛ ریسک باقی‌مانده: نبود package-lock در برنچ (npm install آزاد resolve می‌کند — ریسک کم)
