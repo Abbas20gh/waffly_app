@@ -615,3 +615,15 @@ Work Log:
 
 Stage Summary:
 - دیتابیس ابری Turso کاربر ۱۰۰٪ آماده و مطابق seed محلی است؛ گام بعدی فقط دیپلای Vercel (برنچ arta-site + ۴ env) و اتصال دامنه است؛ نام دامنه کاربر هنوز نامشخص
+
+---
+Task ID: 29
+Agent: Super Z (main)
+Task: رفع ارور ورود Vercel کاربر (account requires further verification)
+
+Work Log:
+- اسکرین‌شات کاربر: vercel.com/login با خطای «Your account requires further verification. Complete the account recovery form» — فلگ سیستم ضدتقلب ورسل (IP ایران/تحریم)
+- سه مسیر به کاربر داده شد: ۱) پر کردن فرم recovery با معرفی GitHub ۲) تلاش مجدد با VPN اروپا + پنجره ناشناس / اکانت جدید ۳) جایگزین‌ها Netlify یا Render با همین کد و همان Turso (کد تغییری نمی‌خواهد)
+
+Stage Summary:
+- داده‌ها امن‌اند (Turso ابری)؛ منتظر نتیجه کاربر از مسیر ۱ یا ۲؛ در صورت شکست، سازگاری build برای Netlify/Render انجام می‌شود
