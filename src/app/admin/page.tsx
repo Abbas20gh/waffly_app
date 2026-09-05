@@ -461,10 +461,11 @@ function SettingsTab() {
   if (loading) return <div className="grid place-items-center py-16"><Loader2 className="size-6 animate-spin text-muted-foreground" /></div>;
 
   const fields: Array<[string, string, string]> = [
-    ["originCity", "شهر مبدأ تولید/ارسال", "مثلاً تهران"],
+    ["originCity", "شهر مبدأ تولید/ارسال", "مثلاً یزد"],
     ["freeShippingThreshold", "سقف ارسال رایگان (تومان)", "۱۰۰۰۰۰۰۰"],
-    ["cardNumber", "شماره کارت برای پرداخت کارت‌به‌کارت", "۶۰۳۷-۹۹xx-xxxx-xxxx"],
-    ["cardOwner", "نام صاحب کارت", "گروه صنعتی آرتا"],
+    ["cardBank", "نام بانک صادرکننده کارت", "بانک ایران زمین"],
+    ["cardNumber", "شماره کارت برای پرداخت کارت‌به‌کارت", "۶۰۶۳-۷۳۱۲-۵۵۵۸-۲۲۹۹"],
+    ["cardOwner", "نام صاحب کارت", "علی سبیلی"],
   ];
 
   return (

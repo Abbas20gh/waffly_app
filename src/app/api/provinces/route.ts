@@ -21,6 +21,7 @@ export async function GET() {
       ),
       cardNumber: map.get("cardNumber") || "",
       cardOwner: map.get("cardOwner") || "",
+      cardBank: map.get("cardBank") || "",
     });
   } catch (e) {
     console.error("provinces error", e);

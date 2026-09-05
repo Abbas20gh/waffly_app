@@ -116,7 +116,6 @@ export function CameraFit() {
     const cam = camera as PerspectiveCamera;
     // eslint-disable-next-line react-hooks/immutability -- الگوی استاندارد R3F: موتیشن مستقیم آبجکت three.js
     cam.position.z = size.width < 640 ? 13 : size.width < 1024 ? 9 : 6.4;
-    // eslint-disable-next-line react-hooks/immutability -- همان الگو
     cam.position.y = 0.3;
     cam.updateProjectionMatrix();
   }, [camera, size.width]);

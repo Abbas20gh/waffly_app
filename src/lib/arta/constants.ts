@@ -14,7 +14,7 @@ export const WHOLESALE_DISCOUNT_PER_UNIT = 200;
 export const FREE_SHIPPING_THRESHOLD = 10_000_000;
 
 /** شهر مبدأ تولید/ارسال (قابل تغییر از پنل مدیریت) */
-export const DEFAULT_ORIGIN_CITY = "تهران";
+export const DEFAULT_ORIGIN_CITY = "یزد";
 
 /** شماره‌های تماس رسمی سایت */
 export const CONTACT_PHONES = ["۰۹۱۰۴۳۶۱۲۳۳", "۰۹۳۹۱۵۳۱۶۶۴"];

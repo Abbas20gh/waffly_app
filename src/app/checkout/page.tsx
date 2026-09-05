@@ -15,7 +15,7 @@ import { SiteFooter } from "@/components/arta/site-footer";
 import { useCart } from "@/store/cart";
 import { computeCart, type PricingProduct } from "@/lib/arta/pricing";
 import type { ProductDTO, ProvinceDTO } from "@/lib/arta/types";
-import { faNumber, faToman, isValidIranMobile, toFa } from "@/lib/arta/format";
+import { faNumber, faToman, isValidIranMobile, toFa, faCardNumber } from "@/lib/arta/format";
 import { PAYMENT_METHODS, FREE_SHIPPING_THRESHOLD } from "@/lib/arta/constants";
 import { toast } from "@/hooks/use-toast";
 
@@ -27,6 +27,7 @@ function CheckoutInner() {
   const [freeThreshold, setFreeThreshold] = useState(FREE_SHIPPING_THRESHOLD);
   const [cardNumber, setCardNumber] = useState("");
   const [cardOwner, setCardOwner] = useState("");
+  const [cardBank, setCardBank] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState<{ serial: number } | null>(null);
@@ -54,6 +55,7 @@ function CheckoutInner() {
           setFreeThreshold(pr.freeShippingThreshold || FREE_SHIPPING_THRESHOLD);
           setCardNumber(pr.cardNumber || "");
           setCardOwner(pr.cardOwner || "");
+          setCardBank(pr.cardBank || "");
         }
       })
       .finally(() => setLoading(false));
@@ -260,7 +262,13 @@ function CheckoutInner() {
                 <div className="mt-3 rounded-2xl bg-vanilla p-4 text-xs leading-6 text-muted-foreground">
                   {cardNumber ? (
                     <>
-                      شماره کارت: <b className="text-choco" dir="ltr">{toFa(cardNumber)}</b>
+                      {cardBank && (
+                        <>
+                          بانک: <b className="text-choco">{cardBank}</b>
+                          <br />
+                        </>
+                      )}
+                      شماره کارت: <b className="text-choco" dir="ltr">{faCardNumber(cardNumber)}</b>
                       {cardOwner && <> — به نام <b className="text-choco">{cardOwner}</b></>}
                       <br />
                       پس از واریز، رسید را برای پشتیبانی ارسال کنید تا سفارش شما پردازش شود.

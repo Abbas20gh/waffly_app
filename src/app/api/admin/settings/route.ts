@@ -5,7 +5,13 @@ import { toEn } from "@/lib/arta/format";
 
 export const dynamic = "force-dynamic";
 
-const EDITABLE_KEYS = ["originCity", "freeShippingThreshold", "cardNumber", "cardOwner"];
+const EDITABLE_KEYS = [
+  "originCity",
+  "freeShippingThreshold",
+  "cardNumber",
+  "cardOwner",
+  "cardBank",
+];
 
 // GET /api/admin/settings
 export async function GET(req: NextRequest) {

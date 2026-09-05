@@ -60,3 +60,9 @@ export function isValidIranMobile(raw: string): boolean {
   const s = toEn(raw).replace(/\D/g, "");
   return /^09\d{9}$/.test(s);
 }
+
+/** شماره کارت ۱۶ رقمی → گروه‌های ۴ رقمی «۶۰۶۳-۷۳۱۲-۵۵۵۸-۲۲۹۹» */
+export function faCardNumber(raw: string): string {
+  const digits = toEn(raw).replace(/\D/g, "").slice(0, 16);
+  return toFa((digits.match(/.{1,4}/g) || []).join("-"));
+}
