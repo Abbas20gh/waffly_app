@@ -600,3 +600,18 @@ Work Log:
 Stage Summary:
 - کد ۱۰۰٪ آماده است؛ از کاربر منتظریم: نام دقیق دامنه + URL/token تورسو (تا turso:setup را اجرا و جدول‌ها/محصولات/کارت را پر کنیم)
 - جایگزین‌های رد شده و دلیل: Render/Koyeb رایگان = دیسک ناپایدار (پاک شدن سفارش‌ها) + خواب ۱۵ دقیقه‌ای؛ GitHub Pages/Netlify استاتیک؛ Liara پولی
+
+---
+Task ID: 28
+Agent: Super Z (main)
+Task: اجرای turso:setup روی دیتابیس ابری کاربر + راستی‌آزمایی داده‌ها
+
+Work Log:
+- کاربر URL و توکن Turso را فرستاد: libsql://arta-abbas20gh.aws-eu-west-1.turso.io
+- worktree سالم بود؛ bun install (۵ ثانیه از کش) + bun x prisma generate
+- TURSO_DATABASE_URL/TURSO_AUTH_TOKEN اینلاین → scripts/turso-setup-arta.ts: جدول‌ها (۶ جدول + ایندکس‌ها) ساخته شد؛ seed: ۴ محصول، ۳۱ استان، ۱ اسانس، ۵ تنظیم
+- راستی‌آزمایی مستقیم از Turso با @libsql/client: تنظیمات (cardBank=بانک ایران زمین، cardNumber، cardOwner=علی سبیلی، originCity=یزد، freeShippingThreshold=10000000)؛ کرایه یزد=۸۰٬۰۰۰/اصفهان=۱۰۰٬۰۰۰/تهران=۱۵۰٬۰۰۰/خراسان=۱۷۰٬۰۰۰؛ ۴ محصول فانتزی (۳۸۰۰/۴۰۰۰/۵۰۰۰/۵۰۰۰)؛ OrderCounter=1000 (اولین سفارش واقعی ۱۰۰۱)
+- خطای گذرا: در SQL یک‌لاینر کوتیشن دوتایی برای literal به‌کار رفت (SQLite identifier error) → با \x27 حل شد؛ نه باگ کد
+
+Stage Summary:
+- دیتابیس ابری Turso کاربر ۱۰۰٪ آماده و مطابق seed محلی است؛ گام بعدی فقط دیپلای Vercel (برنچ arta-site + ۴ env) و اتصال دامنه است؛ نام دامنه کاربر هنوز نامشخص
