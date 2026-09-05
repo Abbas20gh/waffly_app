@@ -567,3 +567,21 @@ Stage Summary:
 - هر سه تصمیم کاربر اعمال و تست شد: مبدأ یزد ✓، کارت ایران زمین در کل زنجیره ✓، دامنه artagroup.ir (فقط تأیید — ثبت با کاربر است)
 - پیش‌نمایش زنده فعلاً در دسترس نیست (پروسه‌های بک‌گراند توسط سندباکس کشته می‌شوند)؛ از cold-start بعدی dev.sh آرتا را سرو می‌کند
 - استقرار واقعی: اتصال ریپو به Cloudflare Pages با برنچ arta-site
+
+---
+Task ID: 26
+Agent: Super Z (main)
+Task: میزبانی رایگان برای سایت آرتا — پشتیبانی Turso + راهنمای دقیق استقرار (Vercel)
+
+Work Log:
+- کاربر گفت دامنه را خرید و هاست رایگان می‌خواهد (لیارا پولی است). artagroup.ir قبلاً ثبت شده بود (DNS زنده)؛ جایگزین‌های آزاد پیشنهاد شد؛ کاربر هنوز نگفته کدام را خریده
+- کشف: arta-wt worktree توسط سندباکس حذف شده بود ولی کامیت‌ها روی origin امن بودند؛ prune + ساخت مجدد
+- رایگان‌مسیر انتخابی: Vercel Hobby (Next.js بومی، رایگان) + Turso Free (SQLite سازگار، ۹GB، ۱ میلیارد خواندن/ماه) — SQLite فایل روی Vercel ماندگار نیست پس دیتابیس ابری لازم بود
+- پیاده‌سازی: db.ts دو-حالته (TURSO_DATABASE_URL → PrismaLibSQL adapter از @prisma/adapter-libsql@6 هم‌ورژن با کلاینت ۶.۱۹؛ وگرنه SQLite محلی)؛ seed-arta.ts به کلاینت مشترک مهاجرت + گارد import.meta.main؛ اسکریپت turso-setup-arta.ts با DDL دقیق از prisma migrate diff (IF NOT EXISTS)
+- نکته نسخه: اداپتور ۷.x با کلاینت ۶ ناسازگار است — باید @6 نصب شود
+- تست: DDL+seed با file: URL اداپتور ✓؛ سرور کامل بدون DATABASE_URL (شبیه‌سازی Vercel): ثبت سفارش ۱۱ جعبه عمده اسانس‌دار از یزد = ۸٬۳۶۰٬۰۰۰+۸۰٬۰۰۰=۸٬۴۴۰٬۰۰۰ و پیگیری ✓؛ گرفتار شدن قبلی مربوط به دو-اینستانس بودن سرور روی پورت ۳۰۰۰ بود نه باگ کد
+- commit f6bd20e روی arta-site push شد
+
+Stage Summary:
+- ریپو حالا برای دیپلای رایگان Vercel+Turso آماده است؛ کاربر باید: دیتابیس Turso بسازد، turso:setup اجرا/یا من اجرا کنم با توکن، پروژه را در Vercel از برنچ arta-site با ۴ متغیر محیطی دیپلوی کند، دامنه را وصل کند
+- متغیرهای محیطی لازم در Vercel: TURSO_DATABASE_URL، TURSO_AUTH_TOKEN، ADMIN_PASSWORD (جدید!)، ADMIN_SESSION_SECRET
