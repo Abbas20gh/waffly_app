@@ -692,3 +692,17 @@ Work Log:
 
 Stage Summary:
 - بیلد و فانکشن سالم است؛ فقط دسترسی عمومی ساب‌دامنه باید باز شود؛ payload تست سفارش از verify-yazd.sh آماده است (nan-fantezi-kuchak، ۲ جعبه، تهران=۱٬۶۷۰٬۰۰۰)
+
+---
+Task ID: 35
+Agent: Super Z (main)
+Task: تست نهایی سایت زنده Netlify + پاکسازی سفارش تست
+
+Work Log:
+- کاربر Access را Public کرد؛ تست کامل (scripts/test-netlify-arta.sh): home/checkout/admin همه 200؛ provinces و products JSON سالم؛ POST سفارش: serial=1001، subtotal=1,520,000 + تهران 150,000 = total=1,670,000 ✓؛ track هم درست
+- پاکسازی از طریق Turso: حذف سفارش 1001 + ریست OrderCounter به 1000 (orders=0)
+- artanon.ir همچنان SERVFAIL (zone هنوز delegate نشده)
+- گام بعدی برای کاربر: اتصال دامنه در Netlify (Domain management → Netlify DNS یا رکورد A 75.2.60.5/CNAME) + اختیاری: تغییر نام پروژه به artanon برای URL تمیزتر
+
+Stage Summary:
+- سایت آرتا به‌صورت رایگان و پایدار روی Netlify + Turso آنلاین شد؛ همه مسیرها تست و تأیید شد؛ فقط اتصال دامنه باقی مانده
