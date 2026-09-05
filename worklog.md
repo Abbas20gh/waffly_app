@@ -585,3 +585,18 @@ Work Log:
 Stage Summary:
 - ریپو حالا برای دیپلای رایگان Vercel+Turso آماده است؛ کاربر باید: دیتابیس Turso بسازد، turso:setup اجرا/یا من اجرا کنم با توکن، پروژه را در Vercel از برنچ arta-site با ۴ متغیر محیطی دیپلوی کند، دامنه را وصل کند
 - متغیرهای محیطی لازم در Vercel: TURSO_DATABASE_URL، TURSO_AUTH_TOKEN، ADMIN_PASSWORD (جدید!)، ADMIN_SESSION_SECRET
+
+---
+Task ID: 27
+Agent: Super Z (main)
+Task: پاسخ فارسی — راهنمای دقیق هاست رایگان (Vercel + Turso) + سخت‌سازی build
+
+Work Log:
+- کاربر خواست پاسخ فارسی باشد؛ چک DNS تازه: هر ۴ نام پیشنهادی (artagroupco/artabastani/artanon/artaicecream.ir) هنوز NXDOMAIN — یا تازه خریده و DNS هنوز delegate نشده یا نام دیگری خریده؛ artagroup.ir همچنان روی 5.144.129.99
+- status ریپو: origin = github.com/Abbas20gh/waffly_app.git؛ برنچ arta-site با پشتیبانی Turso (f6bd20e) از قبل push شده؛ worktree حذف‌شده توسط سندباکس بازسازی شد
+- سخت‌سازی build برای Vercel: postinstall=prisma generate + کپی استاتیک با || true → commit c1f482c روی arta-site push شد
+- راهنمای ۴ مرحله‌ای فارسی ارائه شد: ۱) ساخت DB Turso + URL/token ۲) Import در Vercel از برنچ arta-site + ۴ متغیر محیطی ۳) اتصال دامنه با A/CNAME در پنل iranserver ۴) تست نهایی + تغییر رمز ادمین
+
+Stage Summary:
+- کد ۱۰۰٪ آماده است؛ از کاربر منتظریم: نام دقیق دامنه + URL/token تورسو (تا turso:setup را اجرا و جدول‌ها/محصولات/کارت را پر کنیم)
+- جایگزین‌های رد شده و دلیل: Render/Koyeb رایگان = دیسک ناپایدار (پاک شدن سفارش‌ها) + خواب ۱۵ دقیقه‌ای؛ GitHub Pages/Netlify استاتیک؛ Liara پولی
