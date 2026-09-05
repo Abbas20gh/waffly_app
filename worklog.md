@@ -627,3 +627,17 @@ Work Log:
 
 Stage Summary:
 - داده‌ها امن‌اند (Turso ابری)؛ منتظر نتیجه کاربر از مسیر ۱ یا ۲؛ در صورت شکست، سازگاری build برای Netlify/Render انجام می‌شود
+
+---
+Task ID: 30
+Agent: Super Z (main)
+Task: تأیید ثبت artanon.ir + مهاجرت از Vercel به Render (پلن B)
+
+Work Log:
+- کاربر تأیید کرد: دامنه artanon.ir ثبت شد؛ Vercel هم برایش باز نمی‌شود (اکانت فلگ + دسترسی سخت)
+- DNS چک: artanon.ir = SERVFAIL (ثبت‌شده، zone هنوز delegate/فعال نشده — عادی برای ثبت تازه .ir)؛ vercel.com از سندباکس 200 می‌دهد ولی مشکل سمت کاربر/ایران است
+- تصمیم: Render Free + همان Turso — کد و env ها بدون تغییر؛ راهنمای قدم‌به‌قدم فارسی داده شد: Web Service از گیت‌هاب، Branch=arta-site، Runtime=Bun، build=bun install && bun run build، start=bun run start، Instance=Free، ۴ env var
+- بعد از دیپلای: Custom Domain artanon.ir از پنل Render + رکوردها در iranserver (پس از فعال شدن zone)
+
+Stage Summary:
+- منتظر آدرس xxx.onrender.com از کاربر؛ سپس اتصال دامنه و تست نهایی؛ پلن C اگر Render ثبت‌نام نداد: Netlify
