@@ -641,3 +641,15 @@ Work Log:
 
 Stage Summary:
 - منتظر آدرس xxx.onrender.com از کاربر؛ سپس اتصال دامنه و تست نهایی؛ پلن C اگر Render ثبت‌نام نداد: Netlify
+
+---
+Task ID: 31
+Agent: Super Z (main)
+Task: بازبینی فرم New Web Service کاربر در Render از روی اسکرین‌شات
+
+Work Log:
+- اسکرین‌شات فرم: repo=waffly_app ✓، Branch=arta-site ✓، Build/Start ✓، ولی Instance Type روی $7 انتخاب شده بود (رایگان $0 باید انتخاب شود)، Language=Node به‌جای Bun، و ردیف اضافی PORT در env vars
+- سه اصلاح به کاربر داده شد: انتخاب $0/month، تغییر Language به Bun (یا npm commands اگر Bun نبود)، حذف PORT و افزودن ۴ متغیر واقعی؛ نام اختیاری arta برای URL تمیزتر
+
+Stage Summary:
+- منتظر Deploy Live و ارسال آدرس onrender.com برای تست نهایی
