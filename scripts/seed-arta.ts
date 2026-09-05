@@ -1,7 +1,7 @@
 // ===== Seed فروشگاه نان بستنی آرتا (idempotent) =====
-import { PrismaClient } from "@prisma/client";
-
-const db = new PrismaClient();
+// از کلاینت مشترک @/lib/db استفاده می‌کند؛ بنابراین هم روی SQLite محلی
+// و هم روی Turso (با تنظیم TURSO_DATABASE_URL) کار می‌کند.
+import { db } from "@/lib/db";
 
 const products = [
   {
@@ -81,7 +81,7 @@ const provinces: Array<[string, number]> = [
   ["کردستان", 200_000],
 ];
 
-async function main() {
+export async function main() {
   for (const p of products) {
     await db.product.upsert({
       where: { id: p.id },
@@ -145,9 +145,12 @@ async function main() {
   console.log("seed done:", counts);
 }
 
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(() => db.$disconnect());
+// فقط وقتی مستقیم اجرا می‌شود (bun run scripts/seed-arta.ts) نه موقع import
+if (import.meta.main) {
+  main()
+    .catch((e) => {
+      console.error(e);
+      process.exit(1);
+    })
+    .finally(() => db.$disconnect());
+}
