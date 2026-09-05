@@ -1,0 +1,7 @@
+# تنظیمات دیپلای Netlify برای سایت آرتا (برنچ arta-site)
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
