@@ -679,3 +679,16 @@ Work Log:
 
 Stage Summary:
 - برنچ arta-site حالا هم برای Render و هم Netlify آماده است؛ منتظر نتیجه تلاش دوم کاربر
+
+---
+Task ID: 34
+Agent: Super Z (main)
+Task: تست سایت Netlify کاربر (delightful-salamander-306f01)
+
+Work Log:
+- دیپلای موفق: production @ d9fe2e5 (آخرین کامیت)، بیلد ۵۱ ثانیه، ۱ فانکشن، همه لاگ‌ها سبز
+- تست از سندباکس: GET / و /api/provinces و /api/products → HTTP 401 + ریدایرکت به app.netlify.com/edge-access = قفل Access Control روی ساب‌دامنه netlify.app (احتمالاً به‌دلیل ایمیل تأییدنشده یا تنظیم پیش‌فرض خصوصی اکانت‌های جدید)
+- به کاربر داده شد: ۱) تأیید ایمیل Netlify ۲) Site configuration → Access control → Public؛ سپس تست مجدد و بعد اتصال دامنه artanon.ir
+
+Stage Summary:
+- بیلد و فانکشن سالم است؛ فقط دسترسی عمومی ساب‌دامنه باید باز شود؛ payload تست سفارش از verify-yazd.sh آماده است (nan-fantezi-kuchak، ۲ جعبه، تهران=۱٬۶۷۰٬۰۰۰)
