@@ -706,3 +706,21 @@ Work Log:
 
 Stage Summary:
 - سایت آرتا به‌صورت رایگان و پایدار روی Netlify + Turso آنلاین شد؛ همه مسیرها تست و تأیید شد؛ فقط اتصال دامنه باقی مانده
+
+---
+Task ID: 36
+Agent: Super Z (main)
+Task: عیب‌یابی «سایت در ایران باز نمی‌شود» + بررسی وضعیت artanon.ir
+
+Work Log:
+- whois.nic.ir: هر ۴ نیم‌سرور dns1-dns4.p04.nsone.net در رجیستری .ir ثبت و delegation کامل است → نیازی به ثبت مجدد در NIC.ir نیست
+- dig +trace تأیید کرد: زنجیره delegation از b.nic.ir تا nsone سالم
+- رکورد A از NS معتبر: فقط ۲ رکورد (52.74.6.109 و 13.215.239.219 — لودبالانسرهای Netlify، TTL=120)؛ «دو تا بودن سرورها» طبیعی است نه نقص
+- Shecan (DNS ایرانی) هنوز IPهای کش‌شده قدیمی (63.176.8.218 / 35.157.26.135) را برمی‌گرداند → کش قدیمی، طی چند ساعت پاک می‌شود؛ هر دو مجموعه IP مال Netlify هستند
+- root cause واقعی: TLS برای artanon.ir و www صادر نشده — سرور گواهی پیش‌فرض *.netlify.app (DigiCert) می‌فرستد → SAN mismatch → مرورگر خطای SSL → «سایت باز نمی‌شود»
+- HTTP/80 سالم و محتوای فروشگاه آرتا (نان بستنی آرتا) با 200 سرو می‌شود؛ یعنی DNS و روتینگ هر دو درست‌اند
+- ساب‌دامنه قدیمی delightful-salamander-306f01.netlify.app الان 404 می‌دهد (احتمالاً rename یا حذف از custom domains)
+
+Stage Summary:
+- DNS و رجیستری ایران کاملاً سالم؛ تنها مانع: صدور نشدن گواهی Let's Encrypt در Netlify (احتمالاً هنگام دست‌کاری دوباره DNS باطل/متوقف شده)
+- راه‌حل کاربر: Netlify → Domain management → HTTPS → Verify DNS configuration → Provision/Retry certificate؛ سپس تست در incognito
