@@ -739,3 +739,17 @@ Work Log:
 Stage Summary:
 - همه پیش‌نیازها سبز: DNS تأیید شد، سایت سالم؛ فقط منتظر job صدور گواهی Netlify
 - گام بعد: تست مجدد پس از ~۳۰-۶۰ دقیقه (incognito) یا حذف/اضافه مجدد دامنه اگر ۲۴ ساعت گذشت
+
+---
+Task ID: 36-c
+Agent: Super Z (main)
+Task: چک مجدد پس از ۷۴ دقیقه از تأیید DNS
+
+Work Log:
+- گواهی هنوز *.netlify.app است؛ HTTPS هنوز fail
+- سازگاری NS در ۶ رزولور جهانی (Google/Cloudflare/Quad9/OpenDNS/AWS/Shecan): همه p04 صحیح → انتشار ۱۰۰٪ کامل، هیچ مانع DNS وجود ندارد
+- فرضیه تأخیر: صف کند Netlify یا rate limit داپلیکیت Let's Encrypt (۵ گواهی/هفته برای هر دامنه) به‌دلیل حذف/اضافه مکرر دامنه در این هفته
+
+Stage Summary:
+- هیچ اقدامی از سمت کاربر لازم نیست؛ Netlify خودکار retry می‌کند (تا ۲۴h طبق UI)
+- اگر ۲۴ ساعت گذشت: حذف و اضافه مجدد دامنه برای requeue صدور
