@@ -724,3 +724,18 @@ Work Log:
 Stage Summary:
 - DNS و رجیستری ایران کاملاً سالم؛ تنها مانع: صدور نشدن گواهی Let's Encrypt در Netlify (احتمالاً هنگام دست‌کاری دوباره DNS باطل/متوقف شده)
 - راه‌حل کاربر: Netlify → Domain management → HTTPS → Verify DNS configuration → Provision/Retry certificate؛ سپس تست در incognito
+
+---
+Task ID: 36-b
+Agent: Super Z (main)
+Task: پیگیری صدور گواهی پس از Verify DNS موفق
+
+Work Log:
+- کاربر دکمه Verify DNS configuration را زد → Netlify: «DNS verification was successful ✓»
+- سایت rename شده به artanon.netlify.app (تست: HTTP 200 + محتوای آرتا + گواهی معتبر ✓)
+- پولینگ ۱۶ دقیقه‌ای گواهی artanon.ir: هنوز گواهی پیش‌فرض *.netlify.app سرو می‌شود → گواهی در صف صدور Let's Encrypt است
+- طبق پیام خود Netlify: provision خودکار، حداکثر ۲۴ ساعت (معمولاً < ۱ ساعت)
+
+Stage Summary:
+- همه پیش‌نیازها سبز: DNS تأیید شد، سایت سالم؛ فقط منتظر job صدور گواهی Netlify
+- گام بعد: تست مجدد پس از ~۳۰-۶۰ دقیقه (incognito) یا حذف/اضافه مجدد دامنه اگر ۲۴ ساعت گذشت
