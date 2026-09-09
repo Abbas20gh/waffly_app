@@ -780,3 +780,17 @@ Work Log:
 Stage Summary:
 - قدم بعدی کاربر: چک User settings → Email (verified?) → بعد Provision مجدد
 - پلن B اگر جواب نداد: Cloudflare رایگان (NS جدید در NIC.ir + A به 75.2.60.5 با پروکسی نارنجی + گواهی خودکار CF)
+
+---
+Task ID: 36-f
+Agent: Super Z (main)
+Task: پیگیری تأیید ایمیل Netlify
+
+Work Log:
+- کاربر هیچ ایمیلی از Netlify پیدا نکرد (صندوق + spam)
+- دو حالت: یا ایمیل از قبل verified است (و مشکل جای دیگری است) یا ایمیل اصلاً نرسیده
+- راهنمای چک وضعیت: avatar → User settings → Email؛ اگر گزینه Resend verification بود = verified نیست
+
+Stage Summary:
+- اگر verified نبود: Resend → تأیید → Provision certificate مجدد
+- اگر verified بود: رفتن به پلن B (Cloudflare رایگان: NS جدید در NIC.ir، A به 75.2.60.5 پروکسی نارنجی، www CNAME به artanon.netlify.app، SSL mode = Full)
