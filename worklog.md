@@ -810,3 +810,23 @@ Work Log:
 
 Stage Summary:
 - در انتظار اجرای کاربر؛ پس از تعویض NS و فعال شدن Universal SSL کلادفلر، تست نهایی https://artanon.ir
+
+---
+Task ID: 38
+Agent: Super Z (main)
+Task: تکمیل مهاجرت به Cloudflare — سایت آرتا آنلاین و امن شد 🎉
+
+Work Log:
+- کاربر رکوردهای CF را ساخت (حذف ۴ رکورد import شده stale، افزودن A @ → 75.2.60.5 پروکسی‌شده + CNAME www → artanon.netlify.app پروکسی‌شده)
+- NS در NIC.ir تعویض شد: colin.ns.cloudflare.com + luciane.ns.cloudflare.com (جایگزین ۴ nsone)
+- رجیستری .ir فقط ~۲ دقیقه بعد delegation جدید را سرو کرد (trace تأیید)
+- Cloudflare zone عملاً Active شد؛ Shecan و رزولورهای جهانی IPهای CF edge را برمی‌گردانند (104.21.14.136 / 172.67.203.122)
+- SSL mode = Full از قبل تنظیم بود ✓
+- Universal SSL کلادفلر در ~۲ دقیقه صادر شد: CN=artanon.ir، SANs = artanon.ir + *.artanon.ir
+- نکته جالب: همزمان Netlify هم گواهی LE خودش را صادر کرد (CN=artanon.ir، issuer YE2) — هر دو لایه TLS معتبر
+- تست نهایی: https://artanon.ir → HTTP/2 200 | www → 301 به apex | محتوای فروشگاه آرتا ✓
+
+Stage Summary:
+- سایت آرتا کاملاً امن و زنده: مهاجرت Netlify DNS → Cloudflare رایگان موفق
+- معماری نهایی: بازدیدکننده → CF edge (TLS + کش) → Netlify 75.2.60.5 → Next.js store + Turso
+- درس پرونده: خطای provisioning جبری Netlify با bypass لایه DNS/SSL حل شد؛ NS تعویض در NIC.ir بسیار سریع (~۲ دقیقه) اعمال می‌شود
