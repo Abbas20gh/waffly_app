@@ -753,3 +753,15 @@ Work Log:
 Stage Summary:
 - هیچ اقدامی از سمت کاربر لازم نیست؛ Netlify خودکار retry می‌کند (تا ۲۴h طبق UI)
 - اگر ۲۴ ساعت گذشت: حذف و اضافه مجدد دامنه برای requeue صدور
+
+---
+Task ID: 36-d
+Agent: Super Z (main)
+Task: چک بعدی — ~۲ ساعت پس از تأیید DNS
+
+Work Log:
+- گواهی هنوز صادر نشده؛ status.json اصلی Netlify fetch نشد ولی API incidents خالی است → هیچ مشکل پلتفرمی وجود ندارد
+- تأخیر domain-specific است → تصمیم: راه‌حل remove/re-add دامنه برای requeue صدور
+
+Stage Summary:
+- پیشنهاد نهایی: حذف artanon.ir + www از Domain management و اضافه مجدد (zone دست‌نخورده می‌ماند چون Netlify DNS میزبانی می‌کند)؛ اگر تا امشب نشد → rate limit LE → صبر تا فردا
