@@ -765,3 +765,18 @@ Work Log:
 
 Stage Summary:
 - پیشنهاد نهایی: حذف artanon.ir + www از Domain management و اضافه مجدد (zone دست‌نخورده می‌ماند چون Netlify DNS میزبانی می‌کند)؛ اگر تا امشب نشد → rate limit LE → صبر تا فردا
+
+---
+Task ID: 36-e
+Agent: Super Z (main)
+Task: عیب‌یابی ارور Provision certificate
+
+Work Log:
+- کاربر پس از remove/re-add، هر دو دامنه «✅ Netlify DNS» شدند و دکمه Provision certificate ظاهر شد؛ ولی زدنش ارور عمومی «We could not provision a Let's Encrypt certificate» داد
+- چک‌های انجام‌شده: CAA = ندارد (پاک) | crt.sh = صفر گواهی در کل تاریخچه (سقف ۵/هفته منتفی) | AAAA = ندارد | www = درست | _acme-challenge = آزاد و 404 | زون مینیمال و تمیز
+- فرضیه اصلی: ایمیل اکانت Netlify تأیید نشده (در Task 34 هم مشکوک بودیم) → Netlify بدون تأیید ایمیل گواهی LE نمی‌دهد
+- فرضیه دوم: state خراب پس از rename سایت (delightful-salamander → artanon)
+
+Stage Summary:
+- قدم بعدی کاربر: چک User settings → Email (verified?) → بعد Provision مجدد
+- پلن B اگر جواب نداد: Cloudflare رایگان (NS جدید در NIC.ir + A به 75.2.60.5 با پروکسی نارنجی + گواهی خودکار CF)
