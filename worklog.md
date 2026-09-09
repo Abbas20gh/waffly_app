@@ -794,3 +794,19 @@ Work Log:
 Stage Summary:
 - اگر verified نبود: Resend → تأیید → Provision certificate مجدد
 - اگر verified بود: رفتن به پلن B (Cloudflare رایگان: NS جدید در NIC.ir، A به 75.2.60.5 پروکسی نارنجی، www CNAME به artanon.netlify.app، SSL mode = Full)
+
+---
+Task ID: 37
+Agent: Super Z (main)
+Task: نتیجه چک User settings و تصمیم نهایی
+
+Work Log:
+- اکانت: abbas ghane / abbasghane2000@gmail.com / عضویت Sep 5 (۴ روز پیش) / ثبت‌نام با GitHub OAuth (Abbaz2gh) / بدون پسورد
+- ثبت‌نام OAuth → ایمیل خودکار verified است؛ هیچ هشدار verify هم در پنل نیست → فرضیه ایمیل منتفی
+- همه علت‌های سمت DNS/LE رد شد؛ شکست داخل پایپ‌لاین صدور Netlify است
+- تصمیم نهایی: پلن B — مهاجرت DNS/SSL به Cloudflare رایگان (bypass کامل سیستم گواهی Netlify)
+- نقشه: A apex → 75.2.60.5 پروکسی نارنجی | www CNAME → artanon.netlify.app پروکسی نارنجی | SSL mode = Full (نه strict، نه Flexible) | NS جدید در NIC.ir جایگزین ۴ تا nsone
+- دامنه در Netlify می‌ماند (روتینگ با Host header کار می‌کند)؛ هشدارهای Check DNS در Netlify نادیده گرفته می‌شود
+
+Stage Summary:
+- در انتظار اجرای کاربر؛ پس از تعویض NS و فعال شدن Universal SSL کلادفلر، تست نهایی https://artanon.ir
