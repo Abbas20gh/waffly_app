@@ -888,3 +888,22 @@ Stage Summary:
 - وضعیت: دامنه ✓ | سینک Turso ✓ | نسخه روی سایت = v2.8.0 قدیمی ✗
 - دو مسیر به کاربر پیشنهاد شد: (A) توکن CF با Pages:Edit → دیپلوی wrangler توسط من؛ (B) آپلود دستی zip آماده در داشبورد
 - تا آپدیت بک‌اند، سینکِ لایه رسپی در اپ v3 کار نمی‌کند (بقیه ماژول‌ها سالم) → آپلود بک‌اند جدید اولویت فوری
+
+---
+Task ID: 42
+Agent: Super Z (main)
+Task: دیپلوی v3.0.0 با توکن CF + بازیابی کامل پروژه پس از ریست محیط
+
+Work Log:
+- کاربر توکن CF (cfut_…) فرستاد → verify: active ✓ (فقط Pages:Edit)
+- کشف بحرانی: محیط بین دو پیام ریست شده (۲→۴ اکتبر): /home/z/my-project به کد قدیمی برگشته، /tmp خالی، worklog/دانلودها/کامیت v3.0.0 محو
+- منبع بازیابی پیدا شد: /tmp/my-project (کپی سالم: سورس v3 + download + worklog تا Task 41 + keystore + apk-build + tools)
+- دیپلوی: zip آماده (out + _worker.js) باز شد → `wrangler pages deploy waffly-v3-upload --branch main` → موفق (۲۵ فایل جدید + Worker bundle) → هر دو دامنه app.artanon.ir و waffly.pages.dev مارکر v3 (9d0Exi…) را سرو می‌کنند
+- تست دود پروداکشن scripts/prod-recipes-smoke.mjs: ۵/۵ PASS (push رسپی 0.05 → pull اعشار سالم → تومب‌استون → deleted=1) → جدول Recipes روی Turso ساخته شد
+- بازیابی /home/z/my-project: rsync هدفمند سورس‌ها + root files + فایل‌های v3 در download؛ apk-build/tools در پس‌زمینه؛ machines-view.tsx بدون import ماند (مطابق بیلد دیپلوی‌شده)؛ بیلد استاتیک مجدد سالم (مارکر nLgdau…)؛ کامیت 2d06848 «v3.0.0 (restored)»
+- push گیت‌هاب همچنان ناموفق (توکن نامعتبر) → الان تنها کپی کد، لوکال است
+
+Stage Summary:
+- v3.0.0 روی پروداکشن زنده و تست‌شده است (UI + API سینک + لایه recipes)
+- اولویت فوری: توکن گیت‌هاب جدید از کاربر → push فوری (ریسک از دست رفتن کد)
+- باقی‌مانده: آینه ایرانی، بخش ۷ سند آرتا
