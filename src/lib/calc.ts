@@ -1,6 +1,6 @@
-// محاسبات کسب‌وکار — موجودی، بدحسابی، سود دوره، خریداران، سایر وجوه
-import type { Consumption, Customer, Expense, ExpenseCategory, Material, Production, Purchase, Sale, Setting, BreadType, MachineCost, Machine, OtherFund, Good } from './types'
-import { inRange, jalaliAbsDays, todayJalali, type Period } from './jalali'
+// محاسبات کسب‌وکار — موجودی، بدحسابی، سود دوره، خریداران، سایر وجوه، رسپی
+import type { Consumption, Customer, Expense, ExpenseCategory, Material, Production, Purchase, Sale, Setting, BreadType, MachineCost, Machine, OtherFund, Good, Recipe } from './types'
+import { inRange, jalaliAbsDays, todayJalali, faDigits, type Period } from './jalali'
 
 export interface DataBundle {
   breadTypes: BreadType[]
@@ -299,4 +299,33 @@ export function machineTotals(d: DataBundle, machineId: string) {
   const consumable = costs.filter(c => c.kind === 'CONSUMABLE').reduce((a, c) => a + (c.cost || 0), 0)
   const capital = costs.filter(c => c.kind === 'CAPITAL').reduce((a, c) => a + (c.cost || 0), 0)
   return { consumable, capital, total: consumable + capital, costs }
+}
+
+// ===== رسپی مواد اولیه (v3.0) — کسر خودکار با ثبت تولید =====
+export interface RecipeDeduction { materialId: string; material: Material; qty: number }
+
+/** مقدار مواد لازم برای تعداد مشخص نان از یک نوع، بر اساس رسپی‌های فعال (تجمیع چند قلم همان ماده) */
+export function recipeDeductions(
+  recipes: Recipe[],
+  materials: Material[],
+  breadTypeId: string,
+  breadCount: number,
+): RecipeDeduction[] {
+  if (breadCount <= 0) return []
+  const out = new Map<string, RecipeDeduction>()
+  for (const r of recipes) {
+    if (r.deleted || r.breadTypeId !== breadTypeId) continue
+    const m = materials.find(x => x.id === r.materialId && !x.deleted)
+    if (!m) continue
+    const qty = (r.qtyPerBread || 0) * breadCount
+    if (qty <= 0) continue
+    const prev = out.get(r.materialId)
+    out.set(r.materialId, { materialId: r.materialId, material: m, qty: (prev?.qty || 0) + qty })
+  }
+  return [...out.values()]
+}
+
+/** قالب‌بندی مقدار اعشاری با ارقام فارسی (تا ۳ رقم اعشار) */
+export function faQty(v: number): string {
+  return faDigits(Math.round(v * 1000) / 1000).replace('.', '٫')
 }

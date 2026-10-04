@@ -3,8 +3,8 @@
 // داشبورد — کارت‌های میان‌بر، نمودارها، هشدارها
 import { useMemo, useSyncExternalStore } from 'react'
 import {
-  Wheat, ShoppingCart, ShoppingBasket, Wrench, Calculator,
-  AlertTriangle, CheckCircle2, TrendingUp, Users, ReceiptText, PiggyBank,
+  Wheat, ShoppingCart, ShoppingBasket, Wallet, ClipboardList, Calculator,
+  AlertTriangle, CheckCircle2, TrendingUp, Users, ReceiptText, PiggyBank, Boxes, Percent,
 } from 'lucide-react'
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip,
@@ -20,10 +20,11 @@ import { useSetting } from '@/lib/localdb'
 import { cn } from '@/lib/utils'
 
 const MODULES: { key: ViewKey; title: string; desc: string; icon: typeof Wheat }[] = [
-  { key: 'production', title: 'تولید', desc: 'ثبت تولید روزانه، جعبه‌ها و مصرف مواد', icon: Wheat },
-  { key: 'sales', title: 'فروش', desc: 'ثبت فروش، تسویه مشتریان و چک‌ها', icon: ShoppingCart },
-  { key: 'purchases', title: 'خرید مواد', desc: 'تامین‌کنندگان، موجودی انبار', icon: ShoppingBasket },
-  { key: 'machines', title: 'دستگاه‌سازی', desc: 'تجهیزات نانوایی و دستگاه‌سازی', icon: Wrench },
+  { key: 'production', title: 'تولید', desc: 'ثبت سریع دسته‌ای، جعبه‌ها و رسپی', icon: Wheat },
+  { key: 'sales', title: 'فروش', desc: 'فاکتور، تسویه مشتریان و چک‌ها', icon: ShoppingCart },
+  { key: 'purchases', title: 'خرید مواد', desc: 'تامین‌کنندگان و موجودی انبار', icon: ShoppingBasket },
+  { key: 'expenses', title: 'هزینه‌ها', desc: 'دستمزد، کرایه، برق و گاز', icon: Wallet },
+  { key: 'reports', title: 'گزارش‌ها', desc: 'اکسل و PDF با بازه دلخواه', icon: ClipboardList },
   { key: 'accounting', title: 'حسابداری کل', desc: 'گزارش دوره‌ای سود و زیان', icon: Calculator },
 ]
 
@@ -48,7 +49,14 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: ViewKey) => void
   })
   const profitChart = periods.map(p => {
     const r = periodReport(d, p)
-    return { name: J_MONTHS[p.jm - 1], 'سود ناخالص': Math.round(r.profitGross) }
+    return { name: J_MONTHS[p.jm - 1], 'سود ناخالص': Math.round(r.profitGross), 'سود خالص': Math.round(r.profitNet) }
+  })
+  // نمودار تولید/ضایعات ماهانه (v3.0)
+  const productionChart = periods.map(p => {
+    const prods = active(d.productions).filter(x => x.date >= p.start && x.date <= p.end)
+    const produced = prods.reduce((a, x) => a + (x.totalProduced || 0), 0)
+    const waste = prods.reduce((a, x) => a + (x.waste || 0), 0)
+    return { name: J_MONTHS[p.jm - 1], 'تولید (نان)': produced, 'ضایعات': waste }
   })
   const topBuyers = useMemo(() =>
     buyerStats(d).slice(0, 5).map(b => ({ name: b.customer.name, 'خرید': Math.round(b.amount) })),
@@ -88,7 +96,7 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: ViewKey) => void
       </div>
 
       {/* کارت‌های میان‌بر ماژول‌ها */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {MODULES.map(m => (
           <button
             key={m.key}
@@ -110,11 +118,37 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: ViewKey) => void
         <StatCard title="وصول‌شده در دوره" value={faMoney(report.collected)} tone="positive" icon={<CheckCircle2 className="h-4 w-4" />} />
         <StatCard title="مانده مطالبات (کل)" value={faMoney(report.outstandingTotal)} tone={report.outstandingTotal > 0 ? 'warning' : 'default'} icon={<Users className="h-4 w-4" />} />
         <StatCard
-          title={`سود ناخالص دوره`}
-          value={faMoney(report.profitGross)}
-          tone={report.profitGross >= 0 ? 'positive' : 'negative'}
-          sub={`پس از کسر مواد: ${faMoneyShort(report.materialCost)}`}
+          title={`سود خالص دوره`}
+          value={faMoney(report.profitNet)}
+          tone={report.profitNet >= 0 ? 'positive' : 'negative'}
+          sub={`ناخالص: ${faMoneyShort(report.profitGross)} — هزینه‌ها: ${faMoneyShort(report.expensesTotalIncluded)}`}
           icon={<TrendingUp className="h-4 w-4" />}
+        />
+      </div>
+
+      {/* شاخص‌های تولیدی (v3.0) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatCard title={`تولید ${curPeriod.label}`} value={`${faDigits(report.productionTotals.reduce((a, x) => a + x.produced, 0))} نان`} sub={`${faDigits(report.productionTotals.reduce((a, x) => a + x.boxes, 0))} جعبه`} icon={<Boxes className="h-4 w-4" />} />
+        <StatCard
+          title={`ضایعات ${curPeriod.label}`}
+          value={`${faDigits(report.productionTotals.reduce((a, x) => a + x.waste, 0))} نان`}
+          sub={(() => {
+            const produced = report.productionTotals.reduce((a, x) => a + x.produced, 0)
+            const waste = report.productionTotals.reduce((a, x) => a + x.waste, 0)
+            return produced > 0 ? `نرخ: ${faDigits(Math.round((waste / produced) * 1000) / 10)}٪` : 'بدون تولید'
+          })()}
+          tone={report.productionTotals.reduce((a, x) => a + x.waste, 0) > 0 ? 'warning' : 'default'}
+          icon={<Percent className="h-4 w-4" />}
+        />
+        <StatCard title="هزینه‌های مشمول دوره" value={faMoney(report.expensesTotalIncluded)} sub={`${faDigits(report.expensesIncluded.length)} سرفصل`} icon={<Wallet className="h-4 w-4" />} />
+        <StatCard
+          title="پرفروش‌ترین نوع"
+          value={(() => {
+            const best = [...report.productionTotals].sort((a, b) => b.produced - a.produced)[0]
+            return best && best.produced > 0 ? best.breadType.name : '—'
+          })()}
+          sub="بر اساس تولید دوره"
+          icon={<Percent className="h-4 w-4" />}
         />
       </div>
 
@@ -158,21 +192,44 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: ViewKey) => void
 
         <Card className="waffly-card">
           <CardHeader className="pb-0">
-            <CardTitle className="text-sm">روند سود ناخالص ۶ دوره اخیر</CardTitle>
+            <CardTitle className="text-sm">روند سود ۶ دوره اخیر (ناخالص و خالص)</CardTitle>
           </CardHeader>
           <CardContent className="pt-3">
-            {mounted && profitChart.some(x => x['سود ناخالص'] !== 0) ? (
+            {mounted && profitChart.some(x => x['سود ناخالص'] !== 0 || x['سود خالص'] !== 0) ? (
               <ResponsiveContainer width="100%" height={230}>
                 <LineChart data={profitChart} margin={{ top: 5, left: 0, right: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                   <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} width={56} tickFormatter={(v: number) => faMoneyShort(v)} />
-                  <RTooltip formatter={(v: number | string) => [`${faDigits(typeof v === 'number' ? Math.round(v).toLocaleString('en') : v)} تومان`, 'سود ناخالص']} />
+                  <RTooltip formatter={(v: number | string, n: string) => [`${faDigits(typeof v === 'number' ? Math.round(v).toLocaleString('en') : v)} تومان`, n]} />
                   <Line type="monotone" dataKey="سود ناخالص" stroke="var(--chart-1)" strokeWidth={2.5} dot={{ r: 3.5, fill: 'var(--chart-1)' }} />
+                  <Line type="monotone" dataKey="سود خالص" stroke="var(--chart-2)" strokeWidth={2} strokeDasharray="5 3" dot={{ r: 3, fill: 'var(--chart-2)' }} />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
               <EmptyState title="داده کافی نیست" desc="برای محاسبه سود، ثبت تولید/مصرف مواد و فروش لازم است." icon={<TrendingUp className="h-5 w-5" />} />
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="waffly-card lg:col-span-2">
+          <CardHeader className="pb-0">
+            <CardTitle className="text-sm">تولید و ضایعات ۶ دوره اخیر (نان)</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-3">
+            {mounted && productionChart.some(x => x['تولید (نان)'] > 0) ? (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={productionChart} margin={{ top: 5, left: 0, right: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} width={48} tickFormatter={(v: number) => faDigits(v)} />
+                  <RTooltip formatter={(v: number | string, n: string) => [`${faDigits(typeof v === 'number' ? Math.round(v).toLocaleString('en') : v)} نان`, n]} />
+                  <Bar dataKey="تولید (نان)" fill="var(--chart-1)" radius={[6, 6, 0, 0]} maxBarSize={36} />
+                  <Bar dataKey="ضایعات" fill="var(--chart-5, #ef4444)" radius={[6, 6, 0, 0]} maxBarSize={22} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyState title="هنوز تولیدی ثبت نشده" desc="از بخش تولید، اولین ثبت سریع را انجام دهید تا نمودار نمایش داده شود." icon={<Boxes className="h-5 w-5" />} />
             )}
           </CardContent>
         </Card>

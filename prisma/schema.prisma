@@ -235,6 +235,19 @@ model CombinedInvoice {
   @@index([customerId])
 }
 
+// رسپی مواد اولیه (v3.0) — مقدار ماده به ازای هر یک نان؛ کسر خودکار با ثبت تولید
+model Recipe {
+  id          String @id
+  breadTypeId String
+  materialId  String
+  qtyPerBread Float  @default(0)
+  note        String?
+  updatedAt   Float
+  deleted     Int    @default(0)
+  @@index([breadTypeId])
+  @@index([materialId])
+}
+
 // شمارندهٔ سراسری شماره فاکتور (v2.8) — فقط سرور؛ سینک نمی‌شود
 model InvoiceCounter {
   id         String @id

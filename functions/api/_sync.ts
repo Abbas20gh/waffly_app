@@ -7,6 +7,7 @@ export const TABLES = [
   'customers', 'sales', 'suppliers', 'purchases',
   'machines', 'machineCosts', 'expenseCategories', 'expenses', 'otherFunds', 'settings', 'accounts',
   'combinedInvoices',
+  'recipes',
 ] as const
 export type SyncTbl = (typeof TABLES)[number]
 
@@ -19,6 +20,7 @@ export const PHYS: Record<SyncTbl, string> = {
   expenseCategories: 'ExpenseCategory', expenses: 'Expense', otherFunds: 'OtherFund', settings: 'Setting',
   accounts: 'Account',
   combinedInvoices: 'CombinedInvoice',
+  recipes: 'Recipe',
 }
 
 type FieldType = 'str' | 'num' | 'int' | 'strNull' | 'numNull'
@@ -42,6 +44,7 @@ export const FIELDS: Record<SyncTbl, Record<string, FieldType>> = {
   settings: { businessName: 'str', monthStartDay: 'int', badDebtDays: 'int', checkAlertDays: 'int', bankAccountName: 'str', bankCardNumber: 'str', bankSheba: 'str', bankName: 'str', shopPhones: 'str' },
   accounts: { name: 'str', kind: 'str', initialBalance: 'num', note: 'strNull', active: 'int' },
   combinedInvoices: { invoiceNumber: 'num', customerId: 'str', saleIds: 'str', date: 'str', totalAmount: 'num', paidAmount: 'num', remaining: 'num', note: 'strNull', createdBy: 'strNull' },
+  recipes: { breadTypeId: 'str', materialId: 'str', qtyPerBread: 'num', note: 'strNull' },
 }
 
 const s = (v: unknown, dflt = ''): string => (typeof v === 'string' ? v : v == null ? dflt : String(v))
@@ -135,6 +138,18 @@ export async function ensureSchema(db: Client): Promise<void> {
   for (const [col, dflt] of [['bankAccountName', "'علی سبيلی'"], ['bankCardNumber', "'6063-7312-5558-2299'"], ['bankSheba', "'IR730600000000300326236111'"], ['bankName', "'بانک ایران زمین'"], ['shopPhones', "'۰۹۱۰۴۳۶۱۲۳۳ ,۰۹۳۹۱۵۳۱۶۶۴'"]] as const) {
     if (!settingCols.has(col)) await db.execute(`ALTER TABLE "Setting" ADD COLUMN "${col}" TEXT NOT NULL DEFAULT ${dflt}`)
   }
+  // ۵) مهاجرت v3.0 — رسپی مواد اولیه (کسر خودکار مواد با ثبت تولید)
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS "Recipe" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "breadTypeId" TEXT NOT NULL DEFAULT '',
+      "materialId" TEXT NOT NULL DEFAULT '',
+      "qtyPerBread" REAL NOT NULL DEFAULT 0,
+      "note" TEXT,
+      "updatedAt" REAL NOT NULL DEFAULT 0,
+      "deleted" INTEGER NOT NULL DEFAULT 0
+    )
+  `)
   // ۳) seed مشعلی برای دیتابیس‌های موجود (دیتابیس خالی در ensureSeed گرفته می‌شود) — واحد از v2.5 جعبه است
   const g = await db.execute({ sql: `SELECT id FROM "Good" WHERE id = ?`, args: ['seed-gd-01'] })
   if (g.rows.length === 0) {

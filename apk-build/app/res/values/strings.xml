@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Waffly</string>
+    <string name="default_server_url">https://PLEASE-SET-YOUR-SERVER-URL</string>
+    <string name="setup_title">به Waffly خوش آمدید 👋</string>
+    <string name="setup_hint">آدرس سرور برنامه (از پیام تحویل) را وارد کنید</string>
+    <string name="setup_button">شروع برنامه</string>
+    <string name="offline_title">اتصال برقرار نشد</string>
+    <string name="offline_msg">به سرور دسترسی نیست. اینترنت را بررسی کنید یا آدرس سرور را تغییر دهید.</string>
+    <string name="retry">تلاش دوباره</string>
+    <string name="change_url">تغییر آدرس سرور</string>
+    <string name="saved">ذخیره شد</string>
+</resources>

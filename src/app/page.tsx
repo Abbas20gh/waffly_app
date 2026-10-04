@@ -6,13 +6,14 @@ import { DashboardView } from '@/components/waffly/dashboard-view'
 import { ProductionView } from '@/components/waffly/production-view'
 import { SalesView } from '@/components/waffly/sales-view'
 import { PurchasesView } from '@/components/waffly/purchases-view'
-import { MachinesView } from '@/components/waffly/machines-view'
+import { ExpensesView } from '@/components/waffly/expenses-view'
+import { ReportsView } from '@/components/waffly/reports-view'
 import { AccountingView } from '@/components/waffly/accounting-view'
 import { SettingsView } from '@/components/waffly/settings-view'
 import { startSyncEngine } from '@/lib/sync-engine'
 import { Toaster } from '@/components/ui/toaster'
 
-const VALID_VIEWS: ViewKey[] = ['dashboard', 'production', 'sales', 'purchases', 'machines', 'accounting', 'settings']
+const VALID_VIEWS: ViewKey[] = ['dashboard', 'production', 'sales', 'purchases', 'expenses', 'reports', 'accounting', 'settings']
 
 export default function Home() {
   const [view, setView] = useState<ViewKey>('dashboard')
@@ -48,7 +49,8 @@ export default function Home() {
         {view === 'production' && <ProductionView />}
         {view === 'sales' && <SalesView />}
         {view === 'purchases' && <PurchasesView />}
-        {view === 'machines' && <MachinesView />}
+        {view === 'expenses' && <ExpensesView />}
+        {view === 'reports' && <ReportsView />}
         {view === 'accounting' && <AccountingView />}
         {view === 'settings' && <SettingsView />}
       </AppShell>

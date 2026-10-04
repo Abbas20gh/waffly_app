@@ -23,6 +23,7 @@ export const MODELS: Record<SyncTbl, string> = {
   settings: 'setting',
   accounts: 'account',
   combinedInvoices: 'combinedInvoice',
+  recipes: 'recipe',
 }
 
 export const FIELDS: Record<SyncTbl, Record<string, FieldType>> = {
@@ -44,6 +45,7 @@ export const FIELDS: Record<SyncTbl, Record<string, FieldType>> = {
   settings: { businessName: 'str', monthStartDay: 'int', badDebtDays: 'int', checkAlertDays: 'int', bankAccountName: 'str', bankCardNumber: 'str', bankSheba: 'str', bankName: 'str', shopPhones: 'str' },
   accounts: { name: 'str', kind: 'str', initialBalance: 'num', note: 'strNull', active: 'int' },
   combinedInvoices: { invoiceNumber: 'num', customerId: 'str', saleIds: 'str', date: 'str', totalAmount: 'num', paidAmount: 'num', remaining: 'num', note: 'strNull', createdBy: 'strNull' },
+  recipes: { breadTypeId: 'str', materialId: 'str', qtyPerBread: 'num', note: 'strNull' },
 }
 
 const s = (v: unknown, dflt = '') => (typeof v === 'string' ? v : v == null ? dflt : String(v))

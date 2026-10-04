@@ -3,8 +3,8 @@
 import { useState } from 'react'
 import Image from 'next/image'
 import {
-  LayoutDashboard, Wheat, ShoppingCart, ShoppingBasket, Wrench,
-  Calculator, Settings, Menu, UserRound,
+  LayoutDashboard, Wheat, ShoppingCart, ShoppingBasket,
+  Calculator, Settings, Menu, UserRound, Wallet, ClipboardList,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SyncBadge } from './sync-badge'
@@ -17,14 +17,15 @@ import {
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 
-export type ViewKey = 'dashboard' | 'production' | 'sales' | 'purchases' | 'machines' | 'accounting' | 'settings'
+export type ViewKey = 'dashboard' | 'production' | 'sales' | 'purchases' | 'expenses' | 'reports' | 'accounting' | 'settings'
 
 export const NAV_ITEMS: { key: ViewKey; label: string; icon: typeof LayoutDashboard }[] = [
   { key: 'dashboard', label: 'داشبورد', icon: LayoutDashboard },
   { key: 'production', label: 'تولید', icon: Wheat },
   { key: 'sales', label: 'فروش', icon: ShoppingCart },
   { key: 'purchases', label: 'خرید مواد', icon: ShoppingBasket },
-  { key: 'machines', label: 'دستگاه‌سازی', icon: Wrench },
+  { key: 'expenses', label: 'هزینه‌ها', icon: Wallet },
+  { key: 'reports', label: 'گزارش‌ها', icon: ClipboardList },
   { key: 'accounting', label: 'حسابداری', icon: Calculator },
   { key: 'settings', label: 'تنظیمات', icon: Settings },
 ]
@@ -139,8 +140,8 @@ export function AppShell({ view, onNavigate, children }: {
             ))}
           </nav>
           <div className="p-4 text-[11px] text-muted-foreground border-t">
-            <p className="font-semibold text-foreground/70">Waffly v2.8.0</p>
-            <p className="mt-1 leading-5">آفلاین‌محور • سینک خودکار<br />تقویم شمسی • ۳ کاربر هم‌زمان</p>
+            <p className="font-semibold text-foreground/70">Waffly v3.0.0</p>
+            <p className="mt-1 leading-5">آفلاین‌محور • سینک خودکار<br />تقویم شمسی • رسپی و گزارش‌ساز</p>
           </div>
         </aside>
 
@@ -179,7 +180,7 @@ export function AppShell({ view, onNavigate, children }: {
       {/* ===== ناوبری پایین موبایل ===== */}
       <nav className="fixed bottom-0 inset-x-0 z-40 md:hidden border-t bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80 select-none" aria-label="ناوبری پایین">
         <div className="flex justify-around px-1 py-1.5" style={{ paddingBottom: 'max(0.375rem, env(safe-area-inset-bottom))' }}>
-          {NAV_ITEMS.slice(0, 6).map(item => (
+          {NAV_ITEMS.slice(0, 5).map(item => (
             <button
               key={item.key}
               onClick={() => nav(item.key)}

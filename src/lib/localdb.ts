@@ -50,6 +50,7 @@ class WafflyDB extends Dexie {
   settings!: Table<BaseRow, string>
   accounts!: Table<BaseRow, string>
   combinedInvoices!: Table<BaseRow, string>
+  recipes!: Table<BaseRow, string>
   outbox!: Table<OutboxItem, number>
   meta!: Table<{ key: string; value: unknown }, string>
 
@@ -88,6 +89,10 @@ class WafflyDB extends Dexie {
     // v5: فاکتورهای ترکیبی (v2.8) — فیلدهای discount/invoiceNumber فروش غیرایندکسی‌اند
     this.version(5).stores({
       combinedInvoices: 'id, updatedAt, date, customerId',
+    })
+    // v6: رسپی مواد اولیه (v3.0) — کسر خودکار مواد با ثبت تولید
+    this.version(6).stores({
+      recipes: 'id, updatedAt, breadTypeId, materialId',
     })
   }
 }

@@ -4,6 +4,7 @@ export const TABLES = [
   'customers', 'sales', 'suppliers', 'purchases',
   'machines', 'machineCosts', 'expenseCategories', 'expenses', 'otherFunds', 'settings', 'accounts',
   'combinedInvoices',
+  'recipes',
 ] as const
 
 export type SyncTbl = (typeof TABLES)[number]
@@ -25,6 +26,15 @@ export interface Box extends BaseRow {
   hasEssence?: number; essenceType?: string | null; note?: string | null
 }
 export interface Material extends BaseRow { name: string; unit: string; minStock: number; active?: number }
+
+/** رسپی مواد اولیه — از v3.0: مقدار ماده برای هر یک نان (کسر خودکار با ثبت تولید) */
+export interface Recipe extends BaseRow {
+  breadTypeId: string
+  materialId: string
+  /** مقدار ماده به واحدِ خود ماده، به ازای هر یک عدد نان */
+  qtyPerBread: number
+  note?: string | null
+}
 
 /** کالای بازرگانی — خرید و فروش بدون تولید (مثل نان مشعلی) — از v2.5 همهٔ مقادیر با واحد «جعبه» */
 export interface Good extends BaseRow {
