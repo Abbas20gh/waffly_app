@@ -1055,3 +1055,19 @@ Work Log:
 
 Stage Summary:
 - APK آماده نصب است؛ فقط دیپلوی سرور (فیکس pull-500) مانده که به توکن Cloudflare Pages:Edit نیاز دارد
+
+---
+Task ID: 49-c (پایان)
+Agent: Super Z (main)
+Task: دیپلوی فیکس سرور + تأیید نهایی
+
+Work Log:
+- توکن Cloudflare از کاربر دریافت شد (abbasghane2000@gmail.com تأیید شد)
+- بیلد وب نهایی (SW mv3jtmre) → wrangler pages deploy → موفق (۲۳ فایل جدید + Functions bundle)
+- تست حیاتی: /api/sync/pull?since=0 → HTTP 200 (قبلاً 500!) — فیکس skip جدول ناشناخته کار می‌کند
+- pull از پشت سمّی‌ها (seq 163) → 200 | full → 200
+- چرخه اعلان کامل: push → اعلان CREATE «ثبت سرفصل هزینه» ✓ | حذف → اعلان DELETE ✓
+- E2E کامل: pull ✓، تولید/جعبه/کسر ✓، هزینه‌ها ✓ — فقط ۵ مورد recipes شکست خورد که عمداً است (سینک recipes در این نسخه نیست و کلاینت UI رسپی ندارد)
+
+Stage Summary:
+- هر دو علت مشکل کاربر برطرف شد: (۱) APK v3.1.1 به app.artanon.ir وصل می‌شود (بای‌پس فیلترینگ pages.dev) (۲) سرور دیگر روی cursor قدیمی 500 نمی‌دهد — دستگاه‌های موجود با سینک بعدی خودشان ترمیم می‌شوند
