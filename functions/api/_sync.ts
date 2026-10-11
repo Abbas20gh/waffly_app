@@ -303,10 +303,12 @@ export async function ensureSeed(db: Client): Promise<boolean> {
 }
 
 /** ثبت تغییرات کلاینت‌ها با حل تعارض Last-Write-Wins — پرت از sync/push/route.ts
- *  v2.7: SELECT گروهی برای چک LWW + یک batch برای هر جدول — پایدار زیر سقف subrequest کارگران ابری */
-export async function pushOps(db: Client, ops: unknown): Promise<{ accepted: number; skipped: number }> {
+ *  v2.7: SELECT گروهی برای چک LWW + یک batch برای هر جدول — پایدار زیر سقف subrequest کارگران ابری
+ *  v3.1: SELECT کامل ردیف قبلی → خروجی changes برای تولید اعلان (به _notify.ts) */
+export async function pushOps(db: Client, ops: unknown): Promise<{ accepted: number; skipped: number; changes: { tbl: SyncTbl; row: Record<string, unknown>; prev: Record<string, unknown> | null }[] }> {
   let accepted = 0
   let skipped = 0
+  const changes: { tbl: SyncTbl; row: Record<string, unknown>; prev: Record<string, unknown> | null }[] = []
   const list = Array.isArray(ops) ? ops : []
 
   const byTbl = new Map<SyncTbl, Record<string, unknown>[]>()
@@ -322,18 +324,23 @@ export async function pushOps(db: Client, ops: unknown): Promise<{ accepted: num
 
   for (const [tbl, rows] of byTbl) {
     const phys = PHYS[tbl]
-    // ۱) چک LWW همه رکوردهای این جدول با یک SELECT
+    // ۱) وضعیت قبلی همه رکوردهای این جدول با یک SELECT (کامل — برای اعلان و LWW)
     const ids = rows.map(r => r.id as string)
     const ph = ids.map(() => '?').join(',')
-    const ex = await db.execute({ sql: `SELECT id, updatedAt FROM "${phys}" WHERE id IN (${ph})`, args: ids })
-    const existing = new Map<string, number>()
-    for (const r of ex.rows) existing.set(String(r['id']), Number(r['updatedAt'] ?? 0))
+    const ex = await db.execute({ sql: `SELECT * FROM "${phys}" WHERE id IN (${ph})`, args: ids })
+    const existing = new Map<string, Record<string, unknown>>()
+    for (const r of ex.rows) {
+      const o = rowToObj(ex, r)
+      existing.set(String(o['id']), o)
+    }
 
     // ۲) رکوردهای پذیرفته‌شده در یک batch (INSERT + SyncLog)
     const toWrite = rows.filter(row => {
-      const exUpd = existing.get(row.id as string)
+      const prev = existing.get(row.id as string) ?? null
+      const exUpd = prev ? Number(prev['updatedAt'] ?? 0) : undefined
       if (exUpd !== undefined && exUpd >= (row.updatedAt as number)) { skipped++; return false }
       accepted++
+      changes.push({ tbl, row, prev })
       return true
     })
     if (toWrite.length === 0) continue
@@ -347,7 +354,7 @@ export async function pushOps(db: Client, ops: unknown): Promise<{ accepted: num
     })))
     await db.batch(stmts as unknown as Parameters<Client['batch']>[0], 'write')
   }
-  return { accepted, skipped }
+  return { accepted, skipped, changes }
 }
 
 

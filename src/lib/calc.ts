@@ -27,8 +27,12 @@ export const parseItems = (sale: Sale) => {
 }
 
 // ===== فروش =====
-export interface Settleable { totalAmount?: number; paidAmount?: number }
-export const saleDue = (s: Settleable) => Math.max(0, (s.totalAmount || 0) - (s.paidAmount || 0))
+// v2.7.2 — باگ «خرید پرداخت‌نشده همیشه تسویه‌شده سبز نشان داده می‌شد»:
+//   effectiveSettled قبلاً فقط totalAmount (فیلد فروش) را می‌شناخت؛ خریدها فیلد cost دارند
+//   → totalAmount=undefined→0 → due=0 → همیشه PAID. حالا cost هم پشتیبانی می‌شود.
+export interface Settleable { totalAmount?: number; cost?: number; paidAmount?: number }
+export const settleTotal = (s: Settleable) => (s.totalAmount ?? s.cost) || 0
+export const saleDue = (s: Settleable) => Math.max(0, settleTotal(s) - (s.paidAmount || 0))
 
 export function effectiveSettled(s: Settleable): 'PAID' | 'PARTIAL' | 'UNPAID' {
   const due = saleDue(s)

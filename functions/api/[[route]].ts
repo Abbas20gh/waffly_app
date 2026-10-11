@@ -1,7 +1,8 @@
 // Cloudflare Pages Functions — معادل کامل API های Next.js
-// /api — /api/sync/push — /api/sync/pull — /api/sync/full — /api/backup
+// /api — /api/sync/push — /api/sync/pull — /api/sync/full — /api/backup — /api/sync/notifications (v3.1)
 import { createClient, type Client } from '@libsql/client'
 import { pushOps, pullRows, fullSnapshot, ensureSchema } from './_sync'
+import { ensureNotifTable, buildNotifications, insertNotifications, fetchNotifications, sendTelegramNotifications, classifyOp } from './_notify'
 
 // ⚠️ CORS — حیاتی برای اپ اندروید (Capacitor WebView با origin https://localhost)
 // بدون این هدرها، fetch های سمت APK توسط مرورگر بلاک می‌شوند:
@@ -29,6 +30,8 @@ interface Ctx {
   request: Request
   env: Env
   params: { route?: string | string[] }
+  /** Pages Functions — ادامه اجرای پس از پاسخ (ارسال تلگرام بدون معطلی کلاینت) */
+  waitUntil?: (p: Promise<unknown>) => void
 }
 
 // کلاینت libsql در سطح isolate کش می‌شود (ارزان است، ولی بهتر است یک بار ساخته شود)
@@ -77,8 +80,43 @@ export async function onRequest(ctx: Ctx): Promise<Response> {
       const body = await ctx.request.json().catch(() => null) as { ops?: unknown } | null
       const ops = Array.isArray(body?.ops) ? body!.ops : []
       if (ops.length === 0) return json({ accepted: 0, skipped: 0, serverTime: Date.now() })
-      const { accepted, skipped } = await pushOps(db, ops)
-      return json({ accepted, skipped, serverTime: Date.now() })
+      const { accepted, skipped, changes } = await pushOps(db, ops)
+      // ===== v3.1 اعلان‌ها: از هر تغییر پذیرفته‌شده (هر دستگاهی) اعلان فارسی + تلگرام فوری =====
+      let notifCount = 0
+      try {
+        await ensureNotifTable(db)
+        const classified = changes.map(c => ({ ...c, op: classifyOp(c.tbl, c.prev, c.row) }))
+        const notifs = await buildNotifications(db, classified)
+        if (notifs.length > 0) {
+          await insertNotifications(db, notifs)
+          notifCount = notifs.length
+          const tg = sendTelegramNotifications(ctx.env, notifs).catch(() => null)
+          if (ctx.waitUntil) ctx.waitUntil(tg)
+          else void tg
+        }
+      } catch (ne) {
+        // اعلان هرگز نباید سینک اصلی را بشکند
+        console.error('notify error', ne)
+      }
+      return json({ accepted, skipped, serverTime: Date.now(), notifCount })
+    }
+
+    // ===== v3.1 اعلان‌ها — زنگ داخل اپ (همه دستگاه‌ها همین را می‌خوانند) =====
+    if (path === 'sync/notifications' && (ctx.request.method === 'GET' || ctx.request.method === 'POST')) {
+      await ensureSchema(db)
+      await ensureNotifTable(db)
+      let since = 0
+      let limit = 100
+      if (ctx.request.method === 'POST') {
+        const b = await ctx.request.json().catch(() => null) as { since?: unknown; limit?: unknown } | null
+        since = Number(b?.since || 0) || 0
+        limit = Number(b?.limit || 100) || 100
+      } else {
+        since = Number(url.searchParams.get('since') || 0) || 0
+        limit = Number(url.searchParams.get('limit') || 100) || 100
+      }
+      const notifications = await fetchNotifications(db, since, limit)
+      return json({ notifications, serverTime: Date.now() })
     }
 
     // دریافت افزایشی — GET و POST هر دو پشتیبانی می‌شوند

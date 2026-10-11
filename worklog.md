@@ -830,3 +830,74 @@ Stage Summary:
 - سایت آرتا کاملاً امن و زنده: مهاجرت Netlify DNS → Cloudflare رایگان موفق
 - معماری نهایی: بازدیدکننده → CF edge (TLS + کش) → Netlify 75.2.60.5 → Next.js store + Turso
 - درس پرونده: خطای provisioning جبری Netlify با bypass لایه DNS/SSL حل شد؛ NS تعویض در NIC.ir بسیار سریع (~۲ دقیقه) اعمال می‌شود
+
+---
+Task ID: 45
+Agent: Super Z (main)
+Task: رفع باگ تسویه خرید (علامت سبز اشتباه) + ممیزی کامل کل اپ و یافتن/رفع سایر باگ‌ها
+
+Work Log:
+- گزارش کاربر: در «خرید و انبار» انتخاب «پرداخت‌نشده» و ثبت → نشان سبز «تسویه‌شده» نمایش داده می‌شد
+- ریشه‌یابی: در calc.ts تابع effectiveSettled/saleDue فقط totalAmount (فیلد فروش) را می‌شناخت؛ Purchase فیلد cost دارد → totalAmount=undefined→0 → due=0 → همیشه PAID برای همه خریدها (حتی پرداخت‌نشده و جزئی)
+- Fix 1 (calc.ts): Settleable به { totalAmount?, cost?, paidAmount? } گسترش یافت + settleTotal() جدید: totalAmount ?? cost → نشان وضعیت خریدها حالا درست: UNPAID قرمز، PARTIAL کهربایی با مبلغ، PAID سبز
+- ممیزی کامل فایل‌به‌فایل انجام شد: sales-view (۹۶۳ خط)، purchases-view (۶۶۰)، production-view (۷۴۴)، accounting-view (۶۸۵)، machines-view، dashboard، settings، bits، inline-picker، jalali-date، jalali، boxcode، localdb، sync-engine، calc، invoice، export، invoice-dialog/visual/pdf، types، goods-units، hooks، functions/api/_sync.ts + [[route]].ts، sync-badge، page.tsx، app-shell
+- Fix 2 (sales-view.tsx): دکمه «افزودن قلم» boxId/boxCode را از قلم اول به ارث می‌برد → کد جعبه چسبیده به قلم جدید/نوع دیگر = خراب کردن مانده جعبه؛ همچنین تغییر دستی نوع قلم حالا کد جعبه کهنه را پاک می‌کند
+- Fix 3 (settings-view.tsx): دکمه «پشتیبان روی سرور» روی Cloudflare همیشه 501 می‌گرفت و پیام «ناموفق بود» نادرست می‌داد؛ حالا پیام واقعی سرور (بکاپ خودکار پلتفرم) نمایش داده می‌شود + متن راهنمای نادرست «پشتیبان خودکار روزانه ۱۴ نسخه» اصلاح شد
+- تست رگرسیون: scripts/test-settle-fix.ts با ۹ کیس (فروش/خرید × PAID/PARTIAL/UNPAID + saleDue) → ALL PASS
+- نکات بررسی‌شده و سالم: منطق چک‌ها/بدحساب‌ها، گردش حساب‌ها (ledgerOf/statsOf)، LWW سینک، شمارنده فاکتور اتمیک، نرمال‌سازی جعبه، فرمول‌های periodReport، تلگرام فاکتور، کد جعبه MM DD S، تقویم جلالی
+- بیلد: node scripts/build-pages.mjs → out/ (SW نسخه mv20aqg5) → wrangler pages deploy موفق
+- تأیید پروداکشن: https://app.artanon.ir → 200، /api → 200، sw.js حاوی mv20aqg5 (نسخه جدید زنده)
+- گیت: کامیت 26f051c ساخته شد؛ push ناموفق → توکن GitHub PAT منقضی/باطل (API 401 Bad credentials)
+
+Stage Summary:
+- باگ گزارش‌شده کاربر ریشه‌ای رفع شد + ۲ باگ دیگر یافت و رفع شد
+- پروداکشن (app.artanon.ir + waffly.pages.dev) به‌روز و زنده است
+- ⚠️ معوق: push به گیت‌هاب نیازمند PAT جدید از کاربر (توکن فعلی 401 می‌دهد)
+
+---
+Task ID: 46
+Agent: Super Z (main)
+Task: ساخت APK نسخه 3.0.0 (شامل فیکس تسویه) + دیپلوی وب نسخه‌دار
+
+Work Log:
+- نسخه‌ها: android/app/build.gradle → versionCode 15 / versionName 3.0.0 | settings-view.tsx → «نسخه ۳.۰.۰»
+- سندباکس ریست شده بود (.jdk21 و .android-sdk نبودند) → JDK 21 (Temurin در .jdk21) + cmdline-tools + SDK 36 + build-tools 36 (و 35 توسط AGP) دوباره نصب شد
+- بیلد وب برای APK: NEXT_PUBLIC_API_BASE=https://waffly.pages.dev node scripts/build-pages.mjs → کش sw «apk-mv21eyfc»
+- صحت‌سنجی باندل پیش از پک: فیکس تسویه (totalAmount??) + «۳.۰.۰» + API_BASE همه در chunks یافت شد ✓ → npx cap sync android
+- بیلد: gradlew assembleRelease (JDK21 + local.properties → sdk.dir) موفق
+- صحت‌سنجی aapt: package com.abbas20gh.waffly، versionCode=15، versionName=3.0.0 ✓
+- صحت‌سنجی apksigner: SHA-256 گواهی a31b9080…cda = یکسان با نسخه‌های قبلی → نصب آپدیت بدون حذف ✓
+- صحت‌سنجی داخل APK: assets/public شامل فیکس تسویه + نسخه ۳.۰.۰ + waffly.pages.dev (API_BASE) ✓
+- تحویل: download/Waffly-v3.0.0.apk (8.5MB)
+- دیپلوی وب (بدون API_BASE): کش «mv21kp06» → waffly.pages.dev + app.artanon.ir هر دو 200، sw.js جدید زنده
+- چک API پروداکشن: GET/POST sync/pull → 200 (500های اولیه موقتی/cold-start مهاجرت اسکیما بود)، sync/full → 200
+
+Stage Summary:
+- APK v3.0.0 (versionCode 15) امضاشده با همان کلید قبلی و حاوی فیکس تسویه + ۲ فیکس دیگر آماده تحویل است
+- وب پروداکشن هم نسخه ۳.۰.۰ شد (کاربر وب را hard-refresh کند تا نسخه جدید SW فعال شود)
+- معوق قبلی پابرجا: push گیت‌هاب نیازمند PAT جدید (توکن فعلی 401)
+
+---
+Task ID: 47
+Agent: Super Z (main)
+Task: سیستم اعلان کامل وافلی (تلگرام + نوتیف اندروید + زنگ داخل اپ) — نسخه 3.1.0
+
+Work Log:
+- نیاز کاربر: هر کاری از هر دستگاهی (APK یا وب) → اعلان. جواب‌ها: هر ۳ مقصد، همه رویدادها، جزئیات کامل، کار خودی هم، فوری، ثبت+ویرایش+حذف
+- سرور (functions/api/_notify.ts جدید): جدول Notification روی Turso (با ایندکس ts) + buildNotifications با lookup فارسی (نام مشتری/ماده/فروشنده/سرفصل/حساب/نان/کالا/دستگاه) + classifyOp (CREATE/UPDATE/DELETE/NONE) + rowEquals برای حذف نویز repair (محتوای یکسان = بدون اعلان) + cap 200/push + پاکسازی خودکار ۳۰روزه + sendTelegramNotifications (ضداسپم: بالای ۲۵ مورد = پیام خلاصه)
+- pushOps (_sync.ts): SELECT * به‌جای id,updatedAt → prev کامل برای classify؛ خروجی changes
+- [[route]].ts: push → اعلان + ctx.waitUntil تلگرام (خطای اعلان هرگز سینک را نمی‌شکند) + endpoint جدید GET/POST /api/sync/notifications
+- کلاینت: src/lib/notify.ts (استور useSyncExternalStore + کش localStorage ۱۰۰تایی + خوانده‌شده per-device + maybeLocalNotify برای APK با @capacitor/local-notifications@8.3.1) + notifications-bell.tsx (زنگ هدر با badge قرمز، پنل Popover، پولینگ ۶۰ثانیه + after-sync + visibility) + اتصال در sync-engine
+- نسخه‌ها: build.gradle versionCode 16 / 3.1.0 + settings «۳.۱.۰» + سایدبار v3.1.0
+- تست: scripts/test-notify.ts با db جعلی → ۲۰/۲۰ پاس (classify ۶کیس، بدنه فارسی فروش/خرید مواد/خرید کالا/هزینه/تولید/حذف، ضداسپم، ترتیب)؛ tsc فقط خطاهای ازقبل‌موجود (chart/backup)
+- سندباکس دوباره dotfiles را پاک کرد (.jdk21/.android-sdk) → بازسازی از .tools + SDK reinstall
+- e2e پروداکشن: push CREATE/DELETE دسته هزینه تست → notifCount=1 در هر دو → /api/sync/notifications هر دو را با متن فارسی درست برگرداند
+- دیپلوی وب: کش mv2lo35v → app.artanon.ir 200 + notif-api 200
+- APK: بیلد با NEXT_PUBLIC_API_BASE → cap sync (۳ پلاگین) → assembleRelease → aapt v16/3.1.0 + امضای a31b9080…(یکسان) + کد اعلان/زنگ/پلاگین داخل APK تأیید
+- تحویل: download/Waffly-v3.1.0.apk (8.5MB)
+
+Stage Summary:
+- سیستم اعلان ۳کاناله کامل شد: تلگرام فوری (حتی اپ بسته) + نوتیف سیستم اندروید هنگام اجرای اپ + زنگ داخل اپ روی همه دستگاه‌ها
+- محدودیت شناخته‌شده: نوتیف اندروید وقتی اپ کاملاً بسته است فقط از مسیر تلگرام می‌آید (FCM نیازمند پروژه Firebase کاربر است — بعداً قابل افزودن)
+- دو اعلان تست روی پروداکشن تولید شد (کاربر در تلگرام و زنگ اپ خواهد دید)
+- معوق قبلی: push گیت‌هاب نیازمند PAT جدید

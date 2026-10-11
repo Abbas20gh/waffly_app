@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SyncBadge } from './sync-badge'
+import { NotificationsBell } from './notifications-bell'
 import { todayPretty } from '@/lib/jalali'
 import { getActiveUser, setActiveUser } from '@/lib/localdb'
 import {
@@ -112,6 +113,10 @@ export function AppShell({ view, onNavigate, children }: {
           </DropdownMenu>
 
           <div className="[&_button]:bg-white/10 [&_button]:border-white/20 [&_button]:text-white [&_button:hover]:bg-white/20">
+            <NotificationsBell />
+          </div>
+
+          <div className="[&_button]:bg-white/10 [&_button]:border-white/20 [&_button]:text-white [&_button:hover]:bg-white/20">
             <SyncBadge />
           </div>
         </div>
@@ -139,7 +144,7 @@ export function AppShell({ view, onNavigate, children }: {
             ))}
           </nav>
           <div className="p-4 text-[11px] text-muted-foreground border-t">
-            <p className="font-semibold text-foreground/70">Waffly v2.8.0</p>
+            <p className="font-semibold text-foreground/70">Waffly v3.1.0</p>
             <p className="mt-1 leading-5">آفلاین‌محور • سینک خودکار<br />تقویم شمسی • ۳ کاربر هم‌زمان</p>
           </div>
         </aside>

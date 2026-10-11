@@ -104,8 +104,12 @@ export function SettingsView() {
     setBusy(true)
     try {
       const res = await fetch(`${API_BASE}/api/backup?action=create`)
-      const data = await res.json() as { ok?: boolean; file?: string }
+      const data = await res.json() as { ok?: boolean; file?: string; error?: string; message?: string }
       if (data.ok) { toast({ title: 'پشتیبان ساخته شد', description: data.file || undefined }); void loadBackups() }
+      else if (data.error === 'serverless' && data.message) {
+        // هاست ابری (مثل Cloudflare Pages) — بکاپ خودکار سمت پلتفرم است، خطای کاربر نیست
+        toast({ title: 'پشتیبان‌گیری خودکار پلتفرم', description: data.message })
+      }
       else toast({ title: 'ساخت پشتیبان ناموفق بود', variant: 'destructive' })
     } catch { toast({ title: 'برای پشتیبان سرور، اینترنت لازم است', variant: 'destructive' }) }
     setBusy(false)
@@ -144,7 +148,7 @@ export function SettingsView() {
   return (
     <div className="space-y-5">
       {/* APP_VERSION — با هر آپدیت APK/وب به‌روز شود */}
-      <PageHeader title="تنظیمات" subtitle="دوره حسابداری، هشدارها، سینک، پشتیبان‌گیری و نصب اپ — نسخه ۲.۸.۰" icon={<SettingsIcon className="h-5 w-5" />} />
+      <PageHeader title="تنظیمات" subtitle="دوره حسابداری، هشدارها، سینک، پشتیبان‌گیری و نصب اپ — نسخه ۳.۱.۰" icon={<SettingsIcon className="h-5 w-5" />} />
 
       <div className="grid lg:grid-cols-2 gap-4 items-start">
         <Card className="waffly-card">
@@ -312,8 +316,9 @@ export function SettingsView() {
                 </label>
               </div>
               <p className="text-[11px] text-muted-foreground leading-5">
-                پشتیبان‌گیری خودکار روزانه: هر روز که اپ باز شود (و آنلاین باشد)، در صورت گذشت ۲۴ ساعت از آخرین
-                پشتیبان، خودکار یک نسخه روی سرور ذخیره می‌شود (۱۴ نسخه آخر نگه داشته می‌شوند).
+                در حالت هاست ابری، نسخهٔ پشتیبان به‌صورت خودکار توسط پلتفرم نگهداری می‌شود؛ برای پشتیبان دستی و قابل‌نگهداری
+                محلی، از «دانلود JSON» استفاده کنید و فایل را جایی امن ذخیره کنید. در حالت سرور اختصاصی، پشتیبان روزانه
+                خودکار روی سرور ساخته می‌شود.
               </p>
 
               <div className="rounded-xl border overflow-hidden">

@@ -8,6 +8,7 @@ import {
   isBootstrapped, markBootstrapped, putRemoteRows, replaceAllFromServer,
   outboxCount, normalizeGoodsUnits, TABLES, type SyncTbl,
 } from './localdb'
+import { refreshNotifications } from './notify'
 
 interface SyncState {
   online: boolean
@@ -140,6 +141,8 @@ export async function syncNow(): Promise<void> {
     await pushOutbox()
     await pullIncremental()
     setState({ lastSyncAt: Date.now(), pendingCount: await outboxCount() })
+    // v3.1 — اعلان‌های جدید (از همه دستگاه‌ها) بعد از سینک موفق بروز شوند
+    void refreshNotifications()
   } catch (e) {
     setState({ error: e instanceof Error ? e.message : 'sync error' })
   } finally {

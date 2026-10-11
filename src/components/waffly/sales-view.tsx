@@ -549,7 +549,8 @@ function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, 
                     options={itemOptions}
                     onChange={v => {
                       const g = goods.some(x => x.id === v)
-                      updateItem(idx, { breadTypeId: v, kind: g ? 'GOOD' : 'BREAD' })
+                      // تغییر دستی نوع قلم = کد جعبهٔ قبلی دیگر معنا ندارد (انتخاب جعبه فقط برای همان نوع معتبر بود)
+                      updateItem(idx, { breadTypeId: v, kind: g ? 'GOOD' : 'BREAD', boxId: undefined, boxCode: undefined })
                     }}
                     placeholder="کالا"
                     buttonClassName="h-10 text-xs"
@@ -630,7 +631,7 @@ function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, 
               </div>
               )
             })}
-            <Button variant="outline" className="w-full h-10" onClick={() => setForm(f => ({ ...f, items: [...f.items, { ...form.items[0], breadTypeId: '', qty: 0, unitPrice: 0, delivered: 0, returned: 0, returnCost: 0, kind: 'BREAD' }] }))}>
+            <Button variant="outline" className="w-full h-10" onClick={() => setForm(f => ({ ...f, items: [...f.items, { ...form.items[0], breadTypeId: '', qty: 0, unitPrice: 0, delivered: 0, returned: 0, returnCost: 0, kind: 'BREAD', boxId: undefined, boxCode: undefined }] }))}>
               <Plus className="h-4 w-4" /> افزودن قلم
             </Button>
           </div>
