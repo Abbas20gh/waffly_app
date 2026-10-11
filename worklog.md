@@ -1001,3 +1001,20 @@ Work Log:
 Stage Summary:
 - کد v3.1.0 کامل و سالم است (مطابق نسخه لایو روی Cloudflare)؛ فقط منتظر توکن جدید گیت‌هاب برای push
 - از این به بعد: هر کاری که انجام شود یا watcher هر ۵ دقیقه یا خود من بعد از هر تسک auto-push را اجرا می‌کنم — دیگر لازم نیست کاربر بگوید
+
+---
+Task ID: 48-b (تکمیل)
+Agent: Super Z (main)
+Task: push موفق به گیت‌هاب + ادغام تاریخچه ریموت
+
+Work Log:
+- توکن جدید کاربر دریافت و در remote URL تنظیم شد
+- کشف شد ریپوی ریموت یک restore قدیمی‌تر دارد: «Waffly v3.0.0 (restored)» از جلسه Oct 4 + ۹,۵۷۲ فایل ابزار بیلد (apk-build/tools) که اشتباهی کامیت شده بود
+- merge با استراتژی ours: نسخه محلی v3.1.0 (Oct 10) مرجع شد؛ apk-build و .initial_snapshot.json از درخت ریموت حذف و gitignore شدند
+- تسک‌های worklog ریموت (۳۹-۴۲) دستی به worklog محلی وارد شدند (حل شکاف ۳۸→۴۵)
+- push موفق: d1a1450..310ae87 — ریپو کاملاً سینک شد
+- watcher با setsid مجدداً راه‌اندازی شد (هر ۵ دقیقه: add+commit+push)
+
+Stage Summary:
+- github.com/Abbas20gh/waffly_app حالا v3.1.0 کامل دارد: سیستم اعلان، APKها، مستندات، اسکریپت‌های تست
+- auto-push دائمی فعال: پس از این هر تغییری خودکار push می‌شود
