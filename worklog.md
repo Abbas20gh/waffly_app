@@ -831,6 +831,86 @@ Stage Summary:
 - معماری نهایی: بازدیدکننده → CF edge (TLS + کش) → Netlify 75.2.60.5 → Next.js store + Turso
 - درس پرونده: خطای provisioning جبری Netlify با bypass لایه DNS/SSL حل شد؛ NS تعویض در NIC.ir بسیار سریع (~۲ دقیقه) اعمال می‌شود
 
+
+Task ID: 39
+Agent: Super Z (main)
+Task: سند کامل متنی پروژه (فروشگاه + وافلی) برای کاربر
+
+Work Log:
+- کاربر خواستار «متن قابل ادیت از همه مشخصات/کارها/نسخه‌ها» شد
+- AskUserQuestion: فرمت=txt ساده | اطلاعات حساس=کامل | محدوده=همه پروژه | بخش تغییرات=بله با نمونه | حجم=کامل و مفصل
+- کل worklog (۷۰۸ خط، Task 3 تا 38) + ساختار ریپو (۲۰ مدل پرisma، versionName 2.8.0) مرور شد
+- سند ۷۴۳ خطی نوشته شد: download/Arta-Full-Project-Doc.txt
+  بخش 1 خلاصه | بخش 2 فروشگاه (شناسنامه/معماری/آدرس‌ها/env/صفحات/API/دیتابیس/تاریخچه استقرار ۵ مرحله/ماجرای SSL/نگهداری) | بخش 3 وافلی (شناسنامه/معماری سینک/۱۶ نسخه v1.0→v2.8.1/۷ نما/حساب‌ها/فاکتور+تلگرام/کد جعبه/دیتابیس/env) | بخش 4 سرویس‌های ابری | بخش 5 درس‌ها | بخش 6 باقی‌مانده | بخش 7 فرم تغییرات با کد بخش‌ها و ۸ ردیف خالی | بخش 8 گیت/بیلد/چک‌لیست
+
+Stage Summary:
+- تحویل: download/Arta-Full-Project-Doc.txt (قابل ادیت، شامل بخش محرمانه با هشدار)
+- فرم بخش 7 آماده پر شدن توسط کاربر است → بعد از ارسال، تغییرات یکی‌یکی اجرا می‌شود
+
+---
+
+Task ID: 40
+Agent: Super Z (main)
+Task: Waffly v3.0.0 — بازطراحی تولید، رسپی، هزینه‌ها، گزارش‌ساز، داشبورد + مسیر بدون فیلترشکن (app.artanon.ir)
+
+Work Log:
+- AskUserQuestion (۸ سوال): دسترسی=ساب‌دامنه+بعداً آینه ایران | آدرس=app.artanon.ir | ضایعات=یک فیلد ساده | قالب=ردیفی چندنوعی | داده قدیمی=مخفی+نگه‌داری | ماژول‌ها=هر ۴ تا | APK=بله | کاربران=تک‌کاربر
+- جستجوی وب (سپیدار تولیدی/Wherefour/Katana/GOFRUGAL): الگوی مشترک = رسپی/BOM با کسر خودکار مواد، ضایعات، بهای تمام‌شده، داشبورد KPI، گزارش اکسل/PDF → همان ۴ ماژول انتخابی
+- لایه داده recipes: types.ts (TABLES+Recipe) | localdb v6 | functions/api/_sync.ts (PHYS/FIELDS/ensureSchema DDL خودکار) | server/sync-tables.ts | prisma Recipe + db push
+- production-view بازنویسی: تب‌های جدید (ثبت سریع/سوابق/جعبه‌ها/انواع/رسپی)؛ QuickTab = ردیف‌های «نوع+جعبه+در جعبه» با merge تولید هم‌روز، کد ادامه‌دار، ضایعات تک‌فیلد روی اولین تولید، پیش‌نمایش زنده جمع‌ها/کدها/کسر مواد با هشدار موجودی؛ DailyTab فقط سوابق+ویرایش (شاخه create حذف)؛ ConsumptionTab حذف؛ RecipesTab جدید (ورودی «مقدار برای N نان» → qtyPerBread)
+- calc.ts: recipeDeductions + faQty؛ حذف UI: machines-view.tsx پاک، مصرف مواد از تب‌ها (داده‌ها و محاسبات حسابداری دست‌نخورده)
+- نمای جدید ExpensesView (ثبت+سرفصل‌ها+فیلتر ماه+اکسل) و ReportsView (۷ گزارش، بازه شمسی+پریست، اکسل/PDF/چاپ)؛ nav جدید: داشبورد/تولید/فروش/خرید/هزینه‌ها/گزارش‌ها/حسابداری/تنظیمات؛ داشبورد: ۸ KPI + نمودار تولید/ضایعات + خط سود خالص
+- نسخه: versionCode 15 / 3.0.0 + سایدبار/تنظیمات/سند AI-Prompt (بخش ۱۵)
+- تست: e2e-v300-test.mjs = ۱۱/۱۱ (سینک رسپی+اعشار+LWW+تومب‌استون+هزینه) و رگرسیون e2e-v24 = ۹/۹؛ لینت صفر؛ بیلد وب سالم (مارکرهای رسپی/ثبت همه/گزارش‌ها در چانک‌ها)
+- APK: JDK 21 پرتابل (tools/jdk-21) + SDK با لایسنس از /tmp/apk-build → gradle موفق؛ 8.5MB، امضای a31b9080…cda (نصب رویی)، API_BASE=https://app.artanon.ir تأیید در باندل → download/Waffly-v3.0.0.apk
+- git: کامیت لوکال v3.0.0؛ push گیت‌هاب fail (توکن منقضی) — منتظر توکن جدید؛ دیپلوی CF Pages + دامنه منتظر توکن CF کاربر
+
+Stage Summary:
+- کد v3.0.0 کامل، تست‌شده و کامیت؛ APK امضاشده آماده
+- گام باقی‌مانده: توکن CF (Pages:Edit) → deploy out + POST domains برای app.artanon.ir (یا دستی: Pages→waffly→Custom domains)؛ توکن GitHub برای push
+- آینه ایرانی (انتخاب «هر دو») بعد از تثبیت ساب‌دامنه: گزینه Arvan CDN جلوی app.artanon.ir یا VPS ایران به‌عنوان پروکسی
+
+---
+
+Task ID: 41
+Agent: Super Z (main)
+Task: بررسی وضعیت پس از اقدام کاربر — دامنه وصل ✓ ولی بیلد قدیمی روی Pages
+
+Work Log:
+- کاربر گفت کارها را انجام داد؛ بررسی: app.artanon.ir زنده (CF IPs)، دامنه سفارشی به پروژه waffly وصل شده ✓
+- اما مقایسه مارکر بیلد: دیپلوی‌شده = qzocc0u (v2.8.0 — بدون رسپی/گزارش‌ساز، رشته 2.8.0 در چانک‌ها)؛ لوکال out = 9d0Exi (v3.0.0 با مارکر رسپی) → بیلد جدید هنوز آپلود نشده
+- تست API زنده: /api → Hello world ✓ | /api/sync/pull روی app.artanon.ir و waffly.pages.dev → داده واقعی از Turso ✓ (فانکشن‌های v2.8 فعال)
+- push گیت‌هاب دوباره تست شد: Invalid username or token (توکن هنوز منقضی)؛ ls-remote گمراه‌کننده بود (read عمومی)
+- توکن CF قبلی در هیچ فایلی ذخیره نبود (فقط چت) — باید دوباره از کاربر گرفته شود
+- آماده‌سازی مسیر جایگزین بدون توکن: `wrangler pages functions build` → index.js 265KB (شامل recipes/TURSO/_sync) → به‌عنوان _worker.js کنار out/ (advanced mode)
+- پکیج: download/Waffly-v3.0.0-pages-upload.zip (4.6MB، 118 فایل، پوشه waffly-v3-upload شامل out + _worker.js) → آپلود دستی داشبورد بدون از دست رفتن سینک
+- README اشتباهی حذف شد → فوراً با git checkout برگردانده شد ✓
+
+Stage Summary:
+- وضعیت: دامنه ✓ | سینک Turso ✓ | نسخه روی سایت = v2.8.0 قدیمی ✗
+- دو مسیر به کاربر پیشنهاد شد: (A) توکن CF با Pages:Edit → دیپلوی wrangler توسط من؛ (B) آپلود دستی zip آماده در داشبورد
+- تا آپدیت بک‌اند، سینکِ لایه رسپی در اپ v3 کار نمی‌کند (بقیه ماژول‌ها سالم) → آپلود بک‌اند جدید اولویت فوری
+
+---
+
+Task ID: 42
+Agent: Super Z (main)
+Task: دیپلوی v3.0.0 با توکن CF + بازیابی کامل پروژه پس از ریست محیط
+
+Work Log:
+- کاربر توکن CF (cfut_…) فرستاد → verify: active ✓ (فقط Pages:Edit)
+- کشف بحرانی: محیط بین دو پیام ریست شده (۲→۴ اکتبر): /home/z/my-project به کد قدیمی برگشته، /tmp خالی، worklog/دانلودها/کامیت v3.0.0 محو
+- منبع بازیابی پیدا شد: /tmp/my-project (کپی سالم: سورس v3 + download + worklog تا Task 41 + keystore + apk-build + tools)
+- دیپلوی: zip آماده (out + _worker.js) باز شد → `wrangler pages deploy waffly-v3-upload --branch main` → موفق (۲۵ فایل جدید + Worker bundle) → هر دو دامنه app.artanon.ir و waffly.pages.dev مارکر v3 (9d0Exi…) را سرو می‌کنند
+- تست دود پروداکشن scripts/prod-recipes-smoke.mjs: ۵/۵ PASS (push رسپی 0.05 → pull اعشار سالم → تومب‌استون → deleted=1) → جدول Recipes روی Turso ساخته شد
+- بازیابی /home/z/my-project: rsync هدفمند سورس‌ها + root files + فایل‌های v3 در download؛ apk-build/tools در پس‌زمینه؛ machines-view.tsx بدون import ماند (مطابق بیلد دیپلوی‌شده)؛ بیلد استاتیک مجدد سالم (مارکر nLgdau…)؛ کامیت 2d06848 «v3.0.0 (restored)»
+- push گیت‌هاب همچنان ناموفق (توکن نامعتبر) → الان تنها کپی کد، لوکال است
+
+Stage Summary:
+- v3.0.0 روی پروداکشن زنده و تست‌شده است (UI + API سینک + لایه recipes)
+- اولویت فوری: توکن گیت‌هاب جدید از کاربر → push فوری (ریسک از دست رفتن کد)
+- باقی‌مانده: آینه ایرانی، بخش ۷ سند آرتا
+
 ---
 Task ID: 45
 Agent: Super Z (main)
