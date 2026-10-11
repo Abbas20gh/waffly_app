@@ -1018,3 +1018,25 @@ Work Log:
 Stage Summary:
 - github.com/Abbas20gh/waffly_app حالا v3.1.0 کامل دارد: سیستم اعلان، APKها، مستندات، اسکریپت‌های تست
 - auto-push دائمی فعال: پس از این هر تغییری خودکار push می‌شود
+
+---
+Task ID: 49
+Agent: Super Z (main)
+Task: دیباگ کامل «سینک نمی‌شود و ثبت نمی‌شود» + تست با IP ایران
+
+Work Log:
+- کشف بحرانی ۱: DNS شکان (۱۷۸.۲۲.۱۲۲.۱۰۰) → waffly.pages.dev به 10.10.34.36 (صفحه فیلترینگ ایران) ریسولو می‌شود؛ app.artanon.ir به IP واقعی کلادفلر → APK که به pages.dev وصل است در ایران کاملاً قطع است
+- کشف بحرانی ۲: /api/sync/pull روی پروداکشن 500 می‌دهد (push و full سالم‌اند)
+- با باینری‌سرچ روی cursor پول، ردیف‌های سمّی SyncLog: seq 165 و 166 — مال Oct 4 وقتی دیپلوی v3.0.0 با سینک recipes فعال بود؛ کد فعلی recipes در PHYS ندارد → SELECT FROM "undefined" → 500
+- نتیجه: هر دستگاهی با cursor < 165 برای همیشه در pull گیر کرده — عین علامت کاربر
+- فیکس سرور (v3.1.1): pullRows جدول ناشناخته را skip می‌کند + chunk ۵۰۰تایی ids (سقف متغیر SQL)
+- فیکس APK (v3.1.1): API_BASE در پلتفرم نیتیو همیشه https://app.artanon.ir (بر پایه Capacitor.isNativePlatform) — pages.dev دیگر استفاده نمی‌شود
+- فیکس UX: SyncBadge حالت خطا قرمز + CloudAlert + متن خطا در tooltip (دیگر خطا ساکت نمی‌ماند)
+- تست واحد منطق skip: PASS؛ تست‌های اعلان با bun: ۲۰/۲۰
+- محیط بیلد بعد از ریست سندباکس بازسازی شد: tools/ (۸۵۹MB: jdk-21 + android-sdk) از /tmp برگشت، local.properties ساخته شد
+- بیلد وب: out/ با SW mv3izr47 (وب) و apk-mv3j0tm5 (APK)
+- E2E پروداکشن: push OK (notifCount OK) ولی pull 500 → تا دیپلوی فیکس، وب هم آسیب‌پذیر است
+
+Stage Summary:
+- دو علت مستقل: (۱) فیلترینگ pages.dev در ایران برای APK، (۲) 500 پول سرور برای همه دستگاه‌های قدیمی
+- APK v3.1.1 (versionCode 17) در حال بیلد؛ برای دیپلوی سرور به توکن Cloudflare Pages:Edit نیاز است

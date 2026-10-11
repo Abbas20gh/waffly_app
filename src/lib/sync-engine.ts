@@ -2,6 +2,7 @@
 
 // موتور سینک — push صف outbox، pull افزایشی، bootstrap، real-time با socket.io
 import { useSyncExternalStore } from 'react'
+import { Capacitor } from '@capacitor/core'
 import { io, type Socket } from 'socket.io-client'
 import {
   dexie, getOutboxBatch, clearOutboxUpTo, getCursor, setCursor,
@@ -50,8 +51,12 @@ let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let cycleTimer: ReturnType<typeof setInterval> | null = null
 let socket: Socket | null = null
 
-// بسته‌بندی اندروید (Capacitor): آدرس سرور سینک در زمان build تزریق می‌شود؛ روی وب نسبی می‌ماند
-export const API_BASE = process.env.NEXT_PUBLIC_API_BASE || ''
+// بسته‌بندی اندروید (Capacitor): آدرس سرور سینک — روی وب نسبی می‌ماند (همان origin)
+// v3.1.1 حیاتی: pages.dev در ایران فیلتر است (DNS شکان → 10.10.34.36) → در اپ اندروید
+// همیشه از دامنه اصلی app.artanon.ir استفاده می‌شود (هم در ایران و هم خارج از آن کار می‌کند)
+export const API_BASE = Capacitor.isNativePlatform()
+  ? 'https://app.artanon.ir'
+  : (process.env.NEXT_PUBLIC_API_BASE || '')
 
 async function pushOutbox(): Promise<void> {
   for (;;) {

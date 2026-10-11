@@ -44,3 +44,7 @@ download/waffly-backup-*.bundle
 apk-build/
 .initial_snapshot.json
 .pending_clone.json
+
+# JDK/SDK محلی برای بیلد APK — هرگز در ریپو (فایل ۱۰۰MB+ داریم)
+tools/
+android/local.properties

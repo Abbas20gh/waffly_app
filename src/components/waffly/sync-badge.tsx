@@ -1,7 +1,7 @@
 'use client'
 
 // نشان وضعیت سینک در هدر
-import { Cloud, CloudOff, Loader2, CloudUpload } from 'lucide-react'
+import { Cloud, CloudOff, Loader2, CloudUpload, CloudAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useSyncStore, forceSyncNow } from '@/lib/sync-engine'
 import { faDigits } from '@/lib/jalali'
@@ -10,15 +10,17 @@ import {
 } from '@/components/ui/tooltip'
 
 export function SyncBadge() {
-  const { online, syncing, pendingCount } = useSyncStore()
+  const { online, syncing, pendingCount, error } = useSyncStore()
 
   const label = syncing
     ? 'در حال سینک…'
     : !online
       ? 'آفلاین — تغییرات صف شده'
-      : pendingCount > 0
-        ? `${faDigits(pendingCount)} مورد در صف ارسال`
-        : 'همگام‌شده'
+      : error
+        ? `خطای سینک: ${error}`
+        : pendingCount > 0
+          ? `${faDigits(pendingCount)} مورد در صف ارسال`
+          : 'همگام‌شده'
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -35,6 +37,8 @@ export function SyncBadge() {
               <Loader2 className="h-4.5 w-4.5 animate-spin" />
             ) : !online ? (
               <CloudOff className="h-4.5 w-4.5" />
+            ) : error ? (
+              <CloudAlert className="h-4.5 w-4.5 text-red-500 animate-pulse" />
             ) : pendingCount > 0 ? (
               <span className="relative">
                 <CloudUpload className="h-4.5 w-4.5" />
@@ -48,7 +52,7 @@ export function SyncBadge() {
           </Button>
         </TooltipTrigger>
         <TooltipContent side="bottom">
-          <p className="text-xs">{label} — برای سینک فوری کلیک کنید</p>
+          <p className={`text-xs ${error ? 'text-red-500 font-semibold' : ''}`}>{label} — برای سینک فوری کلیک کنید</p>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

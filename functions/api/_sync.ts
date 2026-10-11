@@ -382,9 +382,17 @@ export async function pullRows(db: Client, since: number, limit: number) {
 
   const rows: { tbl: SyncTbl; row: Record<string, unknown> }[] = []
   for (const [tbl, ids] of byTbl) {
-    const placeholders = ids.map(() => '?').join(',')
-    const r = await db.execute({ sql: `SELECT * FROM "${PHYS[tbl]}" WHERE id IN (${placeholders})`, args: ids })
-    for (const row of r.rows) rows.push({ tbl, row: rowToObj(r, row) })
+    // v3.1.1: جدول ناشناخته (مانند ردیف‌های قدیمی recipes دیپلوی Oct 4) → نادیده گرفته می‌شود
+    // تا pull هرگز 500 ندهد و سینک دستگاه‌های با cursor قدیمی خودبه‌خود ترمیم شود
+    const phys = PHYS[tbl]
+    if (!phys) continue
+    // دسته‌بندی ids (سقف متغیرهای SQL) — هر chunk حداکثر ۵۰۰
+    for (let i = 0; i < ids.length; i += 500) {
+      const chunk = ids.slice(i, i + 500)
+      const placeholders = chunk.map(() => '?').join(',')
+      const r = await db.execute({ sql: `SELECT * FROM "${phys}" WHERE id IN (${placeholders})`, args: chunk })
+      for (const row of r.rows) rows.push({ tbl, row: rowToObj(r, row) })
+    }
   }
 
   const cursor = logs.rows.length > 0 ? Number(logs.rows[logs.rows.length - 1].seq) : since
