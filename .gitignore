@@ -39,3 +39,8 @@ tool-results/
 
 # بکاپ‌های bundle محلی (تاریخچه کامل داخل خود ریپو معنی ندارد)
 download/waffly-backup-*.bundle
+
+# ابزار بیلد APK و اسنپ‌شات سندباکس — هرگز در ریپو
+apk-build/
+.initial_snapshot.json
+.pending_clone.json
