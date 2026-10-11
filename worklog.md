@@ -1040,3 +1040,18 @@ Work Log:
 Stage Summary:
 - دو علت مستقل: (۱) فیلترینگ pages.dev در ایران برای APK، (۲) 500 پول سرور برای همه دستگاه‌های قدیمی
 - APK v3.1.1 (versionCode 17) در حال بیلد؛ برای دیپلوی سرور به توکن Cloudflare Pages:Edit نیاز است
+
+---
+Task ID: 49-b (تکمیل)
+Agent: Super Z (main)
+Task: بیلد و تحویل APK v3.1.1
+
+Work Log:
+- gradlew assembleRelease: موفق در ۳ دقیقه ۵۴ ثانیه (JDK21 + SDK36 از tools/)
+- صحت‌سنجی: امضای Waffly (همان کلید قبلی — آپدیت مستقیم روی نسخه قبلی)، versionCode 17، versionName 3.1.1
+- باندل APK شامل app.artanon.ir به‌عنوان API سرور (pages.dev حذف شد)
+- تحویل: download/Waffly-v3.1.1.apk (8.2MB)
+- اصلاح push گیت‌هاب: tools/ (۸۵۹MB) اشتباهی کامیت شده بود → از کامیت خارج و gitignore شد؛ push نهایی موفق (af0afdb)
+
+Stage Summary:
+- APK آماده نصب است؛ فقط دیپلوی سرور (فیکس pull-500) مانده که به توکن Cloudflare Pages:Edit نیاز دارد
