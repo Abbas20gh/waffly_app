@@ -36,3 +36,6 @@ tsconfig.tsbuildinfo
 .jdk/
 .android-sdk/
 tool-results/
+
+# بکاپ‌های bundle محلی (تاریخچه کامل داخل خود ریپو معنی ندارد)
+download/waffly-backup-*.bundle
