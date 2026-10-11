@@ -6,9 +6,17 @@
 // وضعیت «خوانده‌شده» per-device در localStorage — اعلان سیستم اندروید با
 // @capacitor/local-notifications برای آیتم‌های تازه نمایش داده می‌شود.
 import { useSyncExternalStore } from 'react'
+import { notifCategoryOf, notifCategoryDef } from './notif-categories'
 
-// همان الگوی sync-engine — مقدار در زمان build تزریق می‌شود (APK: آدرس سرور)
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || ''
+// همان الگوی sync-engine — در پلتفرم نیتیو (APK) همیشه سرور اصلی
+// (pages.dev در ایران فیلتر است)؛ در وب: همان دامنهٔ فعلی
+const API_BASE = (() => {
+  try {
+    const cap = (typeof window !== 'undefined' && (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor) || undefined
+    if (cap?.isNativePlatform?.()) return 'https://app.artanon.ir'
+  } catch { /* وب/SSR — بی‌اثر */ }
+  return process.env.NEXT_PUBLIC_API_BASE || ''
+})()
 
 export interface WNotif {
   id: string
@@ -98,7 +106,8 @@ async function maybeLocalNotify(list: WNotif[]) {
     await LocalNotifications.schedule({
       notifications: fresh.map((n, i) => ({
         id: hashId(n.id),
-        title: `Waffly — ${n.title}`,
+        // v3.1.2 — ایموجی دسته در عنوان: 💰 فروش / 🛒 خرید / 🏭 تولید / ...
+        title: `${notifCategoryDef(notifCategoryOf(n.tbl)).emoji} Waffly — ${n.title}`,
         body: n.body + (n.actor ? ` (${n.actor})` : ''),
         schedule: { at: new Date(Date.now() + 300 + i * 500) },
       })),

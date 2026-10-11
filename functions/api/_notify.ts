@@ -7,6 +7,7 @@
 import type { Client } from '@libsql/client'
 import { PHYS, FIELDS, type SyncTbl } from './_sync'
 import { faDigits } from '../../src/lib/jalali'
+import { NOTIF_CATEGORIES, notifCategoryOf } from '../../src/lib/notif-categories'
 
 export type NotifOp = 'CREATE' | 'UPDATE' | 'DELETE'
 /** op می‌تواند NONE باشد (تغییر بی‌اثر — repair/تکراری) و در buildNotifications فیلتر می‌شود */
@@ -257,36 +258,104 @@ export async function fetchNotifications(db: Client, since: number, limit: numbe
   return out
 }
 
-// ===== تلگرام — پیام فوری به صاحب کسب‌وکار =====
-export function telegramMessage(notifs: NotifRow[]): string | null {
-  if (notifs.length === 0) return null
-  if (notifs.length > TELEGRAM_MAX_LINES) {
-    const d = new Date()
-    return `🔔 وافلی — ${faDigits(String(notifs.length))} تغییر جدید ثبت شد\n(بیش از حد برای نمایش جزئیات — در اپ ببینید)\n${faDigits(`${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`)}`
-  }
-  const lines = notifs.map(n => {
-    const by = n.actor ? `\n👤 ${n.actor}` : ''
-    return `${OP_ICON[n.op] || '•'} ${n.title}\n${n.body}${by}`
-  })
+// ===== تلگرام — پیام فوری دسته‌بندی‌شده به صاحب کسب‌وکار (v3.1.2) =====
+// هر دسته (تولید/فروش/خرید/...) پیام مستقل خودش را دارد با ایموجی و رنگ
+// مفهومی مخصوص همان دسته. قالب HTML (هدرهای بولد) با escape کامل متن کاربر.
+
+const TG_SEP = '━━━━━━━━━━━━━━'
+
+const escapeHtml = (s: string): string =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+function tgStamp(): string {
   const d = new Date()
-  const stamp = `🕐 ${faDigits(`${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`)}`
-  return `🔔 وافلی — ${faDigits(String(notifs.length))} تغییر جدید\n━━━━━━━━━━━━━━\n${lines.join('\n━━━━━━━━━━━━━━\n')}\n━━━━━━━━━━━━━━\n${stamp}`
+  return `🕐 ${faDigits(`${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`)}`
+}
+
+/** متن یک اعلان: آیکون عملیات + عنوان + بدنه + کاربر */
+function tgLine(n: NotifRow): string {
+  const by = n.actor ? `\n👤 ${escapeHtml(n.actor)}` : ''
+  return `${OP_ICON[n.op] || '•'} ${escapeHtml(n.title)}\n${escapeHtml(n.body)}${by}`
+}
+
+/** پیام خلاصهٔ ضداسپم — وقتی تغییرات بیش از حد زیاد است */
+function tgSummary(notifs: NotifRow[]): string {
+  return `🔔 وافلی — ${faDigits(String(notifs.length))} تغییر جدید ثبت شد\n(بیش از حد برای نمایش جزئیات — در اپ ببینید)\n${tgStamp()}`
+}
+
+/** پیام یک دستهٔ مشخص — هدر بولد با ایموجی همان دسته */
+function tgCategoryMessage(def: { emoji: string; label: string }, rows: NotifRow[]): string {
+  return [
+    `<b>🔔 وافلی | ${def.emoji} ${escapeHtml(def.label)} — ${faDigits(String(rows.length))} مورد جدید</b>`,
+    TG_SEP,
+    ...rows.map(tgLine),
+    TG_SEP,
+    tgStamp(),
+  ].join('\n')
+}
+
+/**
+ * پیام‌های تلگرام برای مجموعه اعلان‌ها — هر دسته پیام مستقل خودش:
+ *  • یک دسته → یک پیام
+ *  • ۲ تا ۴ دسته → یک پیام برای هر دسته (تولید جدا، فروش جدا، خرید جدا، ...)
+ *  • بیش از ۴ دسته → یک پیام ترکیبی با سکشن هر دسته (ضداسپم)
+ *  • بیش از ۲۵ اعلان → فقط پیام خلاصه
+ */
+export function telegramMessages(notifs: NotifRow[]): string[] {
+  if (notifs.length === 0) return []
+  if (notifs.length > TELEGRAM_MAX_LINES) return [tgSummary(notifs)]
+
+  // گروه‌بندی به ترتیب رسمی دسته‌ها (فروش، خرید، تولید، ...)
+  const groups: { def: (typeof NOTIF_CATEGORIES)[number]; rows: NotifRow[] }[] = []
+  for (const def of NOTIF_CATEGORIES) {
+    const rows = notifs.filter(n => notifCategoryOf(n.tbl) === def.key)
+    if (rows.length > 0) groups.push({ def, rows })
+  }
+  // جدول ناشناخته (نباید اتفاق بیفتد) — داخل دستهٔ تنظیمات می‌افتد
+
+  if (groups.length === 1) return [tgCategoryMessage(groups[0].def, groups[0].rows)]
+  if (groups.length <= 4) return groups.map(g => tgCategoryMessage(g.def, g.rows))
+
+  // ضداسپم: همهٔ دسته‌ها در یک پیام — هر دسته با هدر ایموجی خودش
+  const sections = groups.map(g => `<b>${g.def.emoji} ${escapeHtml(g.def.label)}</b>\n${g.rows.map(tgLine).join('\n')}`)
+  const combined = [
+    `<b>🔔 وافلی — ${faDigits(String(notifs.length))} تغییر جدید</b>`,
+    TG_SEP,
+    sections.join(`\n${TG_SEP}\n`),
+    TG_SEP,
+    tgStamp(),
+  ].join('\n')
+  return [combined]
 }
 
 export async function sendTelegramNotifications(
   env: { TELEGRAM_BOT_TOKEN?: string; TELEGRAM_CHAT_ID?: string; TELEGRAM_THREAD_ID?: string },
   notifs: NotifRow[],
-): Promise<{ sent: boolean; reason?: string }> {
+): Promise<{ sent: boolean; reason?: string; messages?: number }> {
   const token = env.TELEGRAM_BOT_TOKEN
   const chatId = env.TELEGRAM_CHAT_ID
   if (!token || !chatId) return { sent: false, reason: 'telegram env missing' }
-  const text = telegramMessage(notifs)
-  if (!text) return { sent: false, reason: 'empty' }
+  const texts = telegramMessages(notifs)
+  if (texts.length === 0) return { sent: false, reason: 'empty' }
   const threadId = env.TELEGRAM_THREAD_ID ? Number(env.TELEGRAM_THREAD_ID) : undefined
-  const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text, ...(threadId ? { message_thread_id: threadId } : {}) }),
-  })
-  return { sent: res.ok }
+  let sentCount = 0
+  for (let i = 0; i < texts.length; i++) {
+    if (i > 0) await new Promise(r => setTimeout(r, 350)) // فاصلهٔ پیام‌ها — ضد ریت‌لیمیت
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: texts[i],
+        parse_mode: 'HTML',
+        ...(threadId ? { message_thread_id: threadId } : {}),
+      }),
+    })
+    if (!res.ok) {
+      if (sentCount === 0) return { sent: false, reason: `telegram http ${res.status}` }
+      return { sent: true, messages: sentCount } // بخشی ارسال شد
+    }
+    sentCount++
+  }
+  return { sent: true, messages: sentCount }
 }

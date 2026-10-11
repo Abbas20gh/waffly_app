@@ -1,5 +1,5 @@
 // تست واحد ماژول اعلان سرور (functions/api/_notify.ts) — با دیتابیس جعلی
-import { classifyOp, buildNotifications, insertNotifications, fetchNotifications, telegramMessage, type NotifChange, type NotifRow } from '../functions/api/_notify'
+import { classifyOp, buildNotifications, insertNotifications, fetchNotifications, telegramMessages, type NotifChange, type NotifRow } from '../functions/api/_notify'
 import type { Client } from '@libsql/client'
 
 let pass = 0
@@ -104,13 +104,41 @@ async function main() {
   ok(back.length === 6, 'خواندن معکوس')
   ok(back[0].ts >= back[1].ts, 'ترتیب جدید→قدیم')
 
-  console.log('— پیام تلگرام —')
-  const msg = telegramMessage(notifs)
-  ok(!!msg && msg.includes('🔔 وافلی — ۶ تغییر جدید'), 'سرخط تلگرام')
-  ok(!!msg && msg.includes('➕ ثبت فروش') && msg.includes('🗑 حذف سرفصل هزینه'), 'آیکون‌های عملیات در تلگرام')
+  console.log('— پیام تلگرام دسته‌بندی‌شده (v3.1.2) —')
+  // notifs = فروش(۱) + خرید(۲) + هزینه(۲) + تولید(۱) = ۴ دسته → ۴ پیام جدا
+  const msgs = telegramMessages(notifs)
+  ok(msgs.length === 4, `۴ دسته → ۴ پیام جداگانه — got ${msgs.length}`)
+  ok(msgs.some(m => m.includes('💰 فروش — ۱ مورد جدید') && m.includes('➕ ثبت فروش')), 'پیام فروش: هدر 💰 + آیکون عملیات')
+  ok(msgs.some(m => m.includes('🛒 خرید') && m.includes('➕ ثبت خرید')), 'پیام خرید: هدر 🛒')
+  ok(msgs.some(m => m.includes('🏭 تولید — ۱ مورد جدید') && m.includes('نان بزرگ')), 'پیام تولید: هدر 🏭 + بدنه')
+  ok(msgs.some(m => m.includes('💸 هزینه') && m.includes('🗑 حذف سرفصل هزینه')), 'پیام هزینه: هدر 💸 + حذف')
+  ok(msgs.every(m => m.startsWith('<b>🔔 وافلی |') && m.includes('<b>')), 'همهٔ پیام‌ها هدر بولد وافلی دارند')
+
+  const onlySales: NotifRow[] = [
+    { id: 's1', ts: 1, tbl: 'sales', rid: 'a', op: 'CREATE', title: 'ثبت فروش', body: 'کافه نادر', actor: null },
+    { id: 's2', ts: 2, tbl: 'customers', rid: 'b', op: 'CREATE', title: 'ثبت مشتری', body: 'مشتری جدید', actor: null },
+  ]
+  const msgs1 = telegramMessages(onlySales)
+  ok(msgs1.length === 1 && msgs1[0].includes('💰 فروش — ۲ مورد جدید'), 'یک دسته (فروش+مشتری) → یک پیام واحد')
+
+  const mixed: NotifRow[] = [
+    { id: 'a', ts: 1, tbl: 'sales', rid: 'a', op: 'CREATE', title: 'ثبت فروش', body: 'x', actor: null },
+    { id: 'b', ts: 2, tbl: 'purchases', rid: 'b', op: 'CREATE', title: 'ثبت خرید', body: 'x', actor: null },
+    { id: 'c', ts: 3, tbl: 'productions', rid: 'c', op: 'CREATE', title: 'ثبت تولید', body: 'x', actor: null },
+    { id: 'd', ts: 4, tbl: 'expenses', rid: 'd', op: 'CREATE', title: 'ثبت هزینه', body: 'x', actor: null },
+    { id: 'e', ts: 5, tbl: 'materials', rid: 'e', op: 'CREATE', title: 'ثبت ماده اولیه', body: 'x', actor: null },
+  ]
+  const msgs3 = telegramMessages(mixed)
+  ok(msgs3.length === 1 && msgs3[0].includes('۵ تغییر جدید'), `۵ دسته → پیام ترکیبی ضداسپم — got ${msgs3.length}`)
+  ok(!!msgs3[0] && msgs3[0].includes('💰 فروش') && msgs3[0].includes('🏭 تولید') && msgs3[0].includes('📦 موجودی'), 'سکشن هر دسته با ایموجی خودش در پیام ترکیبی')
+
+  const xss: NotifRow[] = [{ id: 'x', ts: 1, tbl: 'sales', rid: 'x', op: 'CREATE', title: 'ثبت فروش', body: '<b>مبلغ</b> & <script>', actor: '<علی>' }]
+  const msgX = telegramMessages(xss)[0]
+  ok(msgX.includes('&lt;script&gt;') && msgX.includes('&amp;') && !msgX.includes('<script>'), 'escape HTML متن کاربر (ایمنی تلگرام)')
+
   const many: NotifRow[] = Array.from({ length: 30 }, (_, i) => ({ id: `n${i}`, ts: i, tbl: 'sales', rid: `r${i}`, op: 'UPDATE', title: 'ویرایش فروش', body: 'x', actor: null }))
-  const msg2 = telegramMessage(many)
-  ok(!!msg2 && msg2.includes('بیش از حد'), 'ضداسپم: بالای ۲۵ مورد → خلاصه')
+  const msg2 = telegramMessages(many)
+  ok(msg2.length === 1 && !!msg2[0] && msg2[0].includes('بیش از حد'), 'ضداسپم: بالای ۲۵ مورد → خلاصه')
 
   console.log(`\nنتیجه: ${pass} پاس، ${fail} شکست`)
   if (fail > 0) process.exit(1)
