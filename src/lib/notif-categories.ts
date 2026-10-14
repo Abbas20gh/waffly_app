@@ -34,7 +34,7 @@ export const NOTIF_CATEGORIES: NotifCategoryDef[] = [
   { key: 'expense',    label: 'هزینه',   emoji: '💸', tables: ['expenses', 'expenseCategories'] },
   { key: 'finance',    label: 'مالی',    emoji: '🏦', tables: ['accounts', 'otherFunds'] },
   { key: 'machine',    label: 'دستگاه',  emoji: '🔧', tables: ['machines', 'machineCosts'] },
-  { key: 'settings',   label: 'تنظیمات', emoji: '⚙️', tables: ['settings'] },
+  { key: 'settings',   label: 'تنظیمات', emoji: '⚙️', tables: ['settings', 'appUsers'] },
 ]
 
 const TBL2CAT: Record<string, NotifCategory> = {}

@@ -4,7 +4,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { toast } from '@/hooks/use-toast'
 import {
-  ShoppingCart, Plus, Trash2, Users, Landmark, AlertOctagon, Check, Wallet, Phone, Pencil, Boxes, FileText, ListChecks, Percent,
+  ShoppingCart, Plus, Trash2, Users, AlertOctagon, Check, Pencil, FileText, ListChecks, Percent,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -18,21 +18,24 @@ import { InlinePicker } from './inline-picker'
 import { InvoiceDialog } from './invoice-dialog'
 import { useTable, useSetting, putRecord, removeRecord, uid, getActiveUser, DEFAULT_BANK } from '@/lib/localdb'
 import { requireUserName } from '@/lib/user-gate'
-import type { Sale, Customer, BreadType, Good, SaleItem, Box, Account, CombinedInvoice, DiscountType } from '@/lib/types'
+import type { Sale, Customer, BreadType, Good, SaleItem, Production, Account, CombinedInvoice, DiscountType } from '@/lib/types'
 import { todayJalali, faDigits, faMoney, prettyJalali } from '@/lib/jalali'
 import { active, saleDue, effectiveSettled, isBadDebt, daysSince, effectivePaymentDate } from '@/lib/calc'
 import { buildSaleInvoice, buildCombinedInvoice, combinedInvoiceRecord, computeDiscount, type InvoiceCtx, type InvoiceModel } from '@/lib/invoice'
 import { API_BASE } from '@/lib/sync-engine'
 import { cn } from '@/lib/utils'
 
-type Tab = 'sales' | 'customers' | 'checks' | 'debts'
+type Tab = 'sales' | 'customers' | 'debts'
 
+// v3.2.0 — سه روش پرداخت (نقدی/کارت به کارت/کارتخوان)؛ چک از انتخاب حذف شد (فقط برای رکوردهای قدیمی لیبل دارد)
 const PAY_METHODS = [
   { key: 'CASH', label: 'نقدی' },
   { key: 'CARD', label: 'کارت به کارت' },
-  { key: 'TRANSFER', label: 'حواله بانکی' },
-  { key: 'CHECK', label: 'چک' },
+  { key: 'POS', label: 'کارتخوان' },
 ] as const
+
+// لیبل نمایشی — شامل روش‌های قدیمی برای رکوردهای قبلی (TRANSFER/CHECK)
+const PAY_LABELS: Record<string, string> = { CASH: 'نقدی', CARD: 'کارت به کارت', POS: 'کارتخوان', TRANSFER: 'کارت به کارت', CHECK: 'چک' }
 
 export function SalesView() {
   const [tab, setTab] = useState<Tab>('sales')
@@ -45,13 +48,11 @@ export function SalesView() {
         tabs={[
           { key: 'sales', label: 'فروش‌ها' },
           { key: 'customers', label: 'مشتریان' },
-          { key: 'checks', label: 'چک‌ها' },
           { key: 'debts', label: 'بدحساب‌ها' },
         ]}
       />
       {tab === 'sales' && <SalesTab />}
       {tab === 'customers' && <CustomersTab />}
-      {tab === 'checks' && <ChecksTab />}
       {tab === 'debts' && <DebtsTab />}
     </div>
   )
@@ -63,13 +64,13 @@ function SalesTab() {
   const customers = useTable<Customer>('customers')
   const breadTypes = useTable<BreadType>('breadTypes')
   const goods = useTable<Good>('goods')
-  const boxes = useTable<Box>('boxes')
+  const productions = useTable<Production>('productions')
   const accounts = useTable<Account>('accounts')
   const setting = useSetting()
   const { confirm, element: confirmDialog } = useConfirm()
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Sale | null>(null)
-  const [filter, setFilter] = useState<'all' | 'unpaid' | 'checks'>('all')
+  const [filter, setFilter] = useState<'all' | 'unpaid'>('all')
   const [saving, setSaving] = useState(false)
 
   const emptyItem: SaleItem = { breadTypeId: '', qty: 0, unitPrice: 0, delivered: 0, returned: 0, returnCost: 0, kind: 'BREAD' }
@@ -90,21 +91,30 @@ function SalesTab() {
     discountValue: '',
   })
 
-  // فروشِ هر جعبه (خالص تحویل − برگشتی) برای نمایش «مانده» در انتخاب‌گر کد جعبه
-  const soldByBox = useMemo(() => {
-    const m = new Map<string, number>()
-    for (const s of sales) {
-      if (s.deleted || s.id === editing?.id) continue
+  // v3.2.0 — موجودی هر محصول (تولید − فروش) و آخرین قیمت فروش هر کالا
+  // با حذف انتخاب کد کارتون از فروش، کسر موجودی در سطح «محصول» انجام می‌شود:
+  // موجودی = مجموع تولید (منهای ضایعات) − مجموع فروش خالص (تحویل − برگشتی) همان کالا
+  const { breadStock, lastPrice } = useMemo(() => {
+    const stock = new Map<string, number>()
+    for (const p of productions) {
+      if (p.deleted) continue
+      const produced = (Number(p.totalProduced) || 0) - (Number(p.waste) || 0)
+      if (p.breadTypeId) stock.set(p.breadTypeId, (stock.get(p.breadTypeId) || 0) + produced)
+    }
+    const prices = new Map<string, number>()
+    const ordered = [...sales].filter(s => !s.deleted && s.id !== editing?.id).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+    for (const s of ordered) {
       let items: SaleItem[] = []
       try { items = JSON.parse(s.items || '[]') as SaleItem[] } catch { continue }
       for (const it of items) {
-        if (!it.boxId) continue
+        if (!it.breadTypeId) continue
         const net = (it.delivered ?? it.qty ?? 0) - (it.returned ?? 0)
-        m.set(it.boxId, (m.get(it.boxId) || 0) + net)
+        if (net) stock.set(it.breadTypeId, (stock.get(it.breadTypeId) || 0) - net)
+        if ((it.unitPrice || 0) > 0 && !prices.has(it.breadTypeId)) prices.set(it.breadTypeId, it.unitPrice)
       }
     }
-    return m
-  }, [sales, editing])
+    return { breadStock: stock, lastPrice: prices }
+  }, [productions, sales, editing])
 
   const itemsTotal = form.items.reduce((a, it) => a + (it.qty || 0) * (it.unitPrice || 0), 0)
   const returnTotal = form.items.reduce((a, it) => a + (it.returnCost || 0), 0)
@@ -120,7 +130,7 @@ function SalesTab() {
       items: [{ ...emptyItem }],
       settledStatus: 'UNPAID',
       paidAmount: '',
-      paymentMethod: 'CASH',
+      paymentMethod: null,
       checkDueDate: '',
       checkNumber: '',
       checkBank: '',
@@ -143,7 +153,7 @@ function SalesTab() {
       items: items.length ? items : [{ ...emptyItem }],
       settledStatus: s.settledStatus,
       paidAmount: s.settledStatus === 'PARTIAL' ? String(s.paidAmount || '') : '',
-      paymentMethod: s.paymentMethod || 'CASH',
+      paymentMethod: s.paymentMethod || (s.settledStatus === 'UNPAID' ? null : 'CASH'),
       checkDueDate: s.checkDueDate || '',
       checkNumber: s.checkNumber || '',
       checkBank: s.checkBank || '',
@@ -184,7 +194,7 @@ function SalesTab() {
         totalAmount: grandTotal,
         settledStatus: status,
         paidAmount: Math.min(paid, grandTotal),
-        paymentMethod: form.paymentMethod,
+        paymentMethod: status === 'UNPAID' ? null : (form.paymentMethod || 'CASH'),
         checkDueDate: form.paymentMethod === 'CHECK' ? (form.checkDueDate || null) : null,
         checkNumber: form.paymentMethod === 'CHECK' ? (form.checkNumber || null) : null,
         checkBank: form.paymentMethod === 'CHECK' ? (form.checkBank || null) : null,
@@ -220,7 +230,7 @@ function SalesTab() {
 
   const list = [...sales]
     .filter(s => !s.deleted)
-    .filter(s => filter === 'all' || (filter === 'unpaid' ? effectiveSettled(s) !== 'PAID' : s.paymentMethod === 'CHECK'))
+    .filter(s => filter === 'all' || effectiveSettled(s) !== 'PAID')
     // v3.1.4 — مرتب‌سازی بر اساس آخرین ثبت/به‌روزرسانی: جدیدترین فاکتورِ ثبت‌شده بالا
     .sort((a, b) => ((b.updatedAt || 0) - (a.updatedAt || 0)) || (b.date || '').localeCompare(a.date || ''))
     .slice(0, 60)
@@ -312,7 +322,7 @@ function SalesTab() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex gap-1.5">
-          {([['all', 'همه'], ['unpaid', 'تسویه‌نشده'], ['checks', 'چکی']] as const).map(([k, label]) => (
+          {([['all', 'همه'], ['unpaid', 'تسویه‌نشده']] as const).map(([k, label]) => (
             <button
               key={k}
               onClick={() => setFilter(k)}
@@ -374,7 +384,10 @@ function SalesTab() {
                       )}
                       <p className="text-sm font-bold">{cName(s.customerId)}</p>
                       <span className="text-[11px] text-muted-foreground waffly-num">{prettyJalali(s.date)}</span>
-                      <span className="text-[10px] rounded bg-muted px-1.5 py-0.5">{PAY_METHODS.find(p => p.key === s.paymentMethod)?.label}</span>
+                      {(() => {
+                        const pmLabel = st === 'UNPAID' ? 'تسویه نشده' : (PAY_LABELS[String(s.paymentMethod || '')] || '')
+                        return pmLabel ? <span className={cn('text-[10px] rounded px-1.5 py-0.5 border', st === 'UNPAID' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-muted border-transparent')}>{pmLabel}</span> : null
+                      })()}
                       {s.paymentMethod === 'CHECK' && s.checkDueDate && (
                         <span className="text-[10px] rounded bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.5 waffly-num">چک: {prettyJalali(s.checkDueDate)}</span>
                       )}
@@ -435,7 +448,7 @@ function SalesTab() {
         isEdit={!!editing}
         form={form} setForm={setForm}
         customers={active(customers)} breadTypes={active(breadTypes)} goods={active(goods).filter(g => g.active !== 0)}
-        boxes={boxes.filter(b => !b.deleted)} accounts={accounts.filter(a => !a.deleted)} soldByBox={soldByBox}
+        accounts={accounts.filter(a => !a.deleted)} breadStock={breadStock} lastPrice={lastPrice}
         itemsTotal={itemsTotal} returnTotal={returnTotal} discountAmount={discountAmount} grandTotal={grandTotal}
         saving={saving}
         onSave={() => requireUserName(() => { void save() })}
@@ -452,7 +465,7 @@ function SalesTab() {
   )
 }
 
-function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, breadTypes, goods, boxes, accounts, soldByBox, itemsTotal, returnTotal, discountAmount, grandTotal, onSave, onQuickAddCustomer, saving }: {
+function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, breadTypes, goods, accounts, breadStock, lastPrice, itemsTotal, returnTotal, discountAmount, grandTotal, onSave, onQuickAddCustomer, saving }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   isEdit?: boolean
@@ -473,9 +486,9 @@ function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, 
   customers: Customer[]
   breadTypes: BreadType[]
   goods: Good[]
-  boxes: Box[]
   accounts: Account[]
-  soldByBox: Map<string, number>
+  breadStock: Map<string, number>
+  lastPrice: Map<string, number>
   itemsTotal: number
   returnTotal: number
   discountAmount: number
@@ -489,38 +502,21 @@ function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, 
     setForm(f => ({ ...f, items: f.items.map((it, i) => i === idx ? { ...it, ...patch } : it) }))
   }
   const isGoodItem = (it: SaleItem) => it.kind === 'GOOD' || goods.some(g => g.id === it.breadTypeId)
+  // v3.2.0 — انتخاب کد جعبه از فرم فروش حذف شد؛ فروش = کالا + تعداد، از موجودی همان کالا کم می‌شود
+  // و قیمت پیش‌فرض هر کالا از آخرین فروش همان کالا می‌آید
   const itemOptions = [
-    ...breadTypes.map(b => ({ value: b.id, label: b.name })),
+    ...breadTypes.map(b => {
+      const st = breadStock.get(b.id)
+      return { value: b.id, label: b.name, hint: st != null ? `مانده انبار: ${faDigits(Math.max(0, st))} عدد` : undefined }
+    }),
     ...goods.map(g => ({ value: g.id, label: g.name, hint: 'جعبه‌ای' })),
   ]
-  const btName = (id: string) => breadTypes.find(b => b.id === id)?.name || goods.find(g => g.id === id)?.name || ''
-  // گزینه‌های انتخاب جعبه با کد — جدیدترین اول + ماندهٔ هر جعبه
-  const boxOptions = [
-    { value: '', label: 'بدون کد جعبه', hint: 'انتخاب آزاد نوع و تعداد' },
-    ...[...boxes]
-      .sort((a, b) => (b.date + b.code).localeCompare(a.date + a.code))
-      .slice(0, 80)
-      .map(b => {
-        const remaining = (b.count || 0) - (soldByBox.get(b.id) || 0)
-        return {
-          value: b.id,
-          label: b.code,
-          hint: `${btName(b.breadTypeId)} • ${faDigits(b.count)} عدد${remaining !== b.count ? ` • مانده: ${faDigits(Math.max(0, remaining))}` : ''}${b.hasEssence ? ' • اسانس‌دار' : ''}`,
-        }
-      }),
-  ]
-  const pickBox = (idx: number, boxId: string) => {
-    if (!boxId) { updateItem(idx, { boxId: undefined, boxCode: undefined }); return }
-    const b = boxes.find(x => x.id === boxId)
-    if (!b) return
-    updateItem(idx, { boxId: b.id, boxCode: b.code, breadTypeId: b.breadTypeId, kind: 'BREAD', qty: b.count, delivered: b.count, returned: 0 })
-  }
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[92dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'ویرایش فروش' : 'ثبت فروش'}</DialogTitle>
-          <DialogDescription>{isEdit ? 'همهٔ فیلدها و اقلام قابل تغییر است؛ موجودی و آمار بعد از ذخیره خودکار اصلاح می‌شود.' : 'نان‌ها و کالاها (مثل مشعلی و فانتزی) را انتخاب کنید؛ کالاها با واحد «جعبه» ثبت می‌شوند و جمع خودکار حساب می‌شود.'}</DialogDescription>
+          <DialogDescription>{isEdit ? 'همهٔ فیلدها و اقلام قابل تغییر است؛ موجودی و آمار بعد از ذخیره خودکار اصلاح می‌شود.' : 'کالا را انتخاب کنید (قیمت پیش‌فرض از آخرین فروش می‌آید)، تعداد را بزنید و جمع هر ردیف همان‌جا حساب می‌شود؛ از موجودی تولید همان کالا هم کم می‌شود.'}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="grid sm:grid-cols-2 gap-3">
@@ -557,9 +553,9 @@ function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, 
             <p className="text-sm font-medium">اقلام فروش</p>
             {form.items.map((it, idx) => {
               const isGood = isGoodItem(it)
-              const boxRemaining = it.boxId ? boxes.find(b => b.id === it.boxId) : undefined
-              const rem = boxRemaining ? (boxRemaining.count || 0) - (soldByBox.get(boxRemaining.id) || 0) : null
-              const overSold = rem != null && (it.delivered || it.qty || 0) > rem
+              const stock = !isGood && it.breadTypeId ? breadStock.get(it.breadTypeId) : undefined
+              const overStock = stock != null && (it.qty || 0) > stock
+              const rowTotal = (it.qty || 0) * (it.unitPrice || 0)
               return (
               <div key={idx} className="rounded-xl border p-3 space-y-2">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -568,8 +564,8 @@ function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, 
                     options={itemOptions}
                     onChange={v => {
                       const g = goods.some(x => x.id === v)
-                      // تغییر دستی نوع قلم = کد جعبهٔ قبلی دیگر معنا ندارد (انتخاب جعبه فقط برای همان نوع معتبر بود)
-                      updateItem(idx, { breadTypeId: v, kind: g ? 'GOOD' : 'BREAD', boxId: undefined, boxCode: undefined })
+                      // v3.2.0 — قیمت پیش‌فرض از آخرین فروش همان کالا می‌آید (در صورت نیاز قابل تغییر است)
+                      updateItem(idx, { breadTypeId: v, kind: g ? 'GOOD' : 'BREAD', unitPrice: lastPrice.get(v) ?? it.unitPrice ?? 0, boxId: undefined, boxCode: undefined })
                     }}
                     placeholder="کالا"
                     buttonClassName="h-10 text-xs"
@@ -597,24 +593,13 @@ function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, 
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
-                {!isGood && (
-                  <div className="grid grid-cols-[auto_1fr] items-center gap-2">
-                    <span className="text-[10px] text-muted-foreground flex items-center gap-1 whitespace-nowrap"><Boxes className="h-3 w-3" /> کد جعبه:</span>
-                    <InlinePicker
-                      value={it.boxId || ''}
-                      options={boxOptions}
-                      onChange={v => pickBox(idx, v)}
-                      placeholder="انتخاب جعبه با کد (اختیاری)"
-                      buttonClassName="h-9 text-xs"
-                    />
-                  </div>
-                )}
-                {it.boxId && it.boxCode && (
-                  <p className={cn('text-[10px]', overSold ? 'text-red-600' : 'text-muted-foreground')}>
-                    فروش از جعبهٔ <code className="waffly-num font-bold" dir="ltr">{it.boxCode}</code> — نوع و تعداد از جعبه پر شد
-                    {rem != null && ` • ماندهٔ جعبه: ${faDigits(Math.max(0, rem))} عدد`}
-                    {overSold && ' — تعداد بیشتر از ماندهٔ این جعبه است!'}
-                  </p>
+                {/* v3.2.0 — جمع هر ردیف داخل همان باکس نمایش داده می‌شود */}
+                <div className="flex items-center justify-between rounded-lg bg-muted/60 px-2.5 py-1.5">
+                  <span className="text-[10px] text-muted-foreground">جمع این ردیف</span>
+                  <span className={cn('text-xs font-bold waffly-num', overStock && 'text-red-600')}>{faMoney(rowTotal)} تومان</span>
+                </div>
+                {overStock && (
+                  <p className="text-[10px] text-red-600">موجودی کافی نیست — ماندهٔ انبار این کالا: {faDigits(Math.max(0, stock || 0))} عدد</p>
                 )}
                 {isGood && (
                   <p className="text-[10px] text-muted-foreground">این کالا با واحد «جعبه» ثبت می‌شود — تحویل و برگشتی هم جعبه‌ای است.</p>
@@ -650,7 +635,7 @@ function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, 
               </div>
               )
             })}
-            <Button variant="outline" className="w-full h-10" onClick={() => setForm(f => ({ ...f, items: [...f.items, { ...form.items[0], breadTypeId: '', qty: 0, unitPrice: 0, delivered: 0, returned: 0, returnCost: 0, kind: 'BREAD', boxId: undefined, boxCode: undefined }] }))}>
+            <Button variant="outline" className="w-full h-10" onClick={() => setForm(f => ({ ...f, items: [...f.items, { breadTypeId: '', qty: 0, unitPrice: 0, delivered: 0, returned: 0, returnCost: 0, kind: 'BREAD' } as SaleItem] }))}>
               <Plus className="h-4 w-4" /> افزودن قلم
             </Button>
           </div>
@@ -698,7 +683,7 @@ function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, 
                   { value: 'PARTIAL', label: 'پرداخت جزئی' },
                   { value: 'UNPAID', label: 'پرداخت‌نشده' },
                 ]}
-                onChange={v => setForm(f => ({ ...f, settledStatus: v as Sale['settledStatus'], ...(v === 'UNPAID' ? { paymentMethod: 'CASH' as Sale['paymentMethod'] } : {}) }))}
+                onChange={v => setForm(f => ({ ...f, settledStatus: v as Sale['settledStatus'], ...(v === 'UNPAID' ? { paymentMethod: null } : {}) }))}
               />
             </FormRow>
             {form.settledStatus === 'PARTIAL' && (
@@ -708,13 +693,14 @@ function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, 
             )}
           </div>
           <div className="grid sm:grid-cols-2 gap-3">
-            <FormRow label="روش پرداخت" hint={form.settledStatus === 'UNPAID' ? 'با وضعیت «پرداخت‌نشده» روش پرداخت انتخاب نمی‌شود' : undefined}>
-              {/* v3.1.4 — تا وقتی وضعیت تسویه «پرداخت‌نشده» است، روش پرداخت قابل انتخاب نیست */}
+            <FormRow label="روش پرداخت" hint={form.settledStatus === 'UNPAID' ? 'با وضعیت «تسویه نشده» روش پرداختی ثبت نمی‌شود' : undefined}>
+              {/* v3.1.4 + v3.2.0 — تا وقتی وضعیت تسویه «پرداخت‌نشده» است، روش پرداخت غیرفعال است و «تسویه نشده» نشان می‌دهد */}
               <InlinePicker
-                value={form.paymentMethod}
+                value={form.paymentMethod || ''}
                 options={PAY_METHODS.map(p => ({ value: p.key, label: p.label }))}
                 onChange={v => setForm(f => ({ ...f, paymentMethod: v as Sale['paymentMethod'] }))}
                 disabled={form.settledStatus === 'UNPAID'}
+                placeholder="تسویه نشده"
               />
             </FormRow>
             <FormRow label="تاریخ وصول واقعی" hint="اگر با تاریخ فروش متفاوت است">
@@ -868,68 +854,6 @@ function CustomersTab() {
       </Card>
       {confirmDialog}
     </div>
-  )
-}
-
-// ================= چک‌ها =================
-function ChecksTab() {
-  const sales = useTable<Sale>('sales')
-  const customers = useTable<Customer>('customers')
-  const checks = active(sales)
-    .filter(s => s.paymentMethod === 'CHECK')
-    .sort((a, b) => (a.checkDueDate || a.date).localeCompare(b.checkDueDate || b.date))
-  const cName = (id: string) => customers.find(c => c.id === id)?.name || 'نامشخص'
-
-  const collect = async (s: Sale) => {
-    await putRecord<Sale>('sales', { ...s, settledStatus: 'PAID', paidAmount: s.totalAmount, paymentDate: todayJalali() })
-    toast({ title: 'چک وصول شد' })
-  }
-
-  const statusChip = (s: Sale) => {
-    const st = effectiveSettled(s)
-    if (st === 'PAID') return <span className="rounded bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 text-[10px]">وصول‌شده</span>
-    const days = daysSince(s.checkDueDate || s.date)
-    if (s.checkDueDate && days > 0 || (!s.checkDueDate && days > 0)) {
-      return <span className="rounded bg-red-50 text-red-700 border border-red-200 px-2 py-0.5 text-[10px] waffly-num">{faDigits(days)} روز گذشته</span>
-    }
-    if (days >= -7) return <span className="rounded bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 text-[10px] waffly-num">نزدیک سررسید</span>
-    return <span className="rounded bg-muted px-2 py-0.5 text-[10px] waffly-num">{faDigits(-days)} روز مانده</span>
-  }
-
-  return (
-    <Card className="waffly-card">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2"><Landmark className="h-4 w-4" /> فروش‌های چکی</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {checks.length === 0 ? (
-          <EmptyState title="چکی ثبت نشده" desc="در ثبت فروش، روش پرداخت «چک» را انتخاب کنید." icon={<Landmark className="h-5 w-5" />} />
-        ) : (
-          <div className="space-y-2">
-            {checks.map(s => (
-              <div key={s.id} className="flex flex-wrap items-center gap-2 rounded-xl border p-3">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold">{cName(s.customerId)}</p>
-                  <p className="text-[11px] text-muted-foreground waffly-num">
-                    فروش {prettyJalali(s.date)}
-                    {s.checkDueDate && ` • سررسید ${prettyJalali(s.checkDueDate)}`}
-                    {s.checkNumber && ` • چک ${s.checkNumber}`}
-                    {s.checkBank && ` • ${s.checkBank}`}
-                  </p>
-                </div>
-                {statusChip(s)}
-                <Money value={s.totalAmount} className="font-bold text-sm" />
-                {effectiveSettled(s) !== 'PAID' && (
-                  <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => void collect(s)}>
-                    <Wallet className="h-3.5 w-3.5" /> وصول شد
-                  </Button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
   )
 }
 

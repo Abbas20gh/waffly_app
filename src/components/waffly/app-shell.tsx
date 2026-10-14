@@ -4,19 +4,19 @@ import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import {
   LayoutDashboard, Wheat, ShoppingCart, ShoppingBasket, Wrench,
-  Calculator, Settings, Menu, UserRound,
+  Calculator, Settings, Menu, UserRound, LogOut,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SyncBadge } from './sync-badge'
 import { NotificationsBell } from './notifications-bell'
 import { todayPretty } from '@/lib/jalali'
-import { getActiveUser, setActiveUser } from '@/lib/localdb'
+import { getSession, setSession, AUTH_EVENT, type AuthSession } from '@/lib/localdb'
 import { UserGateDialog } from '@/lib/user-gate'
+import { LoginGate } from './login-gate'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 
 export type ViewKey = 'dashboard' | 'production' | 'sales' | 'purchases' | 'machines' | 'accounting' | 'settings'
@@ -38,32 +38,31 @@ export function AppShell({ view, onNavigate, children }: {
 }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
-  const [userName, setUserName] = useState('')
-  const [initialized, setInitialized] = useState(false)
+  const [auth, setAuth] = useState<AuthSession | null>(null)
+  const [mounted, setMounted] = useState(false)
 
-  if (!initialized && typeof window !== 'undefined') {
-    setUserName(getActiveUser())
-    setInitialized(true)
-  }
-
-  // v3.1.4 — نام هدر همیشه با گیتِ نام و منوی کاربر همگام بماند
+  // v3.2.0 — قفل ورود: بدون نشست معتبر، فقط صفحهٔ ورود نمایش داده می‌شود
   useEffect(() => {
-    const sync = () => setUserName(getActiveUser())
+    setAuth(getSession())
+    setMounted(true)
+    const sync = () => setAuth(getSession())
+    window.addEventListener(AUTH_EVENT, sync)
     window.addEventListener('waffly-user-changed', sync)
-    return () => window.removeEventListener('waffly-user-changed', sync)
+    return () => {
+      window.removeEventListener(AUTH_EVENT, sync)
+      window.removeEventListener('waffly-user-changed', sync)
+    }
   }, [])
-
-  const saveUser = (name: string) => {
-    setUserName(name)
-    setActiveUser(name)
-    setUserMenuOpen(false)
-  }
 
   const nav = (v: ViewKey) => {
     onNavigate(v)
     setMobileOpen(false)
     window.scrollTo({ top: 0 })
   }
+
+  if (!mounted) return <div className="min-h-screen bg-background" dir="rtl" />
+  if (!auth) return <LoginGate />
+  const userName = auth.family
 
   return (
     <div className="min-h-screen flex flex-col bg-background" dir="rtl">
@@ -93,30 +92,28 @@ export function AppShell({ view, onNavigate, children }: {
 
           <div className="flex-1" />
 
-          {/* انتخاب کاربر فعال */}
+          {/* کاربر واردشده + خروج */}
           <DropdownMenu open={userMenuOpen} onOpenChange={setUserMenuOpen}>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="gap-2 text-white hover:bg-white/10 h-9 px-2.5">
                 <UserRound className="h-4.5 w-4.5" />
-                <span className="text-xs hidden sm:inline">{userName || 'کاربر'}</span>
+                <span className="text-xs hidden sm:inline">{userName}{auth.isAdmin ? ' (مدیر)' : ''}</span>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuLabel>کاربر فعال (بدون سلسله‌مراتب دسترسی)</DropdownMenuLabel>
+            <DropdownMenuContent align="end" className="w-60">
+              <DropdownMenuLabel>کاربر: {userName}{auth.isAdmin ? ' — مدیر' : ''}</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <div className="p-2">
-                <Input
-                  value={userName}
-                  onChange={(e) => setUserName(e.target.value)}
-                  placeholder="نام شما (مثلاً اپراتور ۱)"
-                  onKeyDown={(e) => { if (e.key === 'Enter') saveUser(userName) }}
-                  className="h-9"
-                />
-                <Button size="sm" className="mt-2 w-full h-9" onClick={() => saveUser(userName)}>
-                  ثبت
-                </Button>
-              </div>
-              <p className="px-3 pb-2 text-[11px] text-muted-foreground">نام واردشده روی رکوردهای ثبت‌شده ثبت می‌شود.</p>
+              <p className="px-3 py-2 text-[11px] text-muted-foreground leading-5">
+                نام شما روی رکوردهای ثبت‌شده (فروش، خرید، تولید) درج می‌شود.
+                {auth.isAdmin && ' مدیریت کاربران در تنظیمات ← کاربران است.'}
+              </p>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-red-600 focus:text-red-600"
+                onClick={() => setSession(null)}
+              >
+                <LogOut className="h-4 w-4 ml-1" /> خروج از حساب
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -152,8 +149,8 @@ export function AppShell({ view, onNavigate, children }: {
             ))}
           </nav>
           <div className="p-4 text-[11px] text-muted-foreground border-t">
-            <p className="font-semibold text-foreground/70">Waffly v3.1.4</p>
-            <p className="mt-1 leading-5">آفلاین‌محور • سینک خودکار<br />تقویم شمسی • ۳ کاربر هم‌زمان</p>
+            <p className="font-semibold text-foreground/70">Waffly v3.2.0</p>
+            <p className="mt-1 leading-5">آفلاین‌محور • سینک خودکار<br />تقویم شمسی • ورود با حساب کاربری</p>
           </div>
         </aside>
 

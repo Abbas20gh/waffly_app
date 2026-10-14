@@ -50,6 +50,7 @@ class WafflyDB extends Dexie {
   settings!: Table<BaseRow, string>
   accounts!: Table<BaseRow, string>
   combinedInvoices!: Table<BaseRow, string>
+  appUsers!: Table<BaseRow, string>
   outbox!: Table<OutboxItem, number>
   meta!: Table<{ key: string; value: unknown }, string>
 
@@ -88,6 +89,10 @@ class WafflyDB extends Dexie {
     // v5: فاکتورهای ترکیبی (v2.8) — فیلدهای discount/invoiceNumber فروش غیرایندکسی‌اند
     this.version(5).stores({
       combinedInvoices: 'id, updatedAt, date, customerId',
+    })
+    // v6: کاربران اپ (v3.2.0) — ورود با فامیل + ۴ رقم آخر شماره؛ سینک بین همه دستگاه‌ها
+    this.version(6).stores({
+      appUsers: 'id, updatedAt, family',
     })
   }
 }
@@ -153,6 +158,62 @@ export function setActiveUser(name: string) {
   memUser = name
   try { localStorage.setItem('waffly-user', name) } catch { /* ignore */ }
   if (typeof window !== 'undefined') window.dispatchEvent(new Event('waffly-user-changed'))
+}
+
+// ===== نشست ورود (v3.2.0) =====
+// ورود با فامیل + ۴ رقم آخر شماره موبایل؛ نشست در localStorage نگه داشته می‌شود.
+// لیست کاربران در جدول appUsers سینک می‌شود تا همه دستگاه‌ها همان حساب‌ها را بشناسند.
+export const AUTH_EVENT = 'waffly-auth-changed'
+export interface AuthSession { id: string; family: string; isAdmin: boolean; at: number }
+
+export function getSession(): AuthSession | null {
+  try {
+    const raw = localStorage.getItem('waffly-auth')
+    if (!raw) return null
+    const s = JSON.parse(raw) as AuthSession
+    return s && s.id && s.family ? s : null
+  } catch { return null }
+}
+
+export function setSession(s: AuthSession | null) {
+  try {
+    if (s) localStorage.setItem('waffly-auth', JSON.stringify(s))
+    else localStorage.removeItem('waffly-auth')
+  } catch { /* ignore */ }
+  setActiveUser(s?.family || '')
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(AUTH_EVENT))
+}
+
+interface AppUserLite { id: string; family?: unknown; pin?: unknown; isAdmin?: unknown; phone?: unknown; deleted?: number }
+
+/** تطبیق فامیل (بی‌حساس به فاصله/حروف کوچک) + نرمال‌سازی ارقام فارسی/عربی به لاتین */
+const normFamily = (v: string) => v.trim().replace(/\s+/g, ' ').toLowerCase()
+const toEnDigits = (v: string) =>
+  v.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+
+export async function loginAppUser(family: string, pin: string): Promise<AuthSession | 'NO_USER' | 'BAD_PIN'> {
+  const fam = normFamily(family)
+  const code = toEnDigits(pin).replace(/\D/g, '')
+  const users = (await dexie.appUsers.toArray()) as unknown as AppUserLite[]
+  const u = users.find(x => !x.deleted && normFamily(String(x.family || '')) === fam)
+  if (!u) return 'NO_USER'
+  if (!code || code !== toEnDigits(String(u.pin || '')).replace(/\D/g, '')) return 'BAD_PIN'
+  const s: AuthSession = { id: u.id, family: String(u.family), isAdmin: !!u.isAdmin, at: Date.now() }
+  setSession(s)
+  return s
+}
+
+/** ورود اول — فقط وقتی هیچ کاربری وجود ندارد؛ اولین نفر مدیر می‌شود */
+export async function createFirstAdmin(family: string, pin: string, phone?: string): Promise<AuthSession> {
+  const users = (await dexie.appUsers.toArray()) as unknown as AppUserLite[]
+  if (users.filter(x => !x.deleted).length > 0) throw new Error('کاربران از قبل ثبت شده‌اند')
+  const code = toEnDigits(pin).replace(/\D/g, '')
+  const id = uid()
+  const row = { id, family: family.trim(), pin: code, isAdmin: 1, phone: phone || null, updatedAt: 0, deleted: 0 }
+  await putRecord('appUsers', row as unknown as BaseRow)
+  const s: AuthSession = { id, family: family.trim(), isAdmin: true, at: Date.now() }
+  setSession(s)
+  return s
 }
 
 // ===== رویداد تغییر داده (برای زمان‌بندی سینک) =====

@@ -48,11 +48,14 @@ const TBL_LABEL: Record<SyncTbl, string> = {
   materials: 'ماده اولیه', goods: 'کالا', machines: 'دستگاه', machineCosts: 'هزینه دستگاه',
   expenseCategories: 'سرفصل هزینه', expenses: 'هزینه', otherFunds: 'وجوه دیگر',
   settings: 'تنظیمات', accounts: 'حساب', breadTypes: 'نوع نان', combinedInvoices: 'فاکتور ترکیبی',
+  appUsers: 'کاربر',
 }
 const OP_LABEL: Record<NotifOp, string> = { CREATE: 'ثبت', UPDATE: 'ویرایش', DELETE: 'حذف' }
 const OP_ICON: Record<NotifOp, string> = { CREATE: '➕', UPDATE: '✏️', DELETE: '🗑' }
-const PAY_LABEL: Record<string, string> = { CASH: 'نقدی', CARD: 'کارت‌خوان', TRANSFER: 'کارت به کارت', CHECK: 'چک' }
-const SETTLE_LABEL: Record<string, string> = { PAID: 'تسویه‌شده', PARTIAL: 'تسویه جزئی', UNPAID: 'پرداخت‌نشده' }
+// v3.2.0 — فیکس لیبل روش پرداخت: قبلاً CARD به‌اشتباه «کارت‌خوان» نمایش داده می‌شد
+// (در اپ CARD = کارت به کارت است) + POS جدید (کارتخوان) اضافه شد
+const PAY_LABEL: Record<string, string> = { CASH: 'نقدی', CARD: 'کارت به کارت', POS: 'کارتخوان', TRANSFER: 'کارت به کارت', CHECK: 'چک' }
+const SETTLE_LABEL: Record<string, string> = { PAID: 'تسویه‌شده', PARTIAL: 'تسویه جزئی', UNPAID: 'تسویه نشده' }
 const MACHINE_KIND: Record<string, string> = { BAKING: 'پخت', BUSINESS: 'بازرگانی' }
 const MACHINE_STATUS: Record<string, string> = { IN_PROGRESS: 'در حال ساخت', DONE: 'تکمیل‌شده', PAUSED: 'متوقف' }
 const COST_KIND: Record<string, string> = { CONSUMABLE: 'مصرفی', CAPITAL: 'سرمایه‌ای' }
@@ -149,7 +152,8 @@ export async function buildNotifications(db: Client, changes: NotifChange[]): Pr
     switch (tbl) {
       case 'sales': {
         const cust = nameOf(nameMap, 'customers', r.customerId) || 'مشتری'
-        const pay = PAY_LABEL[String(r.paymentMethod)] || ''
+        // v3.2.0 — تسویه‌نشده بدون روش پرداخت = بدون لیبل نقدی؛ فقط روش واقعی انتخاب‌شده نمایش داده می‌شود
+        const pay = String(r.settledStatus) === 'UNPAID' ? 'تسویه نشده' : (PAY_LABEL[String(r.paymentMethod)] || '')
         const settle = SETTLE_LABEL[String(r.settledStatus)] || ''
         const inv = r.invoiceNumber != null && Number(r.invoiceNumber) > 0 ? `فاکتور #${faDigits(String(r.invoiceNumber))}` : ''
         const acc = r.accountId ? `واریز به ${nameOf(nameMap, 'accounts', r.accountId)}` : ''

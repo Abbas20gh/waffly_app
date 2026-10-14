@@ -3,7 +3,7 @@ export const TABLES = [
   'breadTypes', 'productions', 'boxes', 'materials', 'goods', 'consumptions',
   'customers', 'sales', 'suppliers', 'purchases',
   'machines', 'machineCosts', 'expenseCategories', 'expenses', 'otherFunds', 'settings', 'accounts',
-  'combinedInvoices',
+  'combinedInvoices', 'appUsers',
 ] as const
 
 export type SyncTbl = (typeof TABLES)[number]
@@ -55,10 +55,22 @@ export interface SaleItem {
 }
 export type DiscountType = 'NONE' | 'AMOUNT' | 'PERCENT'
 
+/** روش پرداخت فروش — POS = کارتخوان (از v3.2.0)؛ null = تسویه‌نشده بدون روش */
+export type PayMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'CHECK' | 'POS'
+
+/** کاربر اپ (v3.2.0) — ورود با فامیل + ۴ رقم آخر شماره؛ سینک‌شونده بین همه دستگاه‌ها */
+export interface AppUser extends BaseRow {
+  family: string
+  pin: string // ۴ رقم آخر شماره موبایل
+  isAdmin?: number
+  phone?: string | null
+}
+
 export interface Sale extends BaseRow {
   date: string; customerId: string; items: string // JSON SaleItem[]
   totalAmount: number; settledStatus: 'PAID' | 'PARTIAL' | 'UNPAID'
-  paidAmount: number; paymentMethod: 'CASH' | 'CARD' | 'TRANSFER' | 'CHECK'
+  /** از v3.2.0 — تسویه‌نشده = null (دیگر نقدی پیش‌فرض نمی‌خورد) */
+  paidAmount: number; paymentMethod?: PayMethod | null
   checkDueDate?: string | null; checkNumber?: string | null; checkBank?: string | null
   paymentDate?: string | null; note?: string | null; createdBy?: string | null
   /** از v2.7 — مبلغ پرداختی به این حساب واریز می‌شود (اختیاری) */

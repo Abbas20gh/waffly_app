@@ -5,17 +5,18 @@ import { useEffect, useState } from 'react'
 import { toast } from '@/hooks/use-toast'
 import {
   Settings as SettingsIcon, Save, DatabaseBackup, Download, Upload,
-  CalendarDays, ShieldAlert, RefreshCw, HardDriveDownload, Smartphone, Plus, Trash2, Pencil, CreditCard,
+  CalendarDays, ShieldAlert, RefreshCw, HardDriveDownload, Smartphone, Plus, Trash2, Pencil, CreditCard, Users, LogOut,
 } from 'lucide-react'
 import {
   useSetting, useTable, putRecord, removeRecord, exportAllToJson, importAllFromJson, uid, DEFAULT_BANK,
+  getSession, setSession,
 } from '@/lib/localdb'
 import { PageHeader, FormRow, useConfirm, confirmRemove } from './bits'
 import { PwaGuideContent, getPlatform, isStandalone } from './pwa-install'
 import { faDigits, faMoney } from '@/lib/jalali'
 import { forceSyncNow, useSyncStore, repairSync, forceFullResync } from '@/lib/sync-engine'
 import { downloadTextFile } from '@/lib/export'
-import type { ExpenseCategory } from '@/lib/types'
+import type { ExpenseCategory, AppUser } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -30,7 +31,11 @@ export function SettingsView() {
   const setting = useSetting()
   const { pendingCount, online, lastSyncAt, error, syncing } = useSyncStore()
   const expenseCategories = useTable<ExpenseCategory>('expenseCategories')
+  const appUsers = useTable<AppUser>('appUsers')
+  const auth = typeof window !== 'undefined' ? getSession() : null
   const { confirm, element: confirmDialog } = useConfirm()
+  const [newUserFamily, setNewUserFamily] = useState('')
+  const [newUserPhone, setNewUserPhone] = useState('')
 
   const [businessName, setBusinessName] = useState('')
   const [accountingDay, setAccountingDay] = useState('5')
@@ -145,10 +150,38 @@ export function SettingsView() {
     setEditingCat(null)
   }
 
+  // ===== کاربران (v3.2.0) =====
+  const toEnLocal = (v: string) =>
+    v.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+
+  const addAppUser = async () => {
+    const family = newUserFamily.trim()
+    if (!family) { toast({ title: 'فامیل کاربر را وارد کنید', variant: 'destructive' }); return }
+    const digits = toEnLocal(newUserPhone).replace(/\D/g, '')
+    if (digits.length < 4) { toast({ title: 'شماره موبایل (یا حداقل ۴ رقم آخر آن) لازم است', variant: 'destructive' }); return }
+    const pin = digits.slice(-4)
+    if (appUsers.some(u => !u.deleted && u.family.trim().replace(/\s+/g, ' ').toLowerCase() === family.replace(/\s+/g, ' ').toLowerCase())) {
+      toast({ title: 'کاربری با این فامیل از قبل ثبت است', variant: 'destructive' })
+      return
+    }
+    await putRecord<AppUser>('appUsers', { id: uid(), family, pin, isAdmin: 0, phone: newUserPhone.trim() || null, updatedAt: 0, deleted: 0 })
+    toast({ title: 'کاربر اضافه شد', description: `${family} — رمز ورود: ${pin} (سینک به همه دستگاه‌ها)` })
+    setNewUserFamily('')
+    setNewUserPhone('')
+  }
+
+  const removeAppUser = async (u: AppUser) => {
+    const admins = appUsers.filter(x => !x.deleted && x.isAdmin)
+    if (u.isAdmin && admins.length <= 1) { toast({ title: 'آخرین مدیر قابل حذف نیست', variant: 'destructive' }); return }
+    if (auth && u.id === auth.id) { toast({ title: 'حساب خودتان را نمی‌توانید حذف کنید', variant: 'destructive' }); return }
+    await removeRecord('appUsers', u.id)
+    toast({ title: 'کاربر حذف شد', description: `${u.family} دیگر نمی‌تواند وارد شود` })
+  }
+
   return (
     <div className="space-y-5">
       {/* APP_VERSION — با هر آپدیت APK/وب به‌روز شود */}
-      <PageHeader title="تنظیمات" subtitle="دوره حسابداری، هشدارها، سینک، پشتیبان‌گیری و نصب اپ — نسخه ۳.۱.۱" icon={<SettingsIcon className="h-5 w-5" />} />
+      <PageHeader title="تنظیمات" subtitle="دوره حسابداری، هشدارها، سینک، پشتیبان‌گیری و نصب اپ — نسخه ۳.۲.۰" icon={<SettingsIcon className="h-5 w-5" />} />
 
       <div className="grid lg:grid-cols-2 gap-4 items-start">
         <Card className="waffly-card">
@@ -235,6 +268,53 @@ export function SettingsView() {
 
         {/* ===== سینک و پشتیبان ===== */}
         <div className="space-y-4">
+          {/* کاربران و ورود (v3.2.0) — فقط مدیر */}
+          {auth?.isAdmin && (
+            <Card className="waffly-card">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2"><Users className="h-4 w-4" /> کاربران و ورود به برنامه</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-[11px] text-muted-foreground leading-5">
+                  هر کاربر با <b>فامیل</b> و رمز <b>۴ رقم آخر شماره موبایل خودش</b> وارد می‌شود. لیست کاربران بین همه دستگاه‌ها سینک می‌شود؛
+                  بعد از افزودن، روی دستگاه دیگر چند لحظه صبر کنید تا سینک شود.
+                </p>
+                <div className="space-y-1.5 max-h-48 overflow-y-auto thin-scroll">
+                  {appUsers.filter(u => !u.deleted).length === 0 && (
+                    <p className="text-xs text-muted-foreground text-center py-3">هنوز کاربری ثبت نشده — اولین حساب مدیر است</p>
+                  )}
+                  {appUsers.filter(u => !u.deleted).map(u => (
+                    <div key={u.id} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
+                      <span className="flex-1 font-medium">{u.family}</span>
+                      {u.isAdmin ? (
+                        <span className="text-[10px] rounded bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5">مدیر</span>
+                      ) : (
+                        <span className="text-[10px] rounded bg-muted px-1.5 py-0.5">کاربر</span>
+                      )}
+                      <span className="text-[11px] text-muted-foreground waffly-num" dir="ltr">رمز: {faDigits(u.pin || '—')}</span>
+                      {u.phone && <span className="text-[11px] text-muted-foreground waffly-num hidden sm:inline" dir="ltr">{u.phone}</span>}
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-red-600" aria-label="حذف کاربر"
+                        onClick={() => void confirmRemove(confirm, 'appUsers', u.id, 'حذف کاربر', `آیا از حذف حساب «${u.family}» مطمئن هستید؟ دیگر با این حساب نمی‌توان وارد شد.`)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                <div className="grid sm:grid-cols-[1fr_1fr_auto] gap-2">
+                  <Input value={newUserFamily} onChange={e => setNewUserFamily(e.target.value)} placeholder="فامیل کاربر جدید…" className="h-10" />
+                  <Input inputMode="tel" value={newUserPhone} onChange={e => setNewUserPhone(e.target.value)} placeholder="شماره موبایل (رمز = ۴ رقم آخر)" className="h-10 waffly-num" dir="ltr" />
+                  <Button variant="outline" className="h-10 shrink-0" onClick={() => void addAppUser()}><Plus className="h-4 w-4" /> افزودن</Button>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 pt-1 border-t">
+                  <Button variant="outline" className="h-9 text-red-600 border-red-200 hover:bg-red-50" onClick={() => setSession(null)}>
+                    <LogOut className="ml-1.5 h-3.5 w-3.5" /> خروج از حساب ({auth.family})
+                  </Button>
+                  <span className="text-[11px] text-muted-foreground">برای تغییر رمز یک کاربر، آن را حذف و دوباره با شماره درست اضافه کنید.</span>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card className="waffly-card">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2"><RefreshCw className="h-4 w-4" /> همگام‌سازی</CardTitle>

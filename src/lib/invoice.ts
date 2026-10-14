@@ -218,6 +218,7 @@ export const SETTLE_LABEL: Record<string, string> = {
 export const METHOD_LABEL: Record<string, string> = {
   CASH: 'نقدی',
   CARD: 'کارت به کارت',
+  POS: 'کارتخوان',
   TRANSFER: 'کارت به کارت',
   CHECK: 'چک',
 }

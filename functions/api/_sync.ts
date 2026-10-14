@@ -6,7 +6,7 @@ export const TABLES = [
   'breadTypes', 'productions', 'boxes', 'materials', 'goods', 'consumptions',
   'customers', 'sales', 'suppliers', 'purchases',
   'machines', 'machineCosts', 'expenseCategories', 'expenses', 'otherFunds', 'settings', 'accounts',
-  'combinedInvoices',
+  'combinedInvoices', 'appUsers',
 ] as const
 export type SyncTbl = (typeof TABLES)[number]
 
@@ -19,6 +19,7 @@ export const PHYS: Record<SyncTbl, string> = {
   expenseCategories: 'ExpenseCategory', expenses: 'Expense', otherFunds: 'OtherFund', settings: 'Setting',
   accounts: 'Account',
   combinedInvoices: 'CombinedInvoice',
+  appUsers: 'AppUser',
 }
 
 type FieldType = 'str' | 'num' | 'int' | 'strNull' | 'numNull'
@@ -42,6 +43,7 @@ export const FIELDS: Record<SyncTbl, Record<string, FieldType>> = {
   settings: { businessName: 'str', monthStartDay: 'int', badDebtDays: 'int', checkAlertDays: 'int', bankAccountName: 'str', bankCardNumber: 'str', bankSheba: 'str', bankName: 'str', shopPhones: 'str' },
   accounts: { name: 'str', kind: 'str', initialBalance: 'num', note: 'strNull', active: 'int' },
   combinedInvoices: { invoiceNumber: 'num', customerId: 'str', saleIds: 'str', date: 'str', totalAmount: 'num', paidAmount: 'num', remaining: 'num', note: 'strNull', createdBy: 'strNull' },
+  appUsers: { family: 'str', pin: 'str', isAdmin: 'int', phone: 'strNull' },
 }
 
 const s = (v: unknown, dflt = ''): string => (typeof v === 'string' ? v : v == null ? dflt : String(v))
@@ -126,6 +128,18 @@ export async function ensureSchema(db: Client): Promise<void> {
       "id" TEXT PRIMARY KEY NOT NULL,
       "lastNumber" INTEGER NOT NULL DEFAULT 1000,
       "updatedAt" REAL NOT NULL DEFAULT 0
+    )
+  `)
+  // ۵) مهاجرت v3.2.0 — جدول کاربران اپ (ورود با فامیل + ۴ رقم آخر شماره)
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS "AppUser" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "family" TEXT NOT NULL DEFAULT '',
+      "pin" TEXT NOT NULL DEFAULT '',
+      "isAdmin" INTEGER NOT NULL DEFAULT 0,
+      "phone" TEXT,
+      "updatedAt" REAL NOT NULL DEFAULT 0,
+      "deleted" INTEGER NOT NULL DEFAULT 0
     )
   `)
   // شروع شمارنده از ۱۰۰۰ (اولین فاکتور = ۱۰۰۱) — مقدار قابل تغییر قبل از اولین صدور
