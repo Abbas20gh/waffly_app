@@ -142,11 +142,17 @@ export async function normalizeGoodsUnits(): Promise<number> {
 }
 
 // ===== کاربر فعال =====
+// v3.1.4 — پشتیبان حافظه: اگر localStorage مرورگر خراب/مسدود باشد (حالت خصوصی، سهمیه پر،
+// تنظیمات سخت‌گیرانه) نام فقط در حافظهٔ نشست نگه داشته می‌شود تا گیتِ نام هر بار تکرار نشود
+// و ثبت فروش/خرید/تولید متوقف نشود.
+let memUser: string | null = null
 export function getActiveUser(): string {
-  try { return localStorage.getItem('waffly-user') || '' } catch { return '' }
+  try { return localStorage.getItem('waffly-user') || '' } catch { return memUser ?? '' }
 }
 export function setActiveUser(name: string) {
+  memUser = name
   try { localStorage.setItem('waffly-user', name) } catch { /* ignore */ }
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('waffly-user-changed'))
 }
 
 // ===== رویداد تغییر داده (برای زمان‌بندی سینک) =====

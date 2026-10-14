@@ -14,6 +14,7 @@ import { PageHeader, FormRow, TabsBar, EmptyState, SettleBadge, Money, Num, useC
 import { JalaliDateInput } from './jalali-date'
 import { InlinePicker } from './inline-picker'
 import { useTable, useSetting, putRecord, removeRecord, uid, getActiveUser } from '@/lib/localdb'
+import { requireUserName } from '@/lib/user-gate'
 import type { Purchase, Supplier, Material, Consumption, Good, Sale, Account } from '@/lib/types'
 import { todayJalali, faDigits, faMoney, prettyJalali } from '@/lib/jalali'
 import { active, materialStocks, goodsStocks, effectiveSettled } from '@/lib/calc'
@@ -60,6 +61,7 @@ function PurchasesTab() {
   const { confirm, element: confirmDialog } = useConfirm()
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Purchase | null>(null)
+  const [saving, setSaving] = useState(false)
   const blankForm = {
     date: todayJalali(), itemKind: 'MATERIAL' as 'MATERIAL' | 'GOOD', materialId: '',
     quantity: '', cost: '', pricePerBox: '',
@@ -99,33 +101,47 @@ function PurchasesTab() {
 
   const save = async () => {
     if (!form.materialId || qtyNum <= 0 || costNum <= 0) { toast({ title: 'قلم، مقدار و هزینه را وارد کنید', variant: 'destructive' }); return }
-    const paid = form.settledStatus === 'PAID' ? costNum : parseFloat(form.paidAmount || '0')
-    // ویرایش = همان id با putRecord (updatedAt جدید → سینک)؛ createdBy اصلی حفظ می‌شود
-    await putRecord<Purchase>('purchases', {
-      ...(editing || {}),
-      id: editing ? editing.id : uid(),
-      updatedAt: editing ? editing.updatedAt : 0,
-      date: form.date,
-      materialId: form.materialId,
-      quantity: qtyNum,
-      cost: costNum,
-      supplierId: form.supplierId || null,
-      settledStatus: form.settledStatus === 'PAID' || paid >= costNum - 0.5 ? 'PAID' : paid > 0.5 ? 'PARTIAL' : 'UNPAID',
-      paidAmount: Math.min(paid, costNum),
-      itemKind: form.itemKind,
-      boxesCount: isGood ? qtyNum : 0,
-      note: form.note || null,
-      accountId: form.accountId || null,
-      createdBy: editing?.createdBy ?? (getActiveUser() || null),
-      deleted: 0,
-    })
-    toast({
-      title: editing ? 'خرید ویرایش شد' : 'خرید ثبت شد',
-      description: `${(isGood ? good?.name : mat?.name) || ''}: ${isGood ? `${faDigits(qtyNum)} جعبه` : `${faDigits(qtyNum)} ${(mat?.unit || '')}`} — ${faMoney(costNum)} تومان`,
-    })
-    setOpen(false)
-    setEditing(null)
-    setForm(f => ({ ...f, quantity: '', cost: '', pricePerBox: '', paidAmount: '', note: '' }))
+    if (saving) return
+    setSaving(true)
+    try {
+      const paid = form.settledStatus === 'PAID' ? costNum : parseFloat(form.paidAmount || '0')
+      // ویرایش = همان id با putRecord (updatedAt جدید → سینک)؛ createdBy اصلی حفظ می‌شود
+      await putRecord<Purchase>('purchases', {
+        ...(editing || {}),
+        id: editing ? editing.id : uid(),
+        updatedAt: editing ? editing.updatedAt : 0,
+        date: form.date,
+        materialId: form.materialId,
+        quantity: qtyNum,
+        cost: costNum,
+        supplierId: form.supplierId || null,
+        settledStatus: form.settledStatus === 'PAID' || paid >= costNum - 0.5 ? 'PAID' : paid > 0.5 ? 'PARTIAL' : 'UNPAID',
+        paidAmount: Math.min(paid, costNum),
+        itemKind: form.itemKind,
+        boxesCount: isGood ? qtyNum : 0,
+        note: form.note || null,
+        accountId: form.accountId || null,
+        createdBy: editing?.createdBy ?? (getActiveUser() || null),
+        deleted: 0,
+      })
+      toast({
+        title: editing ? 'خرید ویرایش شد' : 'خرید ثبت شد',
+        description: `${(isGood ? good?.name : mat?.name) || ''}: ${isGood ? `${faDigits(qtyNum)} جعبه` : `${faDigits(qtyNum)} ${(mat?.unit || '')}`} — ${faMoney(costNum)} تومان`,
+      })
+      setOpen(false)
+      setEditing(null)
+      setForm(f => ({ ...f, quantity: '', cost: '', pricePerBox: '', paidAmount: '', note: '' }))
+    } catch (e) {
+      // v3.1.4 — نمایش خطای واقعی به‌جای شکست بی‌صدا
+      console.error('purchase save failed', e)
+      toast({
+        title: 'ثبت خرید انجام نشد',
+        description: e instanceof Error ? e.message : 'خطای ذخیره‌سازی محلی — صفحه را دوباره باز کنید.',
+        variant: 'destructive',
+      })
+    } finally {
+      setSaving(false)
+    }
   }
 
   const list = [...purchases].filter(p => !p.deleted).sort((a, b) => (b.date + b.updatedAt).localeCompare(a.date + a.updatedAt)).slice(0, 50)
@@ -267,7 +283,7 @@ function PurchasesTab() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setOpen(false); setEditing(null) }}>انصراف</Button>
-            <Button onClick={save}>{editing ? 'ذخیره تغییرات' : 'ثبت خرید'}</Button>
+            <Button onClick={() => requireUserName(() => { void save() })} disabled={saving}>{saving ? 'در حال ذخیره…' : (editing ? 'ذخیره تغییرات' : 'ثبت خرید')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

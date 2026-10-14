@@ -15,6 +15,7 @@ import { PageHeader, FormRow, TabsBar, EmptyState, Num, useConfirm, confirmRemov
 import { JalaliDateInput } from './jalali-date'
 import { InlinePicker } from './inline-picker'
 import { useTable, useDexie, dexie, putRecord, putMany, removeRecord, uid, getActiveUser } from '@/lib/localdb'
+import { requireUserName } from '@/lib/user-gate'
 import type { BreadType, Box, Production, Material, Consumption } from '@/lib/types'
 import { ESSENCE_TYPES } from '@/lib/types'
 import { todayJalali, faDigits, parseJalali, prettyJalali, addJalaliDays } from '@/lib/jalali'
@@ -114,7 +115,7 @@ function DailyTab() {
     return codes
   }, [bt, boxes, form.boxesCount, form.date, editing, liveBoxCount])
 
-  const save = async () => {
+  const doSave = async () => {
     if (!form.breadTypeId || !bt) { toast({ title: 'نوع نان را انتخاب کنید', variant: 'destructive' }); return }
     const total = parseFloat(form.totalProduced || '0')
     const boxCount = parseInt(form.boxesCount || '0', 10)
@@ -224,6 +225,21 @@ function DailyTab() {
     }
     toast({ title: 'تولید ثبت شد', description: boxCount > 0 ? `${faDigits(boxCount)} جعبه با کد یکتا ساخته شد${essenceCount > 0 ? ` (${faDigits(essenceCount)} جعبه اسانس‌دار)` : ''}.` : undefined })
     setOpen(false)
+  }
+
+  // v3.1.4 — هیچ شکست ذخیره‌ای بی‌صدا نیست + جلوگیری از دابل‌کلیک
+  const [saving, setSaving] = useState(false)
+  const save = async () => {
+    if (saving) return
+    setSaving(true)
+    try { await doSave() } catch (e) {
+      console.error('production save failed', e)
+      toast({
+        title: 'ثبت تولید انجام نشد',
+        description: e instanceof Error ? e.message : 'خطای ذخیره‌سازی محلی — صفحه را دوباره باز کنید.',
+        variant: 'destructive',
+      })
+    } finally { setSaving(false) }
   }
 
   // لیست تولیدهای اخیر
@@ -411,7 +427,7 @@ function DailyTab() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setOpen(false); setEditing(null) }}>انصراف</Button>
-            <Button onClick={save}>{editing ? 'ذخیره تغییرات' : 'ثبت تولید'}</Button>
+            <Button onClick={() => requireUserName(() => { void save() })} disabled={saving}>{saving ? 'در حال ذخیره…' : (editing ? 'ذخیره تغییرات' : 'ثبت تولید')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -500,7 +516,7 @@ function ConsumptionTab() {
     setForm({ date: c.date, materialId: c.materialId, quantity: c.quantity ? String(Math.round(c.quantity * 100) / 100) : '', note: c.note || '' })
   }
 
-  const save = async () => {
+  const doSave = async () => {
     const qty = parseFloat(form.quantity || '0')
     if (!form.materialId || qty <= 0) { toast({ title: 'ماده و مقدار را وارد کنید', variant: 'destructive' }); return }
     await putRecord<Consumption>('consumptions', {
@@ -517,6 +533,21 @@ function ConsumptionTab() {
     setForm(f => ({ ...f, quantity: '', note: '' }))
     setEditing(null)
     toast({ title: editing ? 'مصرف ویرایش شد' : 'مصرف ثبت شد', description: `${mat?.name}: ${faDigits(qty)} ${mat?.unit}` })
+  }
+
+  // v3.1.4 — هیچ شکست ذخیره‌ای بی‌صدا نیست + جلوگیری از دابل‌کلیک
+  const [saving, setSaving] = useState(false)
+  const save = async () => {
+    if (saving) return
+    setSaving(true)
+    try { await doSave() } catch (e) {
+      console.error('consumption save failed', e)
+      toast({
+        title: 'ثبت مصرف انجام نشد',
+        description: e instanceof Error ? e.message : 'خطای ذخیره‌سازی محلی — صفحه را دوباره باز کنید.',
+        variant: 'destructive',
+      })
+    } finally { setSaving(false) }
   }
 
   const recent = [...consumptions].filter(c => !c.deleted).sort((a, b) => (b.date + b.updatedAt).localeCompare(a.date + a.updatedAt)).slice(0, 30)
@@ -546,7 +577,7 @@ function ConsumptionTab() {
           <FormRow label="یادداشت">
             <Input value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} className="h-11" />
           </FormRow>
-          <Button className="w-full h-11" onClick={save}>{editing ? 'ذخیره تغییرات' : 'ثبت مصرف'}</Button>
+          <Button className="w-full h-11" onClick={() => requireUserName(() => { void save() })} disabled={saving}>{saving ? 'در حال ذخیره…' : (editing ? 'ذخیره تغییرات' : 'ثبت مصرف')}</Button>
           {editing && <Button variant="ghost" className="w-full" onClick={() => { setEditing(null); setForm(f => ({ ...f, quantity: '', note: '' })) }}>انصراف از ویرایش</Button>}
         </CardContent>
       </Card>

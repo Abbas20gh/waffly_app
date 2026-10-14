@@ -17,6 +17,7 @@ import { JalaliDateInput } from './jalali-date'
 import { InlinePicker } from './inline-picker'
 import { InvoiceDialog } from './invoice-dialog'
 import { useTable, useSetting, putRecord, removeRecord, uid, getActiveUser, DEFAULT_BANK } from '@/lib/localdb'
+import { requireUserName } from '@/lib/user-gate'
 import type { Sale, Customer, BreadType, Good, SaleItem, Box, Account, CombinedInvoice, DiscountType } from '@/lib/types'
 import { todayJalali, faDigits, faMoney, prettyJalali } from '@/lib/jalali'
 import { active, saleDue, effectiveSettled, isBadDebt, daysSince, effectivePaymentDate } from '@/lib/calc'
@@ -69,6 +70,7 @@ function SalesTab() {
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Sale | null>(null)
   const [filter, setFilter] = useState<'all' | 'unpaid' | 'checks'>('all')
+  const [saving, setSaving] = useState(false)
 
   const emptyItem: SaleItem = { breadTypeId: '', qty: 0, unitPrice: 0, delivered: 0, returned: 0, returnCost: 0, kind: 'BREAD' }
   const [form, setForm] = useState({
@@ -165,36 +167,50 @@ function SalesTab() {
     if (!form.customerId) { toast({ title: 'مشتری را انتخاب کنید', variant: 'destructive' }); return }
     const items = form.items.filter(it => it.breadTypeId && (it.qty > 0 || it.delivered > 0))
     if (items.length === 0) { toast({ title: 'حداقل یک قلم کالا اضافه کنید', variant: 'destructive' }); return }
-    const paid = form.settledStatus === 'PAID' ? grandTotal : parseFloat(form.paidAmount || '0')
-    const status: Sale['settledStatus'] = form.settledStatus === 'PAID' || paid >= grandTotal - 0.5
-      ? 'PAID'
-      : paid > 0.5 ? 'PARTIAL' : 'UNPAID'
-    await putRecord<Sale>('sales', {
-      ...(editing || {}),
-      id: editing ? editing.id : uid(),
-      updatedAt: editing ? editing.updatedAt : 0,
-      date: form.date,
-      customerId: form.customerId,
-      items: JSON.stringify(items),
-      totalAmount: grandTotal,
-      settledStatus: status,
-      paidAmount: Math.min(paid, grandTotal),
-      paymentMethod: form.paymentMethod,
-      checkDueDate: form.paymentMethod === 'CHECK' ? (form.checkDueDate || null) : null,
-      checkNumber: form.paymentMethod === 'CHECK' ? (form.checkNumber || null) : null,
-      checkBank: form.paymentMethod === 'CHECK' ? (form.checkBank || null) : null,
-      paymentDate: status === 'PAID' ? (form.paymentDate || null) : (form.paymentDate || null),
-      note: form.note || null,
-      accountId: form.accountId || null,
-      discountType: form.discountType,
-      discountValue: discountAmount,
-      invoiceNumber: editing?.invoiceNumber ?? null,
-      createdBy: editing?.createdBy ?? (getActiveUser() || null),
-      deleted: 0,
-    })
-    toast({ title: editing ? 'فروش ویرایش شد' : 'فروش ثبت شد', description: `${faMoney(grandTotal)} تومان` })
-    setOpen(false)
-    setEditing(null)
+    if (saving) return
+    setSaving(true)
+    try {
+      const paid = form.settledStatus === 'PAID' ? grandTotal : parseFloat(form.paidAmount || '0')
+      const status: Sale['settledStatus'] = form.settledStatus === 'PAID' || paid >= grandTotal - 0.5
+        ? 'PAID'
+        : paid > 0.5 ? 'PARTIAL' : 'UNPAID'
+      await putRecord<Sale>('sales', {
+        ...(editing || {}),
+        id: editing ? editing.id : uid(),
+        updatedAt: editing ? editing.updatedAt : 0,
+        date: form.date,
+        customerId: form.customerId,
+        items: JSON.stringify(items),
+        totalAmount: grandTotal,
+        settledStatus: status,
+        paidAmount: Math.min(paid, grandTotal),
+        paymentMethod: form.paymentMethod,
+        checkDueDate: form.paymentMethod === 'CHECK' ? (form.checkDueDate || null) : null,
+        checkNumber: form.paymentMethod === 'CHECK' ? (form.checkNumber || null) : null,
+        checkBank: form.paymentMethod === 'CHECK' ? (form.checkBank || null) : null,
+        paymentDate: status === 'PAID' ? (form.paymentDate || null) : (form.paymentDate || null),
+        note: form.note || null,
+        accountId: form.accountId || null,
+        discountType: form.discountType,
+        discountValue: discountAmount,
+        invoiceNumber: editing?.invoiceNumber ?? null,
+        createdBy: editing?.createdBy ?? (getActiveUser() || null),
+        deleted: 0,
+      })
+      toast({ title: editing ? 'فروش ویرایش شد' : 'فروش ثبت شد', description: `${faMoney(grandTotal)} تومان` })
+      setOpen(false)
+      setEditing(null)
+    } catch (e) {
+      // v3.1.4 — هیچ شکست ذخیره‌ای بی‌صدا نیست: پیام واقعی خطا دیده می‌شود
+      console.error('sale save failed', e)
+      toast({
+        title: 'ثبت فروش انجام نشد',
+        description: e instanceof Error ? e.message : 'خطای ذخیره‌سازی محلی — صفحه را دوباره باز کنید.',
+        variant: 'destructive',
+      })
+    } finally {
+      setSaving(false)
+    }
   }
 
   const quickSettle = async (s: Sale) => {
@@ -205,7 +221,8 @@ function SalesTab() {
   const list = [...sales]
     .filter(s => !s.deleted)
     .filter(s => filter === 'all' || (filter === 'unpaid' ? effectiveSettled(s) !== 'PAID' : s.paymentMethod === 'CHECK'))
-    .sort((a, b) => (b.date + b.updatedAt).localeCompare(a.date + a.updatedAt))
+    // v3.1.4 — مرتب‌سازی بر اساس آخرین ثبت/به‌روزرسانی: جدیدترین فاکتورِ ثبت‌شده بالا
+    .sort((a, b) => ((b.updatedAt || 0) - (a.updatedAt || 0)) || (b.date || '').localeCompare(a.date || ''))
     .slice(0, 60)
 
   // ===== فاکتور (v2.8) =====
@@ -420,7 +437,8 @@ function SalesTab() {
         customers={active(customers)} breadTypes={active(breadTypes)} goods={active(goods).filter(g => g.active !== 0)}
         boxes={boxes.filter(b => !b.deleted)} accounts={accounts.filter(a => !a.deleted)} soldByBox={soldByBox}
         itemsTotal={itemsTotal} returnTotal={returnTotal} discountAmount={discountAmount} grandTotal={grandTotal}
-        onSave={save}
+        saving={saving}
+        onSave={() => requireUserName(() => { void save() })}
         onQuickAddCustomer={async (name) => {
           const id = uid()
           await putRecord<Customer>('customers', { id, name, phone: null, address: null, cooperationType: null, updatedAt: 0, deleted: 0 })
@@ -434,7 +452,7 @@ function SalesTab() {
   )
 }
 
-function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, breadTypes, goods, boxes, accounts, soldByBox, itemsTotal, returnTotal, discountAmount, grandTotal, onSave, onQuickAddCustomer }: {
+function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, breadTypes, goods, boxes, accounts, soldByBox, itemsTotal, returnTotal, discountAmount, grandTotal, onSave, onQuickAddCustomer, saving }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   isEdit?: boolean
@@ -464,6 +482,7 @@ function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, 
   grandTotal: number
   onSave: () => void
   onQuickAddCustomer: (name: string) => void
+  saving?: boolean
 }) {
   const [newCustomer, setNewCustomer] = useState('')
   const updateItem = (idx: number, patch: Partial<SaleItem>) => {
@@ -679,7 +698,7 @@ function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, 
                   { value: 'PARTIAL', label: 'پرداخت جزئی' },
                   { value: 'UNPAID', label: 'پرداخت‌نشده' },
                 ]}
-                onChange={v => setForm(f => ({ ...f, settledStatus: v as Sale['settledStatus'] }))}
+                onChange={v => setForm(f => ({ ...f, settledStatus: v as Sale['settledStatus'], ...(v === 'UNPAID' ? { paymentMethod: 'CASH' as Sale['paymentMethod'] } : {}) }))}
               />
             </FormRow>
             {form.settledStatus === 'PARTIAL' && (
@@ -689,11 +708,13 @@ function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, 
             )}
           </div>
           <div className="grid sm:grid-cols-2 gap-3">
-            <FormRow label="روش پرداخت">
+            <FormRow label="روش پرداخت" hint={form.settledStatus === 'UNPAID' ? 'با وضعیت «پرداخت‌نشده» روش پرداخت انتخاب نمی‌شود' : undefined}>
+              {/* v3.1.4 — تا وقتی وضعیت تسویه «پرداخت‌نشده» است، روش پرداخت قابل انتخاب نیست */}
               <InlinePicker
                 value={form.paymentMethod}
                 options={PAY_METHODS.map(p => ({ value: p.key, label: p.label }))}
                 onChange={v => setForm(f => ({ ...f, paymentMethod: v as Sale['paymentMethod'] }))}
+                disabled={form.settledStatus === 'UNPAID'}
               />
             </FormRow>
             <FormRow label="تاریخ وصول واقعی" hint="اگر با تاریخ فروش متفاوت است">
@@ -727,7 +748,7 @@ function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, 
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>انصراف</Button>
-          <Button onClick={onSave}>{isEdit ? 'ذخیره تغییرات' : 'ثبت فروش'}</Button>
+          <Button onClick={onSave} disabled={saving}>{saving ? 'در حال ذخیره…' : (isEdit ? 'ذخیره تغییرات' : 'ثبت فروش')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

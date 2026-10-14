@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import {
   LayoutDashboard, Wheat, ShoppingCart, ShoppingBasket, Wrench,
@@ -11,6 +11,7 @@ import { SyncBadge } from './sync-badge'
 import { NotificationsBell } from './notifications-bell'
 import { todayPretty } from '@/lib/jalali'
 import { getActiveUser, setActiveUser } from '@/lib/localdb'
+import { UserGateDialog } from '@/lib/user-gate'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
   DropdownMenuSeparator, DropdownMenuTrigger,
@@ -44,6 +45,13 @@ export function AppShell({ view, onNavigate, children }: {
     setUserName(getActiveUser())
     setInitialized(true)
   }
+
+  // v3.1.4 — نام هدر همیشه با گیتِ نام و منوی کاربر همگام بماند
+  useEffect(() => {
+    const sync = () => setUserName(getActiveUser())
+    window.addEventListener('waffly-user-changed', sync)
+    return () => window.removeEventListener('waffly-user-changed', sync)
+  }, [])
 
   const saveUser = (name: string) => {
     setUserName(name)
@@ -144,7 +152,7 @@ export function AppShell({ view, onNavigate, children }: {
             ))}
           </nav>
           <div className="p-4 text-[11px] text-muted-foreground border-t">
-            <p className="font-semibold text-foreground/70">Waffly v3.1.1</p>
+            <p className="font-semibold text-foreground/70">Waffly v3.1.4</p>
             <p className="mt-1 leading-5">آفلاین‌محور • سینک خودکار<br />تقویم شمسی • ۳ کاربر هم‌زمان</p>
           </div>
         </aside>
@@ -180,6 +188,9 @@ export function AppShell({ view, onNavigate, children }: {
           {children}
         </main>
       </div>
+
+      {/* ===== گیت نام کاربر (سراسری — همیشه زنده) ===== */}
+      <UserGateDialog />
 
       {/* ===== ناوبری پایین موبایل ===== */}
       <nav className="fixed bottom-0 inset-x-0 z-40 md:hidden border-t bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80 select-none" aria-label="ناوبری پایین">
