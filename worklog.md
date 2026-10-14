@@ -1119,3 +1119,20 @@ Stage Summary:
 - v3.1.4 روی وب زنده است (app.artanon.ir) — باگ فاکتور دوم با طراحی ضد-شکست-بی‌صدا پوشش داده شد + هر دو قابلیت درخواستی فعال
 - توکن‌های CF و GitHub هر دو کار می‌کنند و در remote/env ست شدند
 - باقی‌مانده: بیلد APK v3.1.4 (cap sync + gradlew؛ حواس به local.properties) و تست کاربر
+
+---
+Task ID: 51-b (تکمیل)
+Agent: Super Z (main)
+Task: بیلد APK v3.1.4 + رفع مشکل نوتیف اندروید + push نهایی
+
+Work Log:
+- محیط بعد از ریست نشست خالی بود: JDK فقط JRE بود و Android SDK هم نبود → Temurin JDK 21 در tools/jdk + cmdline-tools + platforms;android-36 + build-tools;36.0.0 + platform-tools در tools/android-sdk نصب شد
+- cap sync دوباره local.properties را حذف کرد → بازنویسی sdk.dir
+- بیلد اول APK موفق ولی هنگام بررسی gradle: capacitor-local-notifications از gradle حذف شده بود → ریشه‌یابی: پکیج در package.json هست ولی node_modules ناقص نصب شده بود؛ باندل out حاوی «Cannot find module '@capacitor/local-notifications'» بود → نوتیف بومی اندروید خاموش می‌شد
+- npm install کامل → پکیج برگشت → بیلد مجدد وب (SW mv82a5h4) → «IMPORT RESOLVED ✓» → redeploy Pages (abe5ea18) → cap sync → پلاگین برگشت به gradle → assembleRelease موفق
+- APK نهایی: download/Waffly-v3.1.4.apk (8.5MB, versionCode 19, versionName 3.1.4) — امضا با همان keystore قبلی (CN=Waffly) → نصب به‌صورت آپدیت روی v3.1.3
+- push نهایی: 68389d9..5aaa64a main
+
+Stage Summary:
+- وب v3.1.4 زنده (app.artanon.ir) و APK v3.1.4 ساخته و تحویل شد
+- ابزارهای بیلد در محیط بازسازی شد: tools/jdk (JDK21) + tools/android-sdk (API36) — برای بیلد بعدی فقط local.properties ممکن است دوباره لازم باشد
