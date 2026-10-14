@@ -1093,3 +1093,29 @@ Work Log:
 Stage Summary:
 - اعلان‌ها حالا کاملاً دسته‌بندی‌شده‌اند: هر نوع فعالیت هویت بصری مستقل (رنگ+آیکون) در ۳ کانال: زنگ اپ، تلگرام (پیام جداگانه هر دسته)، نوتیف سیستم اندروید
 - سرور (وب) همین حالا لایو است؛ APK v3.1.2 آماده نصب — وب نیازی به آپدیت دستگاه ندارد (SW جدید خودش می‌گیرد)
+
+---
+Task ID: 51
+Agent: Super Z (main)
+Task: احیای نشست — اعتبارسنجی توکن‌ها، بازیابی سورس از گیت‌هاب، تشخیص باگ فاکتور دوم، فیکس v3.1.4 + دو قابلیت جدید، دیپلوی وب، push
+
+Work Log:
+- توکن Cloudflare (cfut_2vfM...): verify → active ✓ | توکن GitHub جدید (ghp_rjWJ...): user=Abbas20gh ✓
+- remote URL با توکن جدید ست شد؛ fetch → origin/main جدید = 7f099a8 (v3.1.2 کامل، versionCode 18)
+- ۲۰ کامیت محلی عقب‌افتاده فقط backup/worklog داشتند → برنچ backup-local-main ساخته و push شد → main به origin/main ریست شد (v3.1.2 بازسازی شد)
+- .live-bundle پاک شده بود → دوباره از app.artanon.ir دانلود شد (هش چانک‌ها جدید — سایت بین دو نشست دیپلوی شده بود)
+- کد زنده تحلیل شد: getActiveUser stateless ✓، گیت (ij) ۴ نقطه فراخوانی سالم ✓، دیالوگ در ریشه AppShell ✓، putRecord/sync/server pushOps سالم ✓
+- E2E با مرورگر هدلس روی سایت زنده: ۳ ذخیره متوالی فروش — همگی موفق؛ باگ بازتولید نشد
+- بازسازی timeline کاربر از دیتای سرور: ۰۹:۴۰-۰۹:۴۸ شش فاکتور موفق (سبیلی) با فاصله ~۲دقیقه = الگوی «شکست→ریلود→موفقیت»؛ نتیجه: علت محتمل = شکست بی‌صدا (localStorage مسدود یا خطای Dexie یا لغو دیالوگ گیت)
+- فیکس v3.1.4 (دفاعی در برابر همه حالت‌ها): localdb پشتیبان حافظه + رویداد waffly-user-changed | src/lib/user-gate.tsx جدید (requireUserName + UserGateDialog با توست لغو) | app-shell نصب گیت + همگام نام هدر | هر ۴ مسیر ذخیره (فروش/خرید/تولید/مصرف) try/catch + توست خطای واقعی + دکمه saving
+- قابلیت A: InlinePicker روش پرداخت disabled وقتی settledStatus=UNPAID (+hint راهنما + ریست به نقدی)
+- قابلیت B: لیست فروش sort بر اساس updatedAt نزولی (جدیدترین ثبت بالا) با tiebreak تاریخ
+- versionCode 19 / versionName 3.1.4 | بیلد pages (SW mv81s8wl) → wrangler deploy موفق
+- تأیید زنده: gate + toast خطا در چانک‌ها ✓ | E2E کامل: گیت فاکتور اول → ثبت ✓، فاکتور دوم بدون گیت ✓، پرداخت غیرفعال در UNPAID ✓، ترتیب لیست ✓، سینک سرور ✓
+- پاکسازی: ۵ فروش تستی + ۲ مشتری تستی روی سرور deleted=1 شدند (7 accepted)
+- push گیت‌هاب: 7f099a8..68389d9 main → موفق (شامل بکاپ .live-bundle)
+
+Stage Summary:
+- v3.1.4 روی وب زنده است (app.artanon.ir) — باگ فاکتور دوم با طراحی ضد-شکست-بی‌صدا پوشش داده شد + هر دو قابلیت درخواستی فعال
+- توکن‌های CF و GitHub هر دو کار می‌کنند و در remote/env ست شدند
+- باقی‌مانده: بیلد APK v3.1.4 (cap sync + gradlew؛ حواس به local.properties) و تست کاربر
