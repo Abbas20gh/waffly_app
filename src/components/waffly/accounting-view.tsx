@@ -20,7 +20,7 @@ import { useDataBundle } from '@/lib/hooks'
 import { periodOf, shiftPeriod, faDigits, faMoney, prettyJalali, todayJalali } from '@/lib/jalali'
 import { periodReport, otherFundsTotals, active, effectivePaymentDate, type ProfitMode } from '@/lib/calc'
 import { putRecord, removeRecord, uid, getActiveUser, useTable } from '@/lib/localdb'
-import type { OtherFund, Account, Sale, Purchase, Expense, Customer, Material, Good } from '@/lib/types'
+import type { OtherFund, Account, Sale, Purchase, Expense, Customer, Material, Good, LedgerEntry, OpsExpense, Supplier } from '@/lib/types'
 import { exportRowsToExcel, exportElementToPdf } from '@/lib/export'
 import { cn } from '@/lib/utils'
 
@@ -463,7 +463,11 @@ function AccountsTab() {
   const purchases = useTable<Purchase>('purchases')
   const expenses = useTable<Expense>('expenses')
   const otherFunds = useTable<OtherFund>('otherFunds')
+  // v3.3/v3.4 — پول‌های دفتر حساب + خریدهای عملیاتی هم در گردش حساب‌ها لحاظ می‌شوند
+  const ledgerEntries = useTable<LedgerEntry>('ledgerEntries')
+  const opsExpenses = useTable<OpsExpense>('opsExpenses')
   const customers = useTable<Customer>('customers')
+  const suppliers = useTable<Supplier>('suppliers')
   const materials = useTable<Material>('materials')
   const goods = useTable<Good>('goods')
   const { confirm, element: confirmDialog } = useConfirm()
@@ -528,6 +532,30 @@ function AccountsTab() {
     for (const f of active(otherFunds)) {
       if (f.accountId !== accId || (f.amount || 0) <= 0) continue
       rows.push({ key: `f-${f.id}`, date: f.date, dir: f.type === 'IN' ? 'IN' : 'OUT', amount: f.amount, desc: f.description, src: 'سایر وجه' })
+    }
+    // تراکنش‌های دفتر حساب (v3.3) — دریافت/پرداخت به اشخاص
+    const partyName = (e: LedgerEntry) =>
+      e.customerId
+        ? (customers.find(c => c.id === e.customerId)?.name || 'مشتری')
+        : e.supplierId
+          ? (suppliers.find(s => s.id === e.supplierId)?.name || 'تامین‌کننده')
+          : String(e.freeName || 'شخص آزاد')
+    for (const e of active(ledgerEntries)) {
+      if (e.accountId !== accId || (e.amount || 0) <= 0) continue
+      rows.push({
+        key: `l-${e.id}`, date: e.date, dir: e.kind === 'IN' ? 'IN' : 'OUT', amount: e.amount,
+        desc: `${e.kind === 'IN' ? 'دریافت از' : 'پرداخت به'} ${partyName(e)}${e.note ? ` — ${e.note}` : ''}`,
+        src: 'دفتر حساب',
+      })
+    }
+    // خریدهای عملیاتی پرداخت‌شده (v3.4) — روزمره/دارایی/حقوق و دستمزد
+    for (const o of active(opsExpenses)) {
+      if (o.accountId !== accId || (o.paidAmount || 0) <= 0) continue
+      rows.push({
+        key: `o-${o.id}`, date: o.date, dir: 'OUT', amount: o.paidAmount,
+        desc: `${o.title}${o.person ? ` — ${o.person}` : ''}`,
+        src: o.kind === 'ASSET' ? 'دستگاه' : o.kind === 'SALARY' ? 'حقوق' : o.kind === 'WAGE' ? 'دستمزد' : 'خرید روزمره',
+      })
     }
     return rows.sort((a, b) => (b.date + b.key).localeCompare(a.date + a.key))
   }

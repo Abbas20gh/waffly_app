@@ -6,7 +6,7 @@ export const TABLES = [
   'breadTypes', 'productions', 'boxes', 'materials', 'goods', 'consumptions',
   'customers', 'sales', 'suppliers', 'purchases',
   'machines', 'machineCosts', 'expenseCategories', 'expenses', 'otherFunds', 'settings', 'accounts',
-  'combinedInvoices', 'appUsers',
+  'combinedInvoices', 'appUsers', 'ledgerEntries', 'opsExpenses',
 ] as const
 export type SyncTbl = (typeof TABLES)[number]
 
@@ -20,6 +20,8 @@ export const PHYS: Record<SyncTbl, string> = {
   accounts: 'Account',
   combinedInvoices: 'CombinedInvoice',
   appUsers: 'AppUser',
+  ledgerEntries: 'LedgerEntry',
+  opsExpenses: 'OpsExpense',
 }
 
 type FieldType = 'str' | 'num' | 'int' | 'strNull' | 'numNull'
@@ -44,6 +46,10 @@ export const FIELDS: Record<SyncTbl, Record<string, FieldType>> = {
   accounts: { name: 'str', kind: 'str', initialBalance: 'num', note: 'strNull', active: 'int' },
   combinedInvoices: { invoiceNumber: 'num', customerId: 'str', saleIds: 'str', date: 'str', totalAmount: 'num', paidAmount: 'num', remaining: 'num', note: 'strNull', createdBy: 'strNull' },
   appUsers: { family: 'str', pin: 'str', isAdmin: 'int', phone: 'strNull' },
+  // v3.3.0 — دفتر حساب: تراکنش پول جدا از فاکتور (ستون‌ها باید دقیقاً با جدول زندهٔ LedgerEntry یکی باشد)
+  ledgerEntries: { date: 'str', kind: 'str', amount: 'num', customerId: 'strNull', supplierId: 'strNull', freeName: 'strNull', method: 'strNull', note: 'strNull', accountId: 'strNull', createdBy: 'strNull' },
+  // v3.4.0 — خرید و هزینهٔ عملیاتی (روزمره/دارایی/حقوق/دستمزد + کرایه)
+  opsExpenses: { date: 'str', kind: 'str', title: 'str', person: 'strNull', qty: 'numNull', unitPrice: 'numNull', rentAmount: 'numNull', totalAmount: 'num', settledStatus: 'str', paidAmount: 'num', method: 'strNull', accountId: 'strNull', note: 'strNull', createdBy: 'strNull' },
 }
 
 const s = (v: unknown, dflt = ''): string => (typeof v === 'string' ? v : v == null ? dflt : String(v))
@@ -142,6 +148,50 @@ export async function ensureSchema(db: Client): Promise<void> {
       "deleted" INTEGER NOT NULL DEFAULT 0
     )
   `)
+  // ۶) مهاجرت v3.3.0 — دفتر حساب: تراکنش‌های پول جدا از فاکتور
+  //    ستون‌ها باید دقیقاً با جدول زندهٔ LedgerEntry یکی باشد (تست‌شده روی Turso)
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS "LedgerEntry" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "date" TEXT NOT NULL DEFAULT '',
+      "kind" TEXT NOT NULL DEFAULT 'IN',
+      "amount" REAL NOT NULL DEFAULT 0,
+      "customerId" TEXT,
+      "supplierId" TEXT,
+      "freeName" TEXT,
+      "method" TEXT,
+      "note" TEXT,
+      "accountId" TEXT,
+      "createdBy" TEXT,
+      "updatedAt" REAL NOT NULL DEFAULT 0,
+      "deleted" INTEGER NOT NULL DEFAULT 0
+    )
+  `)
+  await db.execute(`CREATE INDEX IF NOT EXISTS "LedgerEntry_date_idx" ON "LedgerEntry" ("date")`)
+  // ۷) مهاجرت v3.4.0 — خرید و هزینهٔ عملیاتی: روزمره/دارایی/حقوق/دستمزد + کرایهٔ حمل
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS "OpsExpense" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "date" TEXT NOT NULL DEFAULT '',
+      "kind" TEXT NOT NULL DEFAULT 'DAILY',
+      "title" TEXT NOT NULL DEFAULT '',
+      "person" TEXT,
+      "qty" REAL,
+      "unitPrice" REAL,
+      "rentAmount" REAL,
+      "totalAmount" REAL NOT NULL DEFAULT 0,
+      "settledStatus" TEXT NOT NULL DEFAULT 'PAID',
+      "paidAmount" REAL NOT NULL DEFAULT 0,
+      "method" TEXT,
+      "accountId" TEXT,
+      "note" TEXT,
+      "createdBy" TEXT,
+      "updatedAt" REAL NOT NULL DEFAULT 0,
+      "deleted" INTEGER NOT NULL DEFAULT 0
+    )
+  `)
+  await db.execute(`CREATE INDEX IF NOT EXISTS "OpsExpense_date_idx" ON "OpsExpense" ("date")`)
+  await db.execute(`CREATE INDEX IF NOT EXISTS "OpsExpense_kind_idx" ON "OpsExpense" ("kind")`)
   // شروع شمارنده از ۱۰۰۰ (اولین فاکتور = ۱۰۰۱) — مقدار قابل تغییر قبل از اولین صدور
   await db.execute({ sql: `INSERT OR IGNORE INTO "InvoiceCounter" ("id","lastNumber","updatedAt") VALUES ('main', 1000, ?)`, args: [Date.now()] })
   const st3 = await db.execute({ sql: `PRAGMA table_info("Setting")`, args: [] })

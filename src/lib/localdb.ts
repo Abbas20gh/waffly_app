@@ -94,6 +94,14 @@ class WafflyDB extends Dexie {
     this.version(6).stores({
       appUsers: 'id, updatedAt, family',
     })
+    // v7: دفتر حساب (v3.3.0) — تراکنش‌های پول جدا از فاکتور
+    this.version(7).stores({
+      ledgerEntries: 'id, updatedAt, date',
+    })
+    // v8: خرید و هزینهٔ عملیاتی (v3.4.0) — خرید روزمره/کرایه/دستگاه/حقوق و دستمزد
+    this.version(8).stores({
+      opsExpenses: 'id, updatedAt, date, kind',
+    })
   }
 }
 

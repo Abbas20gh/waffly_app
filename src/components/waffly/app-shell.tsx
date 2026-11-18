@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import {
   LayoutDashboard, Wheat, ShoppingCart, ShoppingBasket, Wrench,
-  Calculator, Settings, Menu, UserRound, LogOut,
+  Calculator, Settings, Menu, UserRound, LogOut, BookText, ShoppingBag,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SyncBadge } from './sync-badge'
@@ -19,15 +19,17 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 
-export type ViewKey = 'dashboard' | 'production' | 'sales' | 'purchases' | 'machines' | 'accounting' | 'settings'
+export type ViewKey = 'dashboard' | 'production' | 'sales' | 'purchases' | 'machines' | 'accounting' | 'ledger' | 'ops' | 'settings'
 
 export const NAV_ITEMS: { key: ViewKey; label: string; icon: typeof LayoutDashboard }[] = [
   { key: 'dashboard', label: 'داشبورد', icon: LayoutDashboard },
   { key: 'production', label: 'تولید', icon: Wheat },
   { key: 'sales', label: 'فروش', icon: ShoppingCart },
   { key: 'purchases', label: 'خرید مواد', icon: ShoppingBasket },
+  { key: 'ops', label: 'خرید و هزینه', icon: ShoppingBag },
   { key: 'machines', label: 'دستگاه‌سازی', icon: Wrench },
   { key: 'accounting', label: 'حسابداری', icon: Calculator },
+  { key: 'ledger', label: 'دفتر حساب', icon: BookText },
   { key: 'settings', label: 'تنظیمات', icon: Settings },
 ]
 
@@ -149,8 +151,8 @@ export function AppShell({ view, onNavigate, children }: {
             ))}
           </nav>
           <div className="p-4 text-[11px] text-muted-foreground border-t">
-            <p className="font-semibold text-foreground/70">Waffly v3.2.0</p>
-            <p className="mt-1 leading-5">آفلاین‌محور • سینک خودکار<br />تقویم شمسی • ورود با حساب کاربری</p>
+            <p className="font-semibold text-foreground/70">Waffly v3.4.0</p>
+            <p className="mt-1 leading-5">آفلاین‌محور • سینک خودکار<br />تقویم شمسی • دفتر حساب اشخاص</p>
           </div>
         </aside>
 

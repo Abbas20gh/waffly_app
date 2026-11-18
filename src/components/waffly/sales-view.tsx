@@ -18,9 +18,10 @@ import { InlinePicker } from './inline-picker'
 import { InvoiceDialog } from './invoice-dialog'
 import { useTable, useSetting, putRecord, removeRecord, uid, getActiveUser, DEFAULT_BANK } from '@/lib/localdb'
 import { requireUserName } from '@/lib/user-gate'
-import type { Sale, Customer, BreadType, Good, SaleItem, Production, Account, CombinedInvoice, DiscountType } from '@/lib/types'
+import type { Sale, Customer, BreadType, Good, SaleItem, Production, Account, CombinedInvoice, DiscountType, LedgerEntry } from '@/lib/types'
 import { todayJalali, faDigits, faMoney, prettyJalali } from '@/lib/jalali'
-import { active, saleDue, effectiveSettled, isBadDebt, daysSince, effectivePaymentDate } from '@/lib/calc'
+import { active, saleDue, effectiveSettled, daysSince, effectivePaymentDate } from '@/lib/calc'
+import { ledgerAppliedToSales, saleDueWithLedger, settledWithLedger } from '@/lib/settlement'
 import { buildSaleInvoice, buildCombinedInvoice, combinedInvoiceRecord, computeDiscount, type InvoiceCtx, type InvoiceModel } from '@/lib/invoice'
 import { API_BASE } from '@/lib/sync-engine'
 import { cn } from '@/lib/utils'
@@ -61,6 +62,7 @@ export function SalesView() {
 // ================= فرم/لیست فروش‌ها =================
 function SalesTab() {
   const sales = useTable<Sale>('sales')
+  const ledger = useTable<LedgerEntry>('ledgerEntries')
   const customers = useTable<Customer>('customers')
   const breadTypes = useTable<BreadType>('breadTypes')
   const goods = useTable<Good>('goods')
@@ -228,9 +230,13 @@ function SalesTab() {
     toast({ title: 'تسویه شد', description: `${faMoney(saleDue(s))} تومان` })
   }
 
+  // v3.4.0 — واریزی‌های دفتر حساب به‌صورت FIFO روی فاکتورهای باز اعمال می‌شود
+  // تا وضعیت تسویه اینجا (بخش فروش) هم واقعی باشد؛ جزئیات در lib/settlement.ts
+  const applied = useMemo(() => ledgerAppliedToSales(sales, ledger), [sales, ledger])
+
   const list = [...sales]
     .filter(s => !s.deleted)
-    .filter(s => filter === 'all' || effectiveSettled(s) !== 'PAID')
+    .filter(s => filter === 'all' || settledWithLedger(s, applied.get(s.id) || 0) !== 'PAID')
     // v3.1.4 — مرتب‌سازی بر اساس آخرین ثبت/به‌روزرسانی: جدیدترین فاکتورِ ثبت‌شده بالا
     .sort((a, b) => ((b.updatedAt || 0) - (a.updatedAt || 0)) || (b.date || '').localeCompare(a.date || ''))
     .slice(0, 60)
@@ -369,7 +375,11 @@ function SalesTab() {
             <div className="space-y-2">
               {list.map(s => {
                 const items = (() => { try { return JSON.parse(s.items || '[]') as SaleItem[] } catch { return [] } })()
-                const st = effectiveSettled(s)
+                const saleApplied = applied.get(s.id) || 0
+                const st = settledWithLedger(s, saleApplied)
+                // اگر با واریز دفتر حساب تسویه شده ولی خود رکورد فاکتور هنوز پرداخت لحظه‌ای ندارد
+                const settledByLedger = st === 'PAID' && effectiveSettled(s) !== 'PAID'
+                const effPaid = (s.paidAmount || 0) + saleApplied
                 return (
                   <div key={s.id} className={cn('rounded-xl border p-3 space-y-2', multiMode && selectedIds.includes(s.id) && 'border-primary bg-primary/5')}>
                     <div className="flex flex-wrap items-center gap-2">
@@ -394,8 +404,11 @@ function SalesTab() {
                       {s.invoiceNumber ? (
                         <span className="text-[10px] rounded bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 waffly-num">فاکتور {faDigits(s.invoiceNumber)}</span>
                       ) : null}
+                      {settledByLedger && (
+                        <span className="text-[10px] rounded bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5">تسویه با واریز دفتر حساب</span>
+                      )}
                       <div className="flex-1" />
-                      <SettleBadge status={st} paid={s.paidAmount} total={s.totalAmount} />
+                      <SettleBadge status={st} paid={effPaid} total={s.totalAmount} />
                       <Money value={s.totalAmount} className="font-bold text-sm" />
                       <span className="text-[10px] text-muted-foreground">تومان</span>
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" aria-label="فاکتور"
@@ -432,7 +445,10 @@ function SalesTab() {
                         <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => void quickSettle(s)}>
                           <Check className="h-3.5 w-3.5" /> تسویه کامل
                         </Button>
-                        <span className="text-[11px] text-red-600 waffly-num">مانده: {faMoney(saleDue(s))}</span>
+                        <span className="text-[11px] text-red-600 waffly-num">مانده: {faMoney(saleDueWithLedger(s, saleApplied))}</span>
+                        {saleApplied > 0.5 && (
+                          <span className="text-[11px] text-emerald-700 waffly-num">پوشش داده‌شده با دفتر: {faMoney(saleApplied)}</span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -745,6 +761,7 @@ function SaleFormDialog({ open, onOpenChange, isEdit, form, setForm, customers, 
 function CustomersTab() {
   const customers = useTable<Customer>('customers')
   const sales = useTable<Sale>('sales')
+  const ledger = useTable<LedgerEntry>('ledgerEntries')
   const { confirm, element: confirmDialog } = useConfirm()
   const [editing, setEditing] = useState<Customer | null>(null)
   const [form, setForm] = useState({ name: '', phone: '', address: '', cooperationType: '' })
@@ -778,17 +795,19 @@ function CustomersTab() {
   }
 
   const stats = useMemo(() => {
+    const applied = ledgerAppliedToSales(sales, ledger)
     const m = new Map<string, { count: number; total: number; due: number; last: string }>()
     for (const s of active(sales)) {
       const st = m.get(s.customerId) || { count: 0, total: 0, due: 0, last: '' }
       st.count++
       st.total += s.totalAmount || 0
-      st.due += saleDue(s)
+      // بدهی با احتساب واریزی‌های دفتر حساب (v3.4.0)
+      st.due += saleDueWithLedger(s, applied.get(s.id) || 0)
       if (s.date > st.last) st.last = s.date
       m.set(s.customerId, st)
     }
     return m
-  }, [sales])
+  }, [sales, ledger])
 
   return (
     <div className="grid lg:grid-cols-5 gap-4">
@@ -860,16 +879,19 @@ function CustomersTab() {
 // ================= بدحساب‌ها =================
 function DebtsTab() {
   const sales = useTable<Sale>('sales')
+  const ledger = useTable<LedgerEntry>('ledgerEntries')
   const customers = useTable<Customer>('customers')
   const { confirm, element: confirmDialog } = useConfirm()
   const setting = useSetting()
   const badDays = setting.badDebtDays || 30
+  // v3.4.0 — بدهی با احتساب واریزی‌های دفتر حساب
+  const applied = useMemo(() => ledgerAppliedToSales(sales, ledger), [sales, ledger])
   const debts = active(sales)
-    .filter(s => isBadDebt(s, badDays))
+    .filter(s => settledWithLedger(s, applied.get(s.id) || 0) !== 'PAID' && daysSince(s.date) > badDays)
     .map(s => ({ s, c: customers.find(x => x.id === s.customerId), days: daysSince(s.date) }))
     .sort((a, b) => b.days - a.days)
 
-  const total = debts.reduce((a, d) => a + saleDue(d.s), 0)
+  const total = debts.reduce((a, d) => a + saleDueWithLedger(d.s, applied.get(d.s.id) || 0), 0)
 
   return (
     <Card className="waffly-card">
@@ -893,7 +915,7 @@ function DebtsTab() {
                     {c?.phone && <span dir="ltr"> • {c.phone}</span>}
                   </p>
                 </div>
-                <span className="text-sm font-bold text-red-700 waffly-num">{faMoney(saleDue(s))}</span>
+                <span className="text-sm font-bold text-red-700 waffly-num">{faMoney(saleDueWithLedger(s, applied.get(s.id) || 0))}</span>
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-600" aria-label="حذف"
                   onClick={() => void confirmRemove(confirm, 'sales', s.id, 'حذف فروش', `آیا از حذف فروش «${c?.name || 'نامشخص'}» مطمئن هستید؟ این عملیات قابل بازگشت نیست.`)}>
                   <Trash2 className="h-4 w-4" />

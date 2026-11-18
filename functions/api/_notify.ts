@@ -48,7 +48,7 @@ const TBL_LABEL: Record<SyncTbl, string> = {
   materials: 'ماده اولیه', goods: 'کالا', machines: 'دستگاه', machineCosts: 'هزینه دستگاه',
   expenseCategories: 'سرفصل هزینه', expenses: 'هزینه', otherFunds: 'وجوه دیگر',
   settings: 'تنظیمات', accounts: 'حساب', breadTypes: 'نوع نان', combinedInvoices: 'فاکتور ترکیبی',
-  appUsers: 'کاربر',
+  appUsers: 'کاربر', ledgerEntries: 'دفتر حساب', opsExpenses: 'خرید و هزینه',
 }
 const OP_LABEL: Record<NotifOp, string> = { CREATE: 'ثبت', UPDATE: 'ویرایش', DELETE: 'حذف' }
 const OP_ICON: Record<NotifOp, string> = { CREATE: '➕', UPDATE: '✏️', DELETE: '🗑' }
@@ -126,6 +126,8 @@ export async function buildNotifications(db: Client, changes: NotifChange[]): Pr
       case 'otherFunds': need('accounts', r.accountId); break
       case 'machineCosts': need('machines', r.machineId); break
       case 'combinedInvoices': need('customers', r.customerId); break
+      case 'ledgerEntries': need('customers', r.customerId); need('suppliers', r.supplierId); need('accounts', r.accountId); break
+      case 'opsExpenses': need('accounts', r.accountId); break
     }
   }
 
@@ -209,6 +211,23 @@ export async function buildNotifications(db: Client, changes: NotifChange[]): Pr
         const cust = nameOf(nameMap, 'customers', r.customerId) || 'مشتری'
         const rem = Number(r.remaining || 0) > 0 ? `مانده: ${money(r.remaining)}` : 'تسویه کامل'
         return [`فاکتور #${faDigits(String(r.invoiceNumber || ''))}`, cust, money(r.totalAmount), rem].filter(Boolean).join(' — ')
+      }
+      case 'ledgerEntries': {
+        const kind = String(r.kind) === 'IN' ? 'دریافت' : 'پرداخت'
+        const party = r.customerId
+          ? (nameOf(nameMap, 'customers', r.customerId) || 'مشتری')
+          : r.supplierId
+            ? (nameOf(nameMap, 'suppliers', r.supplierId) || 'تامین‌کننده')
+            : String(r.freeName || 'شخص آزاد')
+        const acc = r.accountId ? nameOf(nameMap, 'accounts', r.accountId) : ''
+        return [party, kind, money(r.amount), PAY_LABEL[String(r.method)] || '', String(r.note || '') || null, acc].filter(Boolean).join(' — ')
+      }
+      case 'opsExpenses': {
+        const kind = String(r.kind) === 'ASSET' ? 'دستگاه' : String(r.kind) === 'SALARY' ? 'حقوق' : String(r.kind) === 'WAGE' ? 'دستمزد' : 'خرید روزمره'
+        const rent = Number(r.rentAmount || 0) > 0 ? `کرایه: ${money(r.rentAmount)}` : ''
+        const settle = SETTLE_LABEL[String(r.settledStatus)] || ''
+        const acc = r.accountId ? `از ${nameOf(nameMap, 'accounts', r.accountId)}` : ''
+        return [kind, String(r.title || ''), String(r.person || '') || null, money(r.totalAmount), rent, settle, acc].filter(Boolean).join(' — ')
       }
       default: return ''
     }

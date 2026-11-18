@@ -3,7 +3,7 @@ export const TABLES = [
   'breadTypes', 'productions', 'boxes', 'materials', 'goods', 'consumptions',
   'customers', 'sales', 'suppliers', 'purchases',
   'machines', 'machineCosts', 'expenseCategories', 'expenses', 'otherFunds', 'settings', 'accounts',
-  'combinedInvoices', 'appUsers',
+  'combinedInvoices', 'appUsers', 'ledgerEntries', 'opsExpenses',
 ] as const
 
 export type SyncTbl = (typeof TABLES)[number]
@@ -147,6 +147,49 @@ export interface Setting extends BaseRow {
   bankAccountName?: string; bankCardNumber?: string; bankSheba?: string; bankName?: string
   /** از v2.8 — شماره‌های تماس روی سربرگ فاکتور */
   shopPhones?: string
+}
+
+/**
+ * تراکنش دفتر حساب (v3.3.0) — پول‌هایی که جدا از فاکتور جابه‌جا می‌شود:
+ * واریز مشتری، پرداخت قسطی به تامین‌کننده، یا پول با شخص آزاد (فامیل، مغازه و…)
+ * kind=IN: از او گرفتیم | kind=OUT: به او دادیم
+ * طرف حساب: customerId → supplierId → freeName (دقیقاً یکی)
+ */
+export interface LedgerEntry extends BaseRow {
+  date: string // شمسی «1404/07/25»
+  kind: 'IN' | 'OUT'
+  amount: number
+  customerId?: string | null
+  supplierId?: string | null
+  freeName?: string | null
+  method?: PayMethod | null
+  note?: string | null
+  accountId?: string | null
+  createdBy?: string | null
+}
+
+/**
+ * خرید و هزینهٔ عملیاتی (v3.4.0) — خریدهای روزمرهٔ کارگاه که مواد اولیه نیستند
+ * (صبحانه، میوه، لیوان و…)، دستگاه/دارایی، کرایهٔ حمل، و حقوق و دستمزد.
+ * kind: DAILY خرید روزمره | ASSET دستگاه/دارایی | SALARY حقوق | WAGE دستمزد
+ * rentAmount: کرایهٔ حملِ همان خرید (اگر داشته باشد) — داخل totalAmount حساب می‌شود.
+ * ماندهٔ پرداخت‌نشده در دفتر حساب به‌عنوان بدهی به همان شخص نمایش داده می‌شود.
+ */
+export interface OpsExpense extends BaseRow {
+  date: string
+  kind: 'DAILY' | 'ASSET' | 'SALARY' | 'WAGE'
+  title: string // چه خریدیم / برای چه — «صبحانه»، «لیوان یکبارمصرف»، «موتور برشی»
+  person?: string | null // فروشنده/گیرندهٔ پول — «سوپرمarket فلانی»، نام کارگر
+  qty?: number | null
+  unitPrice?: number | null
+  rentAmount?: number | null // کرایهٔ حمل
+  totalAmount: number // جمع نهایی (برای DAILY/ASSET معمولاً qty×unitPrice + rent)
+  settledStatus: 'PAID' | 'PARTIAL' | 'UNPAID'
+  paidAmount: number
+  method?: PayMethod | null
+  accountId?: string | null
+  note?: string | null
+  createdBy?: string | null
 }
 
 // طعم‌های اسانس — لیست قابل‌گسترش (فعلاً پرتقالی؛ بعداً اضافه می‌شود)

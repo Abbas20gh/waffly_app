@@ -242,6 +242,59 @@ model InvoiceCounter {
   updatedAt  Float  @default(0)
 }
 
+// کاربر اپ (v3.2.0) — ورود با فامیل + ۴ رقم آخر شماره
+model AppUser {
+  id        String @id
+  family    String
+  pin       String
+  isAdmin   Int    @default(0)
+  phone     String?
+  updatedAt Float
+  deleted   Int    @default(0)
+  @@index([family])
+}
+
+// تراکنش دفتر حساب (v3.3.0) — پول جدا از فاکتور
+model LedgerEntry {
+  id         String @id
+  date       String
+  kind       String @default("IN") // IN از او گرفتیم | OUT به او دادیم
+  amount     Float  @default(0)
+  customerId String?
+  supplierId String?
+  freeName   String?
+  method     String?
+  note       String?
+  accountId  String?
+  createdBy  String?
+  updatedAt  Float
+  deleted    Int    @default(0)
+  @@index([date])
+}
+
+// خرید و هزینهٔ عملیاتی (v3.4.0) — روزمره/دارایی/حقوق/دستمزد + کرایه
+model OpsExpense {
+  id            String @id
+  date          String
+  kind          String @default("DAILY") // DAILY | ASSET | SALARY | WAGE
+  title         String
+  person        String?
+  qty           Float?
+  unitPrice     Float?
+  rentAmount    Float?
+  totalAmount   Float  @default(0)
+  settledStatus String @default("PAID")
+  paidAmount    Float  @default(0)
+  method        String?
+  accountId     String?
+  note          String?
+  createdBy     String?
+  updatedAt     Float
+  deleted       Int    @default(0)
+  @@index([date])
+  @@index([kind])
+}
+
 model Setting {
   id              String @id
   businessName    String @default("Waffly")

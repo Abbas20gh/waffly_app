@@ -24,6 +24,8 @@ export const MODELS: Record<SyncTbl, string> = {
   accounts: 'account',
   combinedInvoices: 'combinedInvoice',
   appUsers: 'appUser',
+  ledgerEntries: 'ledgerEntry',
+  opsExpenses: 'opsExpense',
 }
 
 export const FIELDS: Record<SyncTbl, Record<string, FieldType>> = {
@@ -46,6 +48,8 @@ export const FIELDS: Record<SyncTbl, Record<string, FieldType>> = {
   accounts: { name: 'str', kind: 'str', initialBalance: 'num', note: 'strNull', active: 'int' },
   combinedInvoices: { invoiceNumber: 'num', customerId: 'str', saleIds: 'str', date: 'str', totalAmount: 'num', paidAmount: 'num', remaining: 'num', note: 'strNull', createdBy: 'strNull' },
   appUsers: { family: 'str', pin: 'str', isAdmin: 'int', phone: 'strNull' },
+  ledgerEntries: { date: 'str', kind: 'str', amount: 'num', customerId: 'strNull', supplierId: 'strNull', freeName: 'strNull', method: 'strNull', note: 'strNull', accountId: 'strNull', createdBy: 'strNull' },
+  opsExpenses: { date: 'str', kind: 'str', title: 'str', person: 'strNull', qty: 'numNull', unitPrice: 'numNull', rentAmount: 'numNull', totalAmount: 'num', settledStatus: 'str', paidAmount: 'num', method: 'strNull', accountId: 'strNull', note: 'strNull', createdBy: 'strNull' },
 }
 
 const s = (v: unknown, dflt = '') => (typeof v === 'string' ? v : v == null ? dflt : String(v))

@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   Bell, CheckCheck, BellOff,
-  Banknote, ShoppingCart, Factory, Package, Receipt, Landmark, Wrench, Settings as SettingsIcon,
+  Banknote, ShoppingCart, Factory, Package, Receipt, Landmark, Wrench, BookText, Settings as SettingsIcon,
   type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -36,6 +36,7 @@ const CAT_UI: Record<NotifCategory, { icon: LucideIcon; badge: string; border: s
   production: { icon: Factory,      badge: 'bg-violet-100 text-violet-700',   border: 'border-s-violet-500',  chip: 'bg-violet-100 text-violet-800 border-violet-300',  dot: 'bg-violet-500' },
   inventory:  { icon: Package,      badge: 'bg-amber-100 text-amber-700',     border: 'border-s-amber-500',   chip: 'bg-amber-100 text-amber-800 border-amber-300',     dot: 'bg-amber-500' },
   expense:    { icon: Receipt,      badge: 'bg-rose-100 text-rose-700',       border: 'border-s-rose-500',    chip: 'bg-rose-100 text-rose-800 border-rose-300',        dot: 'bg-rose-500' },
+  ledger:     { icon: BookText,     badge: 'bg-teal-100 text-teal-700',       border: 'border-s-teal-500',    chip: 'bg-teal-100 text-teal-800 border-teal-300',        dot: 'bg-teal-500' },
   finance:    { icon: Landmark,     badge: 'bg-sky-100 text-sky-700',         border: 'border-s-sky-500',     chip: 'bg-sky-100 text-sky-800 border-sky-300',           dot: 'bg-sky-500' },
   machine:    { icon: Wrench,       badge: 'bg-indigo-100 text-indigo-700',   border: 'border-s-indigo-500',  chip: 'bg-indigo-100 text-indigo-800 border-indigo-300',  dot: 'bg-indigo-500' },
   settings:   { icon: SettingsIcon, badge: 'bg-slate-100 text-slate-600',     border: 'border-s-slate-400',   chip: 'bg-slate-100 text-slate-700 border-slate-300',     dot: 'bg-slate-400' },

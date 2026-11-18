@@ -11,6 +11,7 @@ export type NotifCategory =
   | 'production'  // تولید
   | 'inventory'   // موجودی
   | 'expense'     // هزینه
+  | 'ledger'      // دفتر حساب
   | 'finance'     // مالی (حساب‌ها و وجوه)
   | 'machine'     // دستگاه‌ها
   | 'settings'    // تنظیمات
@@ -31,7 +32,8 @@ export const NOTIF_CATEGORIES: NotifCategoryDef[] = [
   { key: 'purchase',   label: 'خرید',    emoji: '🛒', tables: ['purchases', 'suppliers'] },
   { key: 'production', label: 'تولید',   emoji: '🏭', tables: ['productions', 'boxes', 'consumptions', 'breadTypes'] },
   { key: 'inventory',  label: 'موجودی',  emoji: '📦', tables: ['materials', 'goods'] },
-  { key: 'expense',    label: 'هزینه',   emoji: '💸', tables: ['expenses', 'expenseCategories'] },
+  { key: 'expense',    label: 'هزینه',   emoji: '💸', tables: ['expenses', 'expenseCategories', 'opsExpenses'] },
+  { key: 'ledger',     label: 'دفتر حساب', emoji: '📒', tables: ['ledgerEntries'] },
   { key: 'finance',    label: 'مالی',    emoji: '🏦', tables: ['accounts', 'otherFunds'] },
   { key: 'machine',    label: 'دستگاه',  emoji: '🔧', tables: ['machines', 'machineCosts'] },
   { key: 'settings',   label: 'تنظیمات', emoji: '⚙️', tables: ['settings', 'appUsers'] },
