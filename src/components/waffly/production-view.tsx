@@ -11,7 +11,7 @@ import { Switch } from '@/components/ui/switch'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import { PageHeader, FormRow, TabsBar, EmptyState, Num, useConfirm, confirmRemove } from './bits'
+import { PageHeader, FormRow, TabsBar, EmptyState, useConfirm, confirmRemove } from './bits'
 import { JalaliDateInput } from './jalali-date'
 import { InlinePicker } from './inline-picker'
 import { useTable, useDexie, dexie, putRecord, putMany, removeRecord, uid, getActiveUser } from '@/lib/localdb'
@@ -316,9 +316,21 @@ function DailyTab() {
                     <div className="mt-3 space-y-1.5 border-t pt-3">
                       {pBoxes.map(b => (
                         <div key={b.id} className="flex items-center gap-2 rounded-lg bg-muted/40 px-2.5 py-1.5">
-                          <code className="rounded bg-primary/5 border border-primary/20 px-2 py-0.5 text-[11px] font-bold waffly-num" dir="ltr">{b.code}</code>
+                          {/* v3.4.1 — کلیک روی کد کارت = دیدن و اصلاح تعداد نون‌بستنی داخلش */}
+                          <button
+                            type="button"
+                            onClick={() => setEditBox(b)}
+                            className="shrink-0 flex items-center gap-1.5 rounded-lg px-1 py-0.5 -mx-1 hover:bg-accent transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                            aria-label={`کد ${b.code} — مشاهده و اصلاح تعداد داخل کارت`}
+                            title="کلیک: دیدن و اصلاح تعداد داخل کارت"
+                          >
+                            <code className="rounded bg-primary/5 border border-primary/20 px-2 py-0.5 text-[11px] font-bold waffly-num" dir="ltr">{b.code}</code>
+                            <span className="inline-flex items-center rounded-md bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.5 text-[10px] font-bold waffly-num">
+                              <Boxes className="h-3 w-3 ml-0.5" /> {faDigits(b.count)} عدد
+                            </span>
+                          </button>
                           <span className="text-[11px] text-muted-foreground flex-1 min-w-0 truncate">
-                            {btName(b.breadTypeId)} • <Num value={b.count} /> عدد
+                            {btName(b.breadTypeId)}
                             {b.note ? ` • ${b.note}` : ''}
                           </span>
                           {!!b.hasEssence && (
@@ -336,7 +348,7 @@ function DailyTab() {
                           </Button>
                         </div>
                       ))}
-                      <p className="text-[10px] text-muted-foreground">با دکمه ویرایش، نوع نان، اسانس و یادداشت هر جعبه را جداگانه تنظیم کنید.</p>
+                      <p className="text-[10px] text-muted-foreground">با کلیک روی کد هر کارت، تعداد نون‌بستنی داخلش را می‌بینید و اصلاح می‌کنید؛ نوع نان، اسانس و یادداشت هم در همان دیالوگ است.</p>
                     </div>
                   )}
                 </div>
@@ -465,7 +477,7 @@ function BoxesTab() {
       <CardContent>
         <p className="text-[11px] text-muted-foreground mb-3 leading-5">
           فرمت کد: <code className="waffly-num" dir="ltr">MM DD S</code> — ماه و روز تولید + شمارهٔ جعبهٔ همان روز؛ مثلاً <code className="waffly-num" dir="ltr">07263</code> یعنی مهر ۲۶، جعبهٔ ۳. اگر یک روز بیش از ۹ جعبه تولید شود کد ۶ رقمی می‌شود؛ کدهای قدیمی ۱۰ رقمی هم معتبرند.
-          با دکمه ویرایش، نوع نان/اسانس/یادداشت هر جعبه را جدا تنظیم کنید؛ کد چاپی ثابت می‌ماند.
+          <strong className="text-foreground/70"> با کلیک روی کد کارت، تعداد نون‌بستنی داخلش را می‌بینید و می‌توانید اصلاح کنید</strong>؛ کد چاپی ثابت می‌ماند.
         </p>
         {list.length === 0 ? (
           <EmptyState title="جعبه‌ای یافت نشد" desc="با ثبت تولید روزانه، کد جعبه‌ها خودکار ساخته می‌شود." icon={<Boxes className="h-5 w-5" />} />
@@ -473,9 +485,21 @@ function BoxesTab() {
           <div className="max-h-[480px] overflow-y-auto thin-scroll space-y-1.5">
             {list.map(b => (
               <div key={b.id} className="flex items-center gap-2 rounded-lg border px-3 py-2">
-                <code className="rounded bg-primary/5 border border-primary/20 px-2 py-0.5 text-xs font-bold waffly-num" dir="ltr">{b.code}</code>
+                {/* v3.4.1 — کلیک روی کد کارت = دیدن و اصلاح تعداد نون‌بستنی داخلش */}
+                <button
+                  type="button"
+                  onClick={() => setEditBox(b)}
+                  className="shrink-0 flex items-center gap-1.5 rounded-lg px-1 py-0.5 -mx-1 hover:bg-accent transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  aria-label={`کد ${b.code} — مشاهده و اصلاح تعداد داخل کارت`}
+                  title="کلیک: دیدن و اصلاح تعداد داخل کارت"
+                >
+                  <code className="rounded bg-primary/5 border border-primary/20 px-2 py-0.5 text-xs font-bold waffly-num group-hover:bg-primary/10" dir="ltr">{b.code}</code>
+                  <span className="inline-flex items-center rounded-md bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.5 text-[11px] font-bold waffly-num">
+                    <Boxes className="h-3 w-3 ml-0.5" /> {faDigits(b.count)} عدد
+                  </span>
+                </button>
                 <span className="text-xs text-muted-foreground flex-1 min-w-0 truncate">
-                  {btName(b.breadTypeId)} • {prettyJalali(b.date)} • <Num value={b.count} /> عدد
+                  {btName(b.breadTypeId)} • {prettyJalali(b.date)}
                   {b.note ? ` • ${b.note}` : ''}
                 </span>
                 {!!b.hasEssence && (
@@ -707,13 +731,21 @@ function BoxEditForm({ box, breadTypes, onClose }: {
   onClose: () => void
 }) {
   const [breadTypeId, setBreadTypeId] = useState(box.breadTypeId)
+  // v3.4.1 — تعداد نون‌بستنی داخل کارت هم اینجا دیده و اصلاح می‌شود
+  const [count, setCount] = useState(String(box.count ?? ''))
   const [hasEssence, setHasEssence] = useState(!!box.hasEssence)
   const [essenceType, setEssenceType] = useState(box.essenceType || ESSENCE_TYPES[0] || '')
   const [note, setNote] = useState(box.note || '')
 
   const save = async () => {
+    const parsedCount = parseInt(count, 10)
+    if (!Number.isFinite(parsedCount) || parsedCount < 0) {
+      toast({ title: 'تعداد نون‌بستنی داخل کارت را درست وارد کنید', variant: 'destructive' })
+      return
+    }
     await putRecord<Box>('boxes', {
       ...box,
+      count: parsedCount,
       breadTypeId,
       hasEssence: hasEssence ? 1 : 0,
       essenceType: hasEssence ? (essenceType || null) : null,
@@ -721,7 +753,7 @@ function BoxEditForm({ box, breadTypes, onClose }: {
       updatedAt: 0,
       deleted: 0,
     })
-    toast({ title: 'جعبه ویرایش شد', description: 'کد چاپی جعبه ثابت ماند.' })
+    toast({ title: 'جعبه ویرایش شد', description: `کد چاپی ثابت ماند — تعداد داخل کارت: ${faDigits(parsedCount)} عدد` })
     onClose()
   }
 
@@ -733,9 +765,20 @@ function BoxEditForm({ box, breadTypes, onClose }: {
             ویرایش جعبه
             <code className="waffly-num text-xs bg-muted px-2 py-0.5 rounded border" dir="ltr">{box.code}</code>
           </DialogTitle>
-          <DialogDescription>کد چاپی جعبه ثابت می‌ماند (شناسه تاریخی)؛ فقط مشخصات داخلی تغییر می‌کند.</DialogDescription>
+          <DialogDescription>
+            کد چاپی جعبه ثابت می‌ماند (شناسه تاریخی)؛ فقط مشخصات داخلی تغییر می‌کند — تعداد نون‌بستنی داخل کارت هم همین‌جاست.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
+          <FormRow label="تعداد نون‌بستنی داخل کارت" hint="اگر هنگام تولید جا افتاد یا کم/زیاد شد، همین‌جا اصلاح کنید">
+            <Input
+              inputMode="numeric"
+              className="waffly-num-input h-11"
+              value={count}
+              onChange={e => setCount(e.target.value)}
+              placeholder="۰"
+            />
+          </FormRow>
           <FormRow label="نوع نان این جعبه">
             <InlinePicker
               value={breadTypeId}
